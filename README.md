@@ -1,10 +1,10 @@
 # okf-mcp
 
-`okf-mcp` is a project-agnostic Open Knowledge Format CLI, graph index, generator runner, and read-only MCP stdio server.
+`okf-mcp` is a project-agnostic Open Knowledge Format CLI, graph index, generator runner, MCP stdio server, and optional HTTP authoring API.
 
-It consumes one or more directories of Markdown files with YAML frontmatter, treats non-reserved Markdown files as OKF concepts, and exposes those concepts through CLI commands plus MCP resources and tools for structured search, validation, and graph navigation.
+It consumes one or more directories of Markdown files with YAML frontmatter, treats non-reserved Markdown files as OKF concepts, and exposes those concepts through CLI commands plus MCP resources and tools for structured search, validation, graph navigation, and proposal-based authoring.
 
-The core intentionally has no runtime dependencies, no database, and no embeddings. Local bundle mode makes no network calls. Optional remote bundles can fetch public Markdown concepts from GitHub when configured. Generator plugins are the only write path, and they write only to configured output directories.
+The core intentionally has no runtime dependencies, no database, and no embeddings. Local bundle mode makes no network calls. Optional remote bundles can fetch public Markdown concepts from GitHub when configured. Generator plugins and accepted authoring proposals are the write paths, and both write only under configured project directories.
 
 ## Install And Run
 
@@ -22,7 +22,7 @@ node bin/okf-mcp.js --bundle app=./okf/bundles/app
 
 `--remote-bundle` accepts `id=https://github.com/<owner>/<repo>/tree/<ref>/<path>`. It fetches public Markdown files from that GitHub tree and indexes them as a read-only bundle.
 
-`--inspect` prints a compact graph summary and exits. Without `--inspect`, the process starts a stdio MCP server.
+`--inspect` prints a compact graph summary and exits. Without `--inspect` and without an explicit command, the process starts a stdio MCP server.
 
 The package also exposes an `okf` binary when installed.
 
@@ -78,6 +78,13 @@ Commands:
 - `generate`
 - `serve`
 
+`serve` options:
+
+- `--host <host>`: bind host, default `127.0.0.1`
+- `--port <port>`: bind port, default `8765`
+- `--write-token <token>`: bearer token for write endpoints; defaults to `OKF_WRITE_TOKEN`
+- `--proposal-root <path>`: proposal JSON directory; defaults to `.okf-proposals` under the project root
+
 ## MCP Client Config
 
 Example client configuration:
@@ -97,7 +104,7 @@ Example client configuration:
 }
 ```
 
-Project config mode:
+Project config mode, including authoring tools:
 
 ```json
 {
@@ -241,6 +248,8 @@ Mutation endpoints require `Authorization: Bearer <OKF_WRITE_TOKEN>`:
 - `POST /v1/proposals/:id/reject`
 
 The default file-backed proposal store writes proposal JSON under `.okf-proposals` in the project root. Accepted proposals write Markdown concepts into the configured bundle root.
+
+`POST /v1/concepts/validate` and `POST /v1/concepts/suggest-path` do not persist anything. `POST /v1/proposals` persists only a proposal record. Only `POST /v1/proposals/:id/accept` writes a concept Markdown file.
 
 ## Remote Bundles
 
@@ -397,4 +406,5 @@ Generated output is regular Markdown/YAML OKF and is validated by the same index
 
 - The YAML parser intentionally supports the simple frontmatter shape used by OKF concept metadata: scalar keys, inline arrays, block arrays, and arrays of objects.
 - The MCP server implements the stdio JSON-RPC methods needed for resources and tools directly instead of using an SDK, so advanced SDK conveniences are out of scope.
-- There is no file watcher. Restart the server after changing OKF files.
+- There is no file watcher. Restart the server after external file changes. Concepts accepted through MCP authoring refresh the MCP server index immediately.
+- The HTTP API is a lightweight built-in server, not a full hosted multi-tenant service.
