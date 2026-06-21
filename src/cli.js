@@ -8,6 +8,7 @@ const { loadProjectConfig } = require("./project");
 const { generateProject } = require("./plugins");
 const { runStdioServer } = require("./mcp-server");
 const { fetchRemoteBundles } = require("./remote");
+const { runHttpServer } = require("./http-server");
 
 function parseArgs(argv) {
   const bundles = [];
@@ -16,6 +17,10 @@ function parseArgs(argv) {
   let project = null;
   let inspect = false;
   let help = false;
+  let host = "127.0.0.1";
+  let port = 8765;
+  let writeToken = "";
+  let proposalRoot = "";
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     if (arg === "--bundle" || arg === "-b") {
@@ -58,6 +63,54 @@ function parseArgs(argv) {
       inspect = true;
       continue;
     }
+    if (arg === "--host") {
+      if (!argv[index + 1] || String(argv[index + 1]).startsWith("-")) {
+        throw new Error(`${arg} requires a value.`);
+      }
+      host = argv[index + 1];
+      index += 1;
+      continue;
+    }
+    if (arg.startsWith("--host=")) {
+      host = arg.slice("--host=".length);
+      continue;
+    }
+    if (arg === "--port") {
+      if (!argv[index + 1] || String(argv[index + 1]).startsWith("-")) {
+        throw new Error(`${arg} requires a value.`);
+      }
+      port = Number(argv[index + 1]);
+      index += 1;
+      continue;
+    }
+    if (arg.startsWith("--port=")) {
+      port = Number(arg.slice("--port=".length));
+      continue;
+    }
+    if (arg === "--write-token") {
+      if (!argv[index + 1] || String(argv[index + 1]).startsWith("-")) {
+        throw new Error(`${arg} requires a value.`);
+      }
+      writeToken = argv[index + 1];
+      index += 1;
+      continue;
+    }
+    if (arg.startsWith("--write-token=")) {
+      writeToken = arg.slice("--write-token=".length);
+      continue;
+    }
+    if (arg === "--proposal-root") {
+      if (!argv[index + 1] || String(argv[index + 1]).startsWith("-")) {
+        throw new Error(`${arg} requires a value.`);
+      }
+      proposalRoot = argv[index + 1];
+      index += 1;
+      continue;
+    }
+    if (arg.startsWith("--proposal-root=")) {
+      proposalRoot = arg.slice("--proposal-root=".length);
+      continue;
+    }
     if (arg === "--help" || arg === "-h") {
       help = true;
       continue;
@@ -66,7 +119,7 @@ function parseArgs(argv) {
       positional.push(arg);
     }
   }
-  return { bundles, remoteBundles, positional, project, inspect, help };
+  return { bundles, remoteBundles, positional, project, inspect, help, host, port, writeToken, proposalRoot };
 }
 
 function usage() {
@@ -77,6 +130,7 @@ function usage() {
     "  okf-mcp --bundle <path-or-id=path> [--bundle <path>] [--inspect]",
     "  okf-mcp --remote-bundle <id=github-tree-url> [--inspect]",
     "  okf-mcp --project <okf.project.yaml> <command>",
+    "  okf-mcp --project <okf.project.yaml> serve [--host 127.0.0.1] [--port 8765]",
     "  okf-mcp <command> --bundle <path-or-id=path>",
     "",
     "Commands:",
@@ -88,6 +142,7 @@ function usage() {
     "  neighbors <uri>             Print inbound/outbound neighbors.",
     "  paths <from> <to>           Find directed paths.",
     "  generate                    Run configured generator plugins.",
+    "  serve                       Start the HTTP OKF API server.",
     "",
     "Examples:",
     "  node bin/okf-mcp.js --bundle ./okf/bundles/app --inspect",
@@ -106,7 +161,7 @@ function resolveLegacyBundles(args) {
     return [];
   }
   const first = args.positional[0];
-  const commands = new Set(["mcp", "validate", "graph", "search", "concept", "neighbors", "paths", "generate"]);
+  const commands = new Set(["mcp", "validate", "graph", "search", "concept", "neighbors", "paths", "generate", "serve"]);
   return commands.has(first) ? [] : args.positional;
 }
 
@@ -175,6 +230,20 @@ async function main(argv) {
       throw new Error("At least one --bundle root or --project config is required.");
     }
     await runStdioServer(bundles, process.stdin, process.stdout, { remoteBundles: args.remoteBundles.map(parseRemoteBundleArg) });
+    return;
+  }
+  if (command === "serve") {
+    if (!args.project) {
+      throw new Error("serve requires --project.");
+    }
+    const result = await runHttpServer({
+      projectPath: args.project,
+      host: args.host,
+      port: args.port,
+      writeToken: args.writeToken || process.env.OKF_WRITE_TOKEN || "",
+      proposalRoot: args.proposalRoot || "",
+    });
+    process.stderr.write(`OKF HTTP server listening on ${result.url}\n`);
     return;
   }
   if (command === "generate") {

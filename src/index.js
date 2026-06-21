@@ -8,5 +8,8 @@ module.exports = {
   ...require("./project"),
   ...require("./plugins"),
   ...require("./remote"),
+  ...require("./authoring"),
+  ...require("./store"),
+  ...require("./http-server"),
   ...require("./mcp-server"),
 };

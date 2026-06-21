@@ -62,6 +62,7 @@ node bin/okf-mcp.js --project okf.project.yaml search "orders"
 node bin/okf-mcp.js --project okf.project.yaml graph mermaid
 node bin/okf-mcp.js --project okf.project.yaml generate
 node bin/okf-mcp.js --project okf.project.yaml mcp
+OKF_WRITE_TOKEN=change-me node bin/okf-mcp.js --project okf.project.yaml serve
 node bin/okf-mcp.js --remote-bundle shared=https://github.com/example/okf-atlas/tree/main/bundles/shared --inspect
 ```
 
@@ -75,6 +76,7 @@ Commands:
 - `neighbors <uri>`
 - `paths <from> <to>`
 - `generate`
+- `serve`
 
 ## MCP Client Config
 
@@ -156,6 +158,13 @@ relations:
 - `list_relation_types`
 - `load_remote_bundle`
 - `list_remote_bundles`
+- `okf_validate_concept`
+- `okf_suggest_concept_path`
+- `okf_propose_concept`
+- `okf_list_proposals`
+- `okf_get_proposal`
+- `okf_accept_proposal`
+- `okf_reject_proposal`
 - `get_graph`
 - `get_neighbors`
 - `get_subgraph`
@@ -166,6 +175,72 @@ relations:
 - `export_graph`
 
 Most MCP tools are read-only over the current index. `load_remote_bundle` mutates only the server's in-memory index by fetching a public GitHub tree; it does not write files.
+
+The `okf_*` authoring tools are proposal-first. They are enabled when the server is started with `--project`, because the project config identifies writable local bundles. Proposing a concept writes only a proposal record. Accepting a proposal writes the Markdown concept into the configured bundle root and refreshes the in-memory index.
+
+## Authoring Concepts
+
+Concept authoring is available through MCP tools and the HTTP API. Clients never need direct local file access.
+
+MCP proposal flow:
+
+```json
+{
+  "name": "okf_propose_concept",
+  "arguments": {
+    "bundle": "app",
+    "path": "tools/create-order.md",
+    "frontmatter": {
+      "type": "MCP Tool",
+      "title": "Create Order",
+      "relations": [
+        {
+          "type": "related_to",
+          "target": "okf://app/workflows/order-creation"
+        }
+      ]
+    },
+    "body": "# Create Order\n\nCreates an order through the application MCP tool.",
+    "message": "Document create_order for agents."
+  }
+}
+```
+
+Then call `okf_accept_proposal` with the returned `proposal.id`.
+
+Safety rules:
+
+- concept paths must be safe relative `.md` paths inside a writable bundle
+- missing subdirectories are created only when a proposal is accepted
+- `index.md` and `log.md` cannot be authored as concepts
+- duplicate paths and duplicate `okf://` IDs are rejected
+- invalid IDs, invalid relation types, and broken internal OKF relations fail validation
+- external relation targets such as `repo://...` are allowed
+
+## HTTP API
+
+Start the HTTP server:
+
+```bash
+OKF_WRITE_TOKEN=change-me node bin/okf-mcp.js --project okf.project.yaml serve --host 127.0.0.1 --port 8765
+```
+
+Read/validation endpoints:
+
+- `GET /health`
+- `GET /v1/bundles`
+- `POST /v1/concepts/validate`
+- `POST /v1/concepts/suggest-path`
+- `GET /v1/proposals`
+- `GET /v1/proposals/:id`
+
+Mutation endpoints require `Authorization: Bearer <OKF_WRITE_TOKEN>`:
+
+- `POST /v1/proposals`
+- `POST /v1/proposals/:id/accept`
+- `POST /v1/proposals/:id/reject`
+
+The default file-backed proposal store writes proposal JSON under `.okf-proposals` in the project root. Accepted proposals write Markdown concepts into the configured bundle root.
 
 ## Remote Bundles
 

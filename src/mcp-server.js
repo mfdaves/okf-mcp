@@ -6,6 +6,8 @@ const { attachProject, buildIndex, buildProjectIndex, conceptSummary, loadProjec
 const { searchConcepts } = require("./search");
 const { exportGraph, findPaths, getGraph, getNeighbors, getSubgraph, graphSummary } = require("./graph");
 const { fetchGitHubBundle, fetchRemoteBundles } = require("./remote");
+const { ConceptAuthoringService } = require("./authoring");
+const { FileConceptStore } = require("./store");
 
 const TOOL_NAMES = [
   "list_bundles",
@@ -17,6 +19,13 @@ const TOOL_NAMES = [
   "list_relation_types",
   "load_remote_bundle",
   "list_remote_bundles",
+  "okf_validate_concept",
+  "okf_suggest_concept_path",
+  "okf_propose_concept",
+  "okf_list_proposals",
+  "okf_get_proposal",
+  "okf_accept_proposal",
+  "okf_reject_proposal",
   "get_graph",
   "get_neighbors",
   "get_subgraph",
@@ -49,6 +58,13 @@ function listTools() {
     find_paths: { required: ["source", "target"], properties: { source: { type: "string" }, target: { type: "string" }, maxPaths: { type: "number" } } },
     validate_bundle: { properties: { bundle: { type: "string" } } },
     load_remote_bundle: { required: ["id", "url"], properties: { id: { type: "string" }, url: { type: "string" }, provider: { type: "string" }, include: { type: "array", items: { type: "string" } }, exclude: { type: "array", items: { type: "string" } } } },
+    okf_validate_concept: { required: ["bundle", "path", "frontmatter"], properties: { bundle: { type: "string" }, path: { type: "string" }, frontmatter: { type: "object" }, body: { type: "string" } } },
+    okf_suggest_concept_path: { required: ["bundle", "type", "title"], properties: { bundle: { type: "string" }, type: { type: "string" }, title: { type: "string" }, prefix: { type: "string" } } },
+    okf_propose_concept: { required: ["bundle", "path", "frontmatter"], properties: { bundle: { type: "string" }, path: { type: "string" }, frontmatter: { type: "object" }, body: { type: "string" }, message: { type: "string" } } },
+    okf_list_proposals: { properties: { bundle: { type: "string" }, status: { type: "string" } } },
+    okf_get_proposal: { required: ["proposalId"], properties: { proposalId: { type: "string" } } },
+    okf_accept_proposal: { required: ["proposalId"], properties: { proposalId: { type: "string" } } },
+    okf_reject_proposal: { required: ["proposalId"], properties: { proposalId: { type: "string" }, reason: { type: "string" } } },
     export_graph: { properties: { format: { type: "string" }, includeExternal: { type: "boolean" }, maxNodes: { type: "number" }, maxEdges: { type: "number" } } },
   };
   return {
@@ -183,6 +199,20 @@ function validateBundle(index, args) {
   };
 }
 
+function requireAuthoring(state) {
+  if (!state.authoringService) {
+    throw new Error("OKF authoring is not configured. Start the server with --project to enable writable concept proposals.");
+  }
+  return state.authoringService;
+}
+
+function refreshAuthoringIndex(state) {
+  if (!state.authoringService) {
+    return;
+  }
+  state.index = attachProject(state.authoringService.store.getIndex(), state.authoringService.store.project);
+}
+
 async function callTool(state, name, args) {
   if (!state || !state.index) {
     state = {
@@ -231,6 +261,25 @@ async function callTool(state, name, args) {
       state.index = buildIndex(state.localBundleArgs.concat(state.remoteBundles), { relationTypes: state.relationTypes });
       return jsonContent(remoteBundle.remoteSource);
     }
+    case "okf_validate_concept":
+      return jsonContent(requireAuthoring(state).validateConcept(args || {}));
+    case "okf_suggest_concept_path":
+      return jsonContent(requireAuthoring(state).suggestConceptPath(args || {}));
+    case "okf_propose_concept":
+      return jsonContent(await requireAuthoring(state).proposeConcept(args || {}));
+    case "okf_list_proposals":
+      return jsonContent(await requireAuthoring(state).listProposals(args || {}));
+    case "okf_get_proposal":
+      return jsonContent(await requireAuthoring(state).getProposal(args || {}));
+    case "okf_accept_proposal": {
+      const result = await requireAuthoring(state).acceptProposal(args || {});
+      if (result.accepted) {
+        refreshAuthoringIndex(state);
+      }
+      return jsonContent(result);
+    }
+    case "okf_reject_proposal":
+      return jsonContent(await requireAuthoring(state).rejectProposal(args || {}));
     case "get_graph":
       return jsonContent(getGraph(index, args || {}));
     case "get_neighbors":
@@ -272,6 +321,7 @@ function createServer(bundleArgs, options) {
     localBundleArgs,
     remoteBundles: (options && options.initialRemoteBundles) || [],
     relationTypes: options && options.relationTypes,
+    authoringService: options && options.authoringService,
   };
   async function handle(request) {
     const method = request.method;
@@ -279,7 +329,7 @@ function createServer(bundleArgs, options) {
     if (method === "initialize") {
       return {
         protocolVersion: params.protocolVersion || "2025-06-18",
-        serverInfo: { name: "okf-mcp", version: "0.1.0" },
+        serverInfo: { name: "okf-mcp", version: "0.2.0" },
         capabilities: { resources: {}, tools: {} },
       };
     }
@@ -309,6 +359,8 @@ async function createServerAsync(bundleArgs, options) {
     const extraRemoteBundles = await fetchRemoteBundles(options.remoteBundles || []);
     const initialRemoteBundles = loaded.remoteBundles.concat(extraRemoteBundles);
     const localBundleArgs = (loaded.bundles || []).filter((bundle) => !bundle.remote);
+    const store = options.authoringStore || FileConceptStore.fromProject(options.projectPath, { proposalRoot: options.proposalRoot });
+    const authoringService = options.authoringService || new ConceptAuthoringService(store);
     const initialIndex = attachProject(
       buildIndex(localBundleArgs.concat(initialRemoteBundles), { relationTypes: loaded.project.relationTypes }),
       loaded.project,
@@ -317,6 +369,7 @@ async function createServerAsync(bundleArgs, options) {
       initialIndex,
       initialRemoteBundles,
       relationTypes: loaded.project.relationTypes,
+      authoringService,
     });
   }
   const remoteBundles = await fetchRemoteBundles((options && options.remoteBundles) || []);

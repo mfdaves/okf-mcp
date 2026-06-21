@@ -1,6 +1,7 @@
 node_modules/
 coverage/
 .okf-cache/
+.okf-proposals/
 *.tgz
 npm-debug.log*
 .DS_Store

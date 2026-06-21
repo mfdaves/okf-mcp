@@ -3,6 +3,7 @@
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
+const { Readable } = require("stream");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
@@ -11,6 +12,9 @@ const { main: cliMain, parseArgs } = require("../src/cli");
 const { loadProjectConfig } = require("../src/project");
 const { generateProject } = require("../src/plugins");
 const { fetchGitHubBundle, parseGitHubBundleUrl } = require("../src/remote");
+const { ConceptAuthoringService } = require("../src/authoring");
+const { FileConceptStore } = require("../src/store");
+const { createHttpHandler } = require("../src/http-server");
 const { searchConcepts } = require("../src/search");
 const { exportGraph, findPaths, getGraph, getNeighbors, getSubgraph, graphSummary } = require("../src/graph");
 const { createServer, createServerAsync } = require("../src/mcp-server");
@@ -534,6 +538,208 @@ test("MCP project mode can preload configured remote bundles", async () => {
   }
 });
 
+function makeAuthoringProject() {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "okf-authoring-"));
+  const bundle = path.join(root, "okf", "bundle");
+  const proposals = path.join(root, ".okf-proposals");
+  fs.mkdirSync(bundle, { recursive: true });
+  fs.writeFileSync(path.join(root, "okf.project.yaml"), [
+    "project: Authoring",
+    "bundles:",
+    "  - id: app",
+    "    root: okf/bundle",
+    "",
+  ].join("\n"), "utf8");
+  fs.writeFileSync(path.join(bundle, "existing.md"), [
+    "---",
+    "id: okf://app/existing",
+    "type: Concept",
+    "title: Existing",
+    "---",
+    "",
+    "# Existing",
+    "",
+  ].join("\n"), "utf8");
+  const store = FileConceptStore.fromProject(path.join(root, "okf.project.yaml"), { proposalRoot: proposals });
+  const service = new ConceptAuthoringService(store);
+  return { root, bundle, proposals, store, service };
+}
+
+test("authoring validates OKF concepts and suggests safe nested paths", () => {
+  const { service } = makeAuthoringProject();
+  assert.equal(
+    service.suggestConceptPath({ bundle: "app", type: "MCP Tool", title: "Create Order", prefix: "tools" }).path,
+    "tools/mcp-tool/create-order.md",
+  );
+  const valid = service.validateConcept({
+    bundle: "app",
+    path: "tools/create-order.md",
+    frontmatter: {
+      id: "okf://app/tools/create-order",
+      type: "MCP Tool",
+      title: "Create Order",
+      tags: ["tool", "orders"],
+      relations: [{ type: "related_to", target: "okf://app/existing" }],
+    },
+    body: "# Create Order\n",
+  });
+  assert.equal(valid.valid, true);
+  assert.match(valid.markdown, /relations:\n  - type: related_to\n    target: "okf:\/\/app\/existing"/);
+  assert.equal(valid.concept.uri, "okf://app/tools/create-order");
+});
+
+test("authoring rejects unsafe paths, duplicate ids, and invalid relations", () => {
+  const { service } = makeAuthoringProject();
+  assert.throws(
+    () => service.validateConcept({ bundle: "app", path: "../outside.md", frontmatter: { type: "Concept", title: "Bad" }, body: "# Bad" }),
+    /inside the bundle|safe relative/,
+  );
+  const duplicate = service.validateConcept({
+    bundle: "app",
+    path: "new.md",
+    frontmatter: { id: "okf://app/existing", type: "Concept", title: "Duplicate" },
+    body: "# Duplicate",
+  });
+  assert.equal(duplicate.valid, false);
+  assert.equal(duplicate.errors.some((error) => error.code === "duplicate_uri"), true);
+  const badRelation = service.validateConcept({
+    bundle: "app",
+    path: "bad-relation.md",
+    frontmatter: { type: "Concept", title: "Bad", relations: [{ type: "impossible", target: "okf://app/missing" }] },
+    body: "# Bad",
+  });
+  assert.equal(badRelation.valid, false);
+  assert.equal(badRelation.errors.some((error) => error.code === "invalid_relation_type"), true);
+  assert.equal(badRelation.errors.some((error) => error.code === "broken_relation"), true);
+});
+
+test("authoring proposals are accepted into new subdirectories", async () => {
+  const { bundle, service } = makeAuthoringProject();
+  const proposed = await service.proposeConcept({
+    bundle: "app",
+    path: "tools/create-order.md",
+    frontmatter: { type: "MCP Tool", title: "Create Order" },
+    body: "# Create Order",
+    message: "Add tool concept",
+  });
+  assert.equal(proposed.created, true);
+  assert.equal(fs.existsSync(path.join(bundle, "tools", "create-order.md")), false);
+  const accepted = await service.acceptProposal({ proposalId: proposed.proposal.id });
+  assert.equal(accepted.accepted, true);
+  assert.equal(fs.existsSync(path.join(bundle, "tools", "create-order.md")), true);
+  assert.equal(service.store.getIndex().byUri.has("okf://app/tools/create-order.md"), true);
+});
+
+test("MCP authoring tools create and accept concept proposals in project mode", async () => {
+  const { root, bundle, proposals } = makeAuthoringProject();
+  const server = await createServerAsync([], {
+    projectPath: path.join(root, "okf.project.yaml"),
+    proposalRoot: proposals,
+  });
+  const tools = await server.handle({ method: "tools/list" });
+  assert.equal(tools.tools.some((tool) => tool.name === "okf_propose_concept"), true);
+  const proposed = await server.handle({
+    method: "tools/call",
+    params: {
+      name: "okf_propose_concept",
+      arguments: {
+        bundle: "app",
+        path: "mcp/runtime-tool.md",
+        frontmatter: { type: "MCP Tool", title: "Runtime Tool" },
+        body: "# Runtime Tool",
+      },
+    },
+  });
+  const proposal = JSON.parse(proposed.content[0].text).proposal;
+  const accepted = await server.handle({
+    method: "tools/call",
+    params: { name: "okf_accept_proposal", arguments: { proposalId: proposal.id } },
+  });
+  assert.equal(JSON.parse(accepted.content[0].text).accepted, true);
+  assert.equal(fs.existsSync(path.join(bundle, "mcp", "runtime-tool.md")), true);
+  const concept = await server.handle({
+    method: "tools/call",
+    params: { name: "get_concept", arguments: { uri: "okf://app/mcp/runtime-tool.md" } },
+  });
+  assert.match(concept.content[0].text, /Runtime Tool/);
+});
+
+async function callHttp(handler, options) {
+  const bodyText = options.body === undefined ? "" : JSON.stringify(options.body);
+  const req = Readable.from(bodyText ? [Buffer.from(bodyText)] : []);
+  req.method = options.method || "GET";
+  req.url = options.url || "/";
+  req.headers = Object.assign({}, options.headers || {});
+  const response = { status: 0, headers: {}, text: "" };
+  const res = {
+    writeHead(status, headers) {
+      response.status = status;
+      response.headers = headers || {};
+    },
+    end(text) {
+      response.text = String(text || "");
+    },
+  };
+  await handler(req, res);
+  response.json = response.text ? JSON.parse(response.text) : null;
+  return response;
+}
+
+test("HTTP authoring API protects proposal mutations with bearer auth", async () => {
+  const { root, bundle, proposals } = makeAuthoringProject();
+  const store = FileConceptStore.fromProject(path.join(root, "okf.project.yaml"), { proposalRoot: proposals });
+  const service = new ConceptAuthoringService(store);
+  const handler = createHttpHandler(service, { writeToken: "test-token" });
+
+  const validate = await callHttp(handler, {
+    method: "POST",
+    url: "/v1/concepts/validate",
+    headers: { "content-type": "application/json" },
+    body: {
+      bundle: "app",
+      path: "http/tool.md",
+      frontmatter: { type: "MCP Tool", title: "HTTP Tool" },
+      body: "# HTTP Tool",
+    },
+  });
+  assert.equal(validate.status, 200);
+  assert.equal(validate.json.valid, true);
+
+  const unauthorized = await callHttp(handler, {
+    method: "POST",
+    url: "/v1/proposals",
+    headers: { "content-type": "application/json" },
+    body: {
+      bundle: "app",
+      path: "http/tool.md",
+      frontmatter: { type: "MCP Tool", title: "HTTP Tool" },
+      body: "# HTTP Tool",
+    },
+  });
+  assert.equal(unauthorized.status, 401);
+
+  const proposed = await callHttp(handler, {
+    method: "POST",
+    url: "/v1/proposals",
+    headers: { "content-type": "application/json", authorization: "Bearer test-token" },
+    body: {
+      bundle: "app",
+      path: "http/tool.md",
+      frontmatter: { type: "MCP Tool", title: "HTTP Tool" },
+      body: "# HTTP Tool",
+    },
+  });
+  assert.equal(proposed.status, 200);
+  const accepted = await callHttp(handler, {
+    method: "POST",
+    url: `/v1/proposals/${proposed.json.proposal.id}/accept`,
+    headers: { authorization: "Bearer test-token" },
+  });
+  assert.equal(accepted.status, 200);
+  assert.equal(accepted.json.accepted, true);
+  assert.equal(fs.existsSync(path.join(bundle, "http", "tool.md")), true);
+});
+
 test("generator plugins write project concepts into configured outputs", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "okf-generate-"));
   fs.mkdirSync(path.join(root, "docs"), { recursive: true });
@@ -625,6 +831,9 @@ test("CLI subcommands support project validation and search", async () => {
 test("CLI rejects dangling option flags", () => {
   assert.throws(() => parseArgs(["--bundle"]), /requires a value/);
   assert.throws(() => parseArgs(["--project"]), /requires a value/);
+  assert.throws(() => parseArgs(["--host"]), /requires a value/);
+  assert.equal(parseArgs(["--project", "okf.project.yaml", "serve", "--host", "0.0.0.0", "--port", "9000"]).host, "0.0.0.0");
+  assert.equal(parseArgs(["--project", "okf.project.yaml", "serve", "--host", "0.0.0.0", "--port", "9000"]).port, 9000);
 });
 
 test("MCP resources and tools operate over the in-memory index", async () => {
