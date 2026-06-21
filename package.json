@@ -1,0 +1,41 @@
+{
+  "name": "okf-mcp",
+  "version": "0.1.0",
+  "description": "Project-agnostic Open Knowledge Format CLI, graph index, and MCP stdio server.",
+  "homepage": "https://github.com/mfdaves/okf-mcp#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mfdaves/okf-mcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/mfdaves/okf-mcp/issues"
+  },
+  "main": "src/index.js",
+  "bin": {
+    "okf": "bin/okf-mcp.js",
+    "okf-mcp": "bin/okf-mcp.js"
+  },
+  "scripts": {
+    "test": "node --test",
+    "inspect": "node bin/okf-mcp.js --help",
+    "start": "node bin/okf-mcp.js"
+  },
+  "keywords": [
+    "mcp",
+    "okf",
+    "okf-format",
+    "markdown",
+    "knowledge-graph",
+    "agents"
+  ],
+  "license": "MIT",
+  "files": [
+    "bin",
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  }
+}
