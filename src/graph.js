@@ -73,6 +73,11 @@ function trimGraph(nodes, edges, options) {
   };
 }
 
+function canonicalUri(index, uri) {
+  const doc = uri ? index.byUri.get(uri) : null;
+  return doc ? doc.uri : uri;
+}
+
 function getGraph(index, options) {
   const docs = docsByFilter(index, options || {});
   const uris = new Set(docs.map((doc) => doc.uri));
@@ -97,23 +102,25 @@ function getGraph(index, options) {
 }
 
 function getNeighbors(index, uri) {
+  const canonical = canonicalUri(index, uri);
   const inbound = [];
   const outbound = [];
   index.edges.forEach((edge) => {
-    if (edge.source === uri && index.byUri.has(edge.target)) {
+    if (edge.source === canonical && index.byUri.has(edge.target)) {
       outbound.push({ edge, node: nodeFor(index.byUri.get(edge.target)) });
-    } else if (edge.source === uri && edge.external) {
+    } else if (edge.source === canonical && edge.external) {
       outbound.push({ edge, node: externalNodeFor(edge.target) });
     }
-    if (edge.target === uri && index.byUri.has(edge.source)) {
+    if (edge.target === canonical && index.byUri.has(edge.source)) {
       inbound.push({ edge, node: nodeFor(index.byUri.get(edge.source)) });
     }
   });
-  return { uri, inbound, outbound };
+  return { uri: canonical, inbound, outbound };
 }
 
 function getSubgraph(index, options) {
-  const seeds = Array.isArray(options && options.seeds) ? options.seeds : [options && options.uri].filter(Boolean);
+  const requestedSeeds = Array.isArray(options && options.seeds) ? options.seeds : [options && options.uri].filter(Boolean);
+  const seeds = Array.from(new Set(requestedSeeds.map((uri) => canonicalUri(index, uri))));
   const depth = boundedInteger(options && options.depth, 1, 0, 10);
   const maxNodes = boundedInteger(options && options.maxNodes, 50, 1, 1000);
   const allowedUris = new Set((options && options.includeReserved ? index.documents : index.concepts).map((doc) => doc.uri));
@@ -141,6 +148,8 @@ function getSubgraph(index, options) {
 }
 
 function findPaths(index, source, target, maxPaths) {
+  const canonicalSource = canonicalUri(index, source);
+  const canonicalTarget = canonicalUri(index, target);
   const limit = boundedInteger(maxPaths, 3, 1, 50);
   const adjacency = new Map();
   index.edges.filter((edge) => !edge.broken).forEach((edge) => {
@@ -149,13 +158,13 @@ function findPaths(index, source, target, maxPaths) {
     }
     adjacency.get(edge.source).push(edge.target);
   });
-  const queue = [[source]];
+  const queue = [[canonicalSource]];
   const paths = [];
-  const bestDepth = new Map([[source, 0]]);
+  const bestDepth = new Map([[canonicalSource, 0]]);
   while (queue.length && paths.length < limit) {
     const path = queue.shift();
     const last = path[path.length - 1];
-    if (last === target) {
+    if (last === canonicalTarget) {
       paths.push(path);
       continue;
     }
@@ -171,7 +180,7 @@ function findPaths(index, source, target, maxPaths) {
       queue.push(path.concat(next));
     }
   }
-  return { source, target, paths };
+  return { source: canonicalSource, target: canonicalTarget, paths };
 }
 
 function graphSummary(index) {

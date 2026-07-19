@@ -39,6 +39,65 @@ function writeJson(filePath, value) {
   fs.writeFileSync(filePath, JSON.stringify(value, null, 2) + "\n", "utf8");
 }
 
+function revisionFor(text) {
+  return `sha256:${crypto.createHash("sha256").update(text).digest("hex")}`;
+}
+
+function writeFileAtomic(filePath, text, expectedRevision) {
+  ensureDir(path.dirname(filePath));
+  if (fs.existsSync(filePath) && fs.lstatSync(filePath).isSymbolicLink()) {
+    throw new Error("Concept files cannot be symbolic links.");
+  }
+  const mode = fs.existsSync(filePath) ? fs.statSync(filePath).mode : null;
+  const temporaryPath = path.join(
+    path.dirname(filePath),
+    `.${path.basename(filePath)}.${process.pid}.${crypto.randomBytes(6).toString("hex")}.tmp`,
+  );
+  try {
+    fs.writeFileSync(temporaryPath, text, { encoding: "utf8", flag: "wx" });
+    if (mode !== null) {
+      fs.chmodSync(temporaryPath, mode);
+    }
+    const currentRevision = revisionFor(fs.readFileSync(filePath));
+    if (expectedRevision && currentRevision !== expectedRevision) {
+      return { written: false, currentRevision };
+    }
+    fs.renameSync(temporaryPath, filePath);
+    return { written: true, currentRevision };
+  } finally {
+    if (fs.existsSync(temporaryPath)) {
+      fs.unlinkSync(temporaryPath);
+    }
+  }
+}
+
+function isInside(root, candidate) {
+  const relative = path.relative(root, candidate);
+  return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
+}
+
+function rejectSymlinkTraversal(realRoot, relativePath) {
+  const segments = relativePath.split("/");
+  let current = realRoot;
+  segments.forEach((segment, index) => {
+    current = path.join(current, segment);
+    if (!fs.existsSync(current)) {
+      return;
+    }
+    const stat = fs.lstatSync(current);
+    if (stat.isSymbolicLink()) {
+      throw new Error(`Concept path cannot traverse a symbolic link: ${segments.slice(0, index + 1).join("/")}`);
+    }
+    if (index < segments.length - 1 && !stat.isDirectory()) {
+      throw new Error(`Concept path parent is not a directory: ${segments.slice(0, index + 1).join("/")}`);
+    }
+    const resolved = fs.realpathSync(current);
+    if (!isInside(realRoot, resolved)) {
+      throw new Error("Concept path resolves outside bundle root.");
+    }
+  });
+}
+
 class FileConceptStore {
   constructor(options) {
     this.project = options.project || null;
@@ -77,6 +136,30 @@ class FileConceptStore {
     return bundle;
   }
 
+  resolveConceptFile(bundleId, conceptPath) {
+    const bundle = this.getBundle(bundleId);
+    const relativePath = normalizeConceptPath(conceptPath);
+    const realRoot = fs.realpathSync(bundle.root);
+    const absolutePath = path.resolve(realRoot, ...relativePath.split("/"));
+    if (!isInside(realRoot, absolutePath)) {
+      throw new Error("Concept path resolves outside bundle root.");
+    }
+    rejectSymlinkTraversal(realRoot, relativePath);
+    return { relativePath, absolutePath };
+  }
+
+  getConceptRevision(bundleId, conceptPath) {
+    const { relativePath, absolutePath } = this.resolveConceptFile(bundleId, conceptPath);
+    if (!fs.existsSync(absolutePath)) {
+      throw new Error(`Concept file does not exist: ${relativePath}`);
+    }
+    return revisionFor(fs.readFileSync(absolutePath));
+  }
+
+  getContentRevision(text) {
+    return revisionFor(text);
+  }
+
   listProposalFiles() {
     if (!fs.existsSync(this.proposalRoot)) {
       return [];
@@ -93,6 +176,10 @@ class FileConceptStore {
     const proposal = {
       id,
       status: "proposed",
+      op: input.op || "create",
+      targetUri: input.targetUri || null,
+      targetPathUri: input.targetPathUri || null,
+      baseRevision: input.baseRevision || null,
       bundle: input.bundle,
       path: input.path,
       uri: input.validation && input.validation.uri,
@@ -122,6 +209,8 @@ class FileConceptStore {
     }).map((proposal) => ({
       id: proposal.id,
       status: proposal.status,
+      op: proposal.op || "create",
+      targetUri: proposal.targetUri || null,
       bundle: proposal.bundle,
       path: proposal.path,
       uri: proposal.uri,
@@ -145,39 +234,93 @@ class FileConceptStore {
     return proposal;
   }
 
+  markProposalConflict(proposal, currentRevision) {
+    proposal.conflict = {
+      expectedRevision: proposal.baseRevision || null,
+      actualRevision: currentRevision,
+      detectedAt: nowIso(),
+    };
+    this.saveExistingProposal(proposal);
+    return {
+      accepted: false,
+      conflict: true,
+      message: "The concept changed after this update was proposed. Create a new proposal from the current concept.",
+      proposal,
+    };
+  }
+
   async acceptProposal(id, authoringService) {
     const proposal = await this.getProposal(id);
     if (proposal.status !== "proposed") {
       throw new Error(`Only proposed concepts can be accepted. Current status: ${proposal.status}`);
     }
-    const validation = authoringService.validateConcept({
+    const op = proposal.op || "create";
+    if (op !== "create" && op !== "update") {
+      throw new Error(`Unsupported proposal operation: ${op}`);
+    }
+    const { relativePath, absolutePath } = this.resolveConceptFile(proposal.bundle, proposal.path);
+    const exists = fs.existsSync(absolutePath);
+    if (op === "create" && exists) {
+      throw new Error(`Concept file already exists: ${relativePath}`);
+    }
+    if (op === "update" && !exists) {
+      throw new Error(`Concept file does not exist for update: ${relativePath}`);
+    }
+    let existing = null;
+    if (op === "update") {
+      const currentRevision = this.getConceptRevision(proposal.bundle, proposal.path);
+      if (!proposal.baseRevision || currentRevision !== proposal.baseRevision) {
+        return this.markProposalConflict(proposal, currentRevision);
+      }
+      existing = authoringService.resolveConcept(proposal.targetUri);
+      if (
+        proposal.bundle !== existing.bundle
+        || proposal.path !== existing.path
+        || proposal.targetPathUri !== existing.pathUri
+      ) {
+        throw new Error("Update proposal target does not match the current concept identity.");
+      }
+    }
+    const candidate = {
       bundle: proposal.bundle,
       path: proposal.path,
       frontmatter: proposal.frontmatter,
       body: proposal.body,
-    });
+    };
+    const validation = op === "update"
+      ? authoringService.validateUpdateCandidate(candidate, existing)
+      : authoringService.validateConcept(candidate);
     if (!validation.valid) {
       proposal.validation = validation;
       this.saveExistingProposal(proposal);
       return { accepted: false, proposal, validation };
     }
-    const bundle = this.getBundle(proposal.bundle);
-    const relativePath = normalizeConceptPath(proposal.path);
-    const absolutePath = path.resolve(bundle.root, relativePath);
-    const relative = path.relative(path.resolve(bundle.root), absolutePath);
-    if (relative.startsWith("..") || path.isAbsolute(relative)) {
-      throw new Error("Accepted concept path resolves outside bundle root.");
+    if (op === "update") {
+      const currentRevision = this.getConceptRevision(proposal.bundle, proposal.path);
+      if (currentRevision !== proposal.baseRevision) {
+        return this.markProposalConflict(proposal, currentRevision);
+      }
+      const safeTarget = this.resolveConceptFile(proposal.bundle, proposal.path);
+      const write = writeFileAtomic(safeTarget.absolutePath, validation.markdown, proposal.baseRevision);
+      if (!write.written) {
+        return this.markProposalConflict(proposal, write.currentRevision);
+      }
+    } else {
+      ensureDir(path.dirname(absolutePath));
+      const safeTarget = this.resolveConceptFile(proposal.bundle, proposal.path);
+      fs.writeFileSync(safeTarget.absolutePath, validation.markdown, { encoding: "utf8", flag: "wx" });
     }
-    if (fs.existsSync(absolutePath)) {
-      throw new Error(`Concept file already exists: ${relativePath}`);
-    }
-    ensureDir(path.dirname(absolutePath));
-    fs.writeFileSync(absolutePath, validation.markdown, "utf8");
     proposal.status = "accepted";
     proposal.acceptedAt = nowIso();
     proposal.validation = validation;
     this.saveExistingProposal(proposal);
-    return { accepted: true, proposal, validation };
+    return {
+      accepted: true,
+      created: op === "create",
+      updated: op === "update",
+      proposal,
+      validation,
+    };
   }
 
   async rejectProposal(id, reason) {

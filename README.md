@@ -168,6 +168,7 @@ relations:
 - `okf_validate_concept`
 - `okf_suggest_concept_path`
 - `okf_propose_concept`
+- `okf_propose_update`
 - `okf_list_proposals`
 - `okf_get_proposal`
 - `okf_accept_proposal`
@@ -183,7 +184,9 @@ relations:
 
 Most MCP tools are read-only over the current index. `load_remote_bundle` mutates only the server's in-memory index by fetching a public GitHub tree; it does not write files.
 
-The `okf_*` authoring tools are proposal-first. They are enabled when the server is started with `--project`, because the project config identifies writable local bundles. Proposing a concept writes only a proposal record. Accepting a proposal writes the Markdown concept into the configured bundle root and refreshes the in-memory index.
+Every MCP tool includes a purpose-specific description, descriptions for its input parameters, and standard annotations covering read-only behavior, destructive behavior, idempotency, and external access.
+
+The `okf_*` authoring tools are proposal-first. They are enabled when the server is started with `--project`, because the project config identifies writable local bundles. Proposing a concept or update writes only a proposal record. Accepting a proposal writes the Markdown concept into the configured bundle root and refreshes the in-memory index.
 
 ## Authoring Concepts
 
@@ -215,12 +218,33 @@ MCP proposal flow:
 
 Then call `okf_accept_proposal` with the returned `proposal.id`.
 
+To correct an existing concept, read it with `get_concept`, then propose only the fields that need to change:
+
+```json
+{
+  "name": "okf_propose_update",
+  "arguments": {
+    "uri": "okf://app/tools/create-order",
+    "frontmatter": {
+      "title": "Create Order Tool",
+      "description": "Creates a validated order."
+    },
+    "removeFrontmatterKeys": ["deprecatedField"],
+    "message": "Correct outdated tool metadata."
+  }
+}
+```
+
+Omitted frontmatter fields and an omitted body are preserved. The concept URI cannot change through an update. Each update proposal records the source file revision, and acceptance checks it again immediately before replacing the file so detected concurrent changes are rejected.
+
 Safety rules:
 
 - concept paths must be safe relative `.md` paths inside a writable bundle
+- concept writes cannot traverse symbolic links under a writable bundle
 - missing subdirectories are created only when a proposal is accepted
 - `index.md` and `log.md` cannot be authored as concepts
 - duplicate paths and duplicate `okf://` IDs are rejected
+- updates cannot change concept identity and reject detected changes made after proposal creation
 - invalid IDs, invalid relation types, and broken internal OKF relations fail validation
 - external relation targets such as `repo://...` are allowed
 
@@ -244,6 +268,7 @@ Read/validation endpoints:
 Mutation endpoints require `Authorization: Bearer <OKF_WRITE_TOKEN>`:
 
 - `POST /v1/proposals`
+- `POST /v1/proposals/update`
 - `POST /v1/proposals/:id/accept`
 - `POST /v1/proposals/:id/reject`
 

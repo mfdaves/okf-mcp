@@ -80,6 +80,11 @@ function createHttpHandler(service, options) {
         sendJson(res, 200, service.suggestConceptPath(await readBody(req)));
         return;
       }
+      if (req.method === "POST" && url.pathname === "/v1/proposals/update") {
+        requireWriteAuth(req, writeToken);
+        sendJson(res, 200, await service.proposeUpdate(await readBody(req)));
+        return;
+      }
       if (req.method === "POST" && url.pathname === "/v1/proposals") {
         requireWriteAuth(req, writeToken);
         sendJson(res, 200, await service.proposeConcept(await readBody(req)));

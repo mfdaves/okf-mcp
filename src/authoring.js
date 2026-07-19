@@ -155,16 +155,26 @@ class ConceptAuthoringService {
     };
   }
 
-  validateConcept(input) {
+  validateConcept(input, options) {
     const bundleId = input && input.bundle;
     const bundle = this.getBundle(bundleId);
     const conceptPath = normalizeConceptPath(input && input.path);
     const frontmatter = Object.assign({}, input && input.frontmatter ? input.frontmatter : {});
     const markdown = renderConceptMarkdown({ path: conceptPath, frontmatter, body: input && input.body });
     const index = this.store.getIndex();
+    const replace = options && options.replace;
     const errors = [];
     const warnings = [];
     let doc = null;
+
+    function isReplacedConcept(existing) {
+      return Boolean(
+        replace
+        && existing
+        && existing.bundle === replace.bundle
+        && existing.path === replace.path,
+      );
+    }
 
     try {
       doc = parseMarkdownText(bundle, conceptPath, markdown, `${bundle.root}/${conceptPath}`);
@@ -182,10 +192,12 @@ class ConceptAuthoringService {
       }
     });
 
-    if (index.byUri.has(doc.pathUri)) {
+    const existingAtPath = index.byUri.get(doc.pathUri);
+    if (existingAtPath && !isReplacedConcept(existingAtPath)) {
       errors.push({ code: "duplicate_uri", bundle: bundleId, path: conceptPath, uri: doc.pathUri, message: "Concept path already exists." });
     }
-    if (doc.uri !== doc.pathUri && index.byUri.has(doc.uri)) {
+    const existingAtUri = index.byUri.get(doc.uri);
+    if (doc.uri !== doc.pathUri && existingAtUri && !isReplacedConcept(existingAtUri)) {
       errors.push({ code: "duplicate_uri", bundle: bundleId, path: conceptPath, uri: doc.uri, message: "Concept id already exists." });
     }
 
@@ -246,6 +258,7 @@ class ConceptAuthoringService {
       return { created: false, validation };
     }
     const proposal = await this.store.saveProposal({
+      op: "create",
       bundle: validation.bundle,
       path: validation.path,
       frontmatter: Object.assign({}, input.frontmatter || {}),
@@ -255,6 +268,89 @@ class ConceptAuthoringService {
       validation,
     });
     return { created: true, proposal };
+  }
+
+  resolveConcept(uri) {
+    const index = this.store.getIndex();
+    const existing = uri ? index.byUri.get(uri) : null;
+    if (!existing || existing.reserved || !existing.valid) {
+      throw new Error(`Unknown valid OKF concept: ${uri || "<missing>"}`);
+    }
+    this.getBundle(existing.bundle);
+    return existing;
+  }
+
+  validateUpdateCandidate(input, existing) {
+    const validation = this.validateConcept({
+      bundle: existing.bundle,
+      path: existing.path,
+      frontmatter: input.frontmatter,
+      body: input.body,
+    }, {
+      replace: {
+        bundle: existing.bundle,
+        path: existing.path,
+      },
+    });
+    if (validation.uri !== existing.uri) {
+      validation.errors.push({
+        code: "immutable_uri",
+        bundle: existing.bundle,
+        path: existing.path,
+        uri: validation.uri,
+        message: "Concept updates cannot change the existing concept URI.",
+      });
+      validation.valid = false;
+    }
+    return validation;
+  }
+
+  async proposeUpdate(input) {
+    const uri = input && input.uri;
+    if (!uri) {
+      throw new Error("okf_propose_update requires uri.");
+    }
+    const existing = this.resolveConcept(uri);
+    const patch = input && input.frontmatter === undefined ? {} : input.frontmatter;
+    if (!patch || typeof patch !== "object" || Array.isArray(patch)) {
+      throw new Error("frontmatter must be an object when provided.");
+    }
+    const removeKeys = input && input.removeFrontmatterKeys === undefined
+      ? []
+      : input.removeFrontmatterKeys;
+    if (!Array.isArray(removeKeys) || removeKeys.some((key) => typeof key !== "string" || !key.trim())) {
+      throw new Error("removeFrontmatterKeys must be an array of non-empty strings.");
+    }
+    if (removeKeys.includes("id")) {
+      throw new Error("Concept updates cannot remove the existing concept id.");
+    }
+    const hasBody = Boolean(input && Object.prototype.hasOwnProperty.call(input, "body"));
+    if (!Object.keys(patch).length && !removeKeys.length && !hasBody) {
+      throw new Error("okf_propose_update requires a frontmatter change, a removed key, or a body replacement.");
+    }
+    const frontmatter = Object.assign({}, existing.frontmatter, patch);
+    removeKeys.forEach((key) => {
+      delete frontmatter[key];
+    });
+    const body = hasBody ? String(input.body || "") : existing.body;
+    const validation = this.validateUpdateCandidate({ frontmatter, body }, existing);
+    if (!validation.valid) {
+      return { created: false, op: "update", validation };
+    }
+    const proposal = await this.store.saveProposal({
+      op: "update",
+      targetUri: existing.uri,
+      targetPathUri: existing.pathUri,
+      baseRevision: this.store.getContentRevision(existing.text),
+      bundle: validation.bundle,
+      path: validation.path,
+      frontmatter,
+      body,
+      markdown: validation.markdown,
+      message: input.message || "",
+      validation,
+    });
+    return { created: true, op: "update", proposal };
   }
 
   async listProposals(input) {

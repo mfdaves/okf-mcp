@@ -8,33 +8,313 @@ const { exportGraph, findPaths, getGraph, getNeighbors, getSubgraph, graphSummar
 const { fetchGitHubBundle, fetchRemoteBundles } = require("./remote");
 const { ConceptAuthoringService } = require("./authoring");
 const { FileConceptStore } = require("./store");
+const packageMetadata = require("../package.json");
 
-const TOOL_NAMES = [
-  "list_bundles",
-  "list_concepts",
-  "get_concept",
-  "search_concepts",
-  "list_types",
-  "list_tags",
-  "list_relation_types",
-  "load_remote_bundle",
-  "list_remote_bundles",
-  "okf_validate_concept",
-  "okf_suggest_concept_path",
-  "okf_propose_concept",
-  "okf_list_proposals",
-  "okf_get_proposal",
-  "okf_accept_proposal",
-  "okf_reject_proposal",
-  "get_graph",
-  "get_neighbors",
-  "get_subgraph",
-  "find_paths",
-  "graph_summary",
-  "validate_bundle",
-  "validate_project",
-  "export_graph",
-];
+const READ_ONLY = {
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: false,
+};
+const LOCAL_WRITE = {
+  readOnlyHint: false,
+  destructiveHint: false,
+  idempotentHint: false,
+  openWorldHint: false,
+};
+const DESTRUCTIVE_WRITE = {
+  readOnlyHint: false,
+  destructiveHint: true,
+  idempotentHint: false,
+  openWorldHint: false,
+};
+const REMOTE_LOAD = {
+  readOnlyHint: false,
+  destructiveHint: false,
+  idempotentHint: false,
+  openWorldHint: true,
+};
+
+function stringParameter(description, extra) {
+  return Object.assign({ type: "string", description }, extra || {});
+}
+
+function numberParameter(description, extra) {
+  return Object.assign({ type: "number", description }, extra || {});
+}
+
+function booleanParameter(description) {
+  return { type: "boolean", description };
+}
+
+function stringArrayParameter(description) {
+  return {
+    type: "array",
+    description,
+    items: { type: "string" },
+  };
+}
+
+function objectParameter(description) {
+  return {
+    type: "object",
+    description,
+    additionalProperties: true,
+  };
+}
+
+function defineTool(description, annotations, properties, required, schemaExtras) {
+  return {
+    description,
+    annotations,
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      properties: properties || {},
+      ...(required && required.length ? { required } : {}),
+      ...(schemaExtras || {}),
+    },
+  };
+}
+
+const TOOL_DEFINITIONS = {
+  list_bundles: defineTool(
+    "List the local and remote OKF bundles currently loaded by the server.",
+    READ_ONLY,
+  ),
+  list_concepts: defineTool(
+    "List compact OKF concept summaries with optional bundle, type, tag, and text filters.",
+    READ_ONLY,
+    {
+      query: stringParameter("Optional text matched against concept metadata and content."),
+      bundle: stringParameter("Limit results to this bundle id."),
+      type: stringParameter("Limit results to this exact concept type."),
+      tag: stringParameter("Limit results to concepts containing this tag."),
+      limit: numberParameter("Maximum number of concepts to return."),
+      offset: numberParameter("Number of matching concepts to skip before returning results."),
+    },
+  ),
+  get_concept: defineTool(
+    "Read one valid OKF concept, including its frontmatter, Markdown body, and links.",
+    READ_ONLY,
+    {
+      uri: stringParameter("Canonical or path based okf URI for the concept."),
+      bundle: stringParameter("Bundle id used with path when uri is not supplied."),
+      path: stringParameter("Bundle relative Markdown path used with bundle when uri is not supplied."),
+    },
+    [],
+    {
+      anyOf: [
+        { required: ["uri"] },
+        { required: ["bundle", "path"] },
+      ],
+    },
+  ),
+  search_concepts: defineTool(
+    "Search OKF concepts and return ranked summaries using text and structured filters.",
+    READ_ONLY,
+    {
+      query: stringParameter("Text query matched against concept metadata and content."),
+      bundle: stringParameter("Limit results to this bundle id."),
+      types: stringArrayParameter("Limit results to any of these concept types."),
+      tagsAny: stringArrayParameter("Require at least one of these tags."),
+      tagsAll: stringArrayParameter("Require all of these tags."),
+      pathPrefix: stringParameter("Limit results to bundle relative paths beginning with this prefix."),
+      relationType: stringParameter("Limit results to concepts participating in this relation type."),
+      limit: numberParameter("Maximum number of concepts to return."),
+      offset: numberParameter("Number of matching concepts to skip before returning results."),
+    },
+  ),
+  list_types: defineTool(
+    "Count the concept types present in the current OKF index.",
+    READ_ONLY,
+  ),
+  list_tags: defineTool(
+    "Count the tags present on concepts in the current OKF index.",
+    READ_ONLY,
+  ),
+  list_relation_types: defineTool(
+    "Count the typed relations present in the current OKF graph.",
+    READ_ONLY,
+  ),
+  load_remote_bundle: defineTool(
+    "Fetch a public GitHub Markdown tree and add it to the in memory index as a read only remote bundle.",
+    REMOTE_LOAD,
+    {
+      id: stringParameter("Unique bundle id to assign to the fetched remote tree."),
+      url: stringParameter("Public GitHub tree URL to fetch."),
+      provider: stringParameter("Remote provider name. Only github is supported.", { enum: ["github"] }),
+      include: stringArrayParameter("Optional glob patterns selecting remote Markdown paths to include."),
+      exclude: stringArrayParameter("Optional glob patterns selecting remote Markdown paths to exclude."),
+    },
+    ["id", "url"],
+  ),
+  list_remote_bundles: defineTool(
+    "List metadata for remote bundles currently loaded into the server.",
+    READ_ONLY,
+  ),
+  okf_validate_concept: defineTool(
+    "Validate a proposed new OKF concept without writing a proposal or concept file.",
+    READ_ONLY,
+    {
+      bundle: stringParameter("Writable bundle id that would contain the concept."),
+      path: stringParameter("Safe bundle relative Markdown path for the concept."),
+      frontmatter: objectParameter("Complete YAML frontmatter represented as a JSON object."),
+      body: stringParameter("Markdown body for the concept."),
+    },
+    ["bundle", "path", "frontmatter"],
+  ),
+  okf_suggest_concept_path: defineTool(
+    "Suggest a safe bundle relative Markdown path from a concept type and title.",
+    READ_ONLY,
+    {
+      bundle: stringParameter("Writable bundle id that will contain the concept."),
+      type: stringParameter("Concept type used to build the path."),
+      title: stringParameter("Concept title used to build the file name."),
+      prefix: stringParameter("Optional bundle relative directory prefix."),
+    },
+    ["bundle", "type", "title"],
+  ),
+  okf_propose_concept: defineTool(
+    "Create a reviewable proposal for a new OKF concept without writing the concept file.",
+    LOCAL_WRITE,
+    {
+      bundle: stringParameter("Writable bundle id that will contain the concept."),
+      path: stringParameter("Safe bundle relative Markdown path for the new concept."),
+      frontmatter: objectParameter("Complete YAML frontmatter represented as a JSON object."),
+      body: stringParameter("Markdown body for the new concept."),
+      message: stringParameter("Optional review note explaining why the concept should be created."),
+    },
+    ["bundle", "path", "frontmatter"],
+  ),
+  okf_propose_update: defineTool(
+    "Create a reviewable update proposal for an existing OKF concept while preserving unspecified content.",
+    LOCAL_WRITE,
+    {
+      uri: stringParameter("Canonical or path based okf URI of the existing concept."),
+      frontmatter: objectParameter("Frontmatter fields to add or replace; unspecified fields are preserved."),
+      removeFrontmatterKeys: stringArrayParameter("Frontmatter keys to remove; the id field cannot be removed."),
+      body: stringParameter("Replacement Markdown body; omit it to preserve the current body."),
+      message: stringParameter("Optional review note explaining why the concept should be updated."),
+    },
+    ["uri"],
+    {
+      anyOf: [
+        { required: ["frontmatter"] },
+        { required: ["removeFrontmatterKeys"] },
+        { required: ["body"] },
+      ],
+    },
+  ),
+  okf_list_proposals: defineTool(
+    "List compact metadata for stored authoring proposals.",
+    READ_ONLY,
+    {
+      bundle: stringParameter("Limit results to proposals for this bundle id."),
+      status: stringParameter("Limit results to this proposal status.", { enum: ["proposed", "accepted", "rejected"] }),
+    },
+  ),
+  okf_get_proposal: defineTool(
+    "Read one authoring proposal, including its candidate content and validation result.",
+    READ_ONLY,
+    {
+      proposalId: stringParameter("Identifier returned when the proposal was created."),
+    },
+    ["proposalId"],
+  ),
+  okf_accept_proposal: defineTool(
+    "Accept a reviewed proposal and write its new or updated concept file after revalidation.",
+    DESTRUCTIVE_WRITE,
+    {
+      proposalId: stringParameter("Identifier of the proposed change to accept."),
+    },
+    ["proposalId"],
+  ),
+  okf_reject_proposal: defineTool(
+    "Reject a reviewed proposal so it can no longer be accepted.",
+    DESTRUCTIVE_WRITE,
+    {
+      proposalId: stringParameter("Identifier of the proposed change to reject."),
+      reason: stringParameter("Optional explanation recorded with the rejection."),
+    },
+    ["proposalId"],
+  ),
+  get_graph: defineTool(
+    "Return a bounded set of OKF graph nodes and edges with optional concept filters.",
+    READ_ONLY,
+    {
+      bundle: stringParameter("Limit graph nodes to this bundle id."),
+      type: stringParameter("Limit graph nodes to this exact concept type."),
+      tag: stringParameter("Limit graph nodes to concepts containing this tag."),
+      pathPrefix: stringParameter("Limit graph nodes to bundle relative paths beginning with this prefix."),
+      includeExternal: booleanParameter("Include opaque external relation targets in the graph."),
+      maxNodes: numberParameter("Maximum number of graph nodes to return."),
+      maxEdges: numberParameter("Maximum number of graph edges to return."),
+    },
+  ),
+  get_neighbors: defineTool(
+    "Return the incoming and outgoing graph relationships for one OKF concept.",
+    READ_ONLY,
+    {
+      uri: stringParameter("Canonical or path based okf URI of the center concept."),
+    },
+    ["uri"],
+  ),
+  get_subgraph: defineTool(
+    "Traverse a bounded OKF subgraph outward from one or more seed concepts.",
+    READ_ONLY,
+    {
+      uri: stringParameter("Single canonical or path based okf URI to use as a seed."),
+      seeds: stringArrayParameter("One or more okf URIs to use as traversal seeds."),
+      depth: numberParameter("Maximum relationship depth to traverse from the seeds."),
+      maxNodes: numberParameter("Maximum number of graph nodes to return."),
+    },
+    [],
+    {
+      anyOf: [
+        { required: ["uri"] },
+        { required: ["seeds"] },
+      ],
+    },
+  ),
+  find_paths: defineTool(
+    "Find bounded relationship paths between two OKF concepts.",
+    READ_ONLY,
+    {
+      source: stringParameter("Canonical or path based okf URI where path search begins."),
+      target: stringParameter("Canonical or path based okf URI where path search ends."),
+      maxPaths: numberParameter("Maximum number of distinct paths to return."),
+    },
+    ["source", "target"],
+  ),
+  graph_summary: defineTool(
+    "Summarize bundle, concept, edge, type, tag, and graph health counts.",
+    READ_ONLY,
+  ),
+  validate_bundle: defineTool(
+    "Return validation errors and warnings for one bundle or for the full current index.",
+    READ_ONLY,
+    {
+      bundle: stringParameter("Optional bundle id to validate in isolation."),
+    },
+  ),
+  validate_project: defineTool(
+    "Return validation errors and warnings for the complete configured OKF project.",
+    READ_ONLY,
+  ),
+  export_graph: defineTool(
+    "Render the current OKF graph as JSON, Graphviz DOT, or Mermaid text.",
+    READ_ONLY,
+    {
+      format: stringParameter("Output format for the graph.", { enum: ["json", "dot", "mermaid"] }),
+      includeExternal: booleanParameter("Include opaque external relation targets in the export."),
+      maxNodes: numberParameter("Maximum number of graph nodes to export."),
+      maxEdges: numberParameter("Maximum number of graph edges to export."),
+    },
+  ),
+};
+
+const TOOL_NAMES = Object.keys(TOOL_DEFINITIONS);
 
 function jsonContent(value) {
   return {
@@ -48,36 +328,8 @@ function jsonContent(value) {
 }
 
 function listTools() {
-  const schemas = {
-    get_concept: { required: ["uri"], properties: { uri: { type: "string" }, bundle: { type: "string" }, path: { type: "string" } } },
-    search_concepts: { properties: { query: { type: "string" }, bundle: { type: "string" }, types: { type: "array", items: { type: "string" } }, tagsAny: { type: "array", items: { type: "string" } }, tagsAll: { type: "array", items: { type: "string" } }, pathPrefix: { type: "string" }, relationType: { type: "string" }, limit: { type: "number" }, offset: { type: "number" } } },
-    list_concepts: { properties: { query: { type: "string" }, bundle: { type: "string" }, type: { type: "string" }, tag: { type: "string" }, limit: { type: "number" }, offset: { type: "number" } } },
-    get_graph: { properties: { bundle: { type: "string" }, type: { type: "string" }, tag: { type: "string" }, pathPrefix: { type: "string" }, includeExternal: { type: "boolean" }, maxNodes: { type: "number" }, maxEdges: { type: "number" } } },
-    get_neighbors: { required: ["uri"], properties: { uri: { type: "string" } } },
-    get_subgraph: { properties: { uri: { type: "string" }, seeds: { type: "array", items: { type: "string" } }, depth: { type: "number" }, maxNodes: { type: "number" } } },
-    find_paths: { required: ["source", "target"], properties: { source: { type: "string" }, target: { type: "string" }, maxPaths: { type: "number" } } },
-    validate_bundle: { properties: { bundle: { type: "string" } } },
-    load_remote_bundle: { required: ["id", "url"], properties: { id: { type: "string" }, url: { type: "string" }, provider: { type: "string" }, include: { type: "array", items: { type: "string" } }, exclude: { type: "array", items: { type: "string" } } } },
-    okf_validate_concept: { required: ["bundle", "path", "frontmatter"], properties: { bundle: { type: "string" }, path: { type: "string" }, frontmatter: { type: "object" }, body: { type: "string" } } },
-    okf_suggest_concept_path: { required: ["bundle", "type", "title"], properties: { bundle: { type: "string" }, type: { type: "string" }, title: { type: "string" }, prefix: { type: "string" } } },
-    okf_propose_concept: { required: ["bundle", "path", "frontmatter"], properties: { bundle: { type: "string" }, path: { type: "string" }, frontmatter: { type: "object" }, body: { type: "string" }, message: { type: "string" } } },
-    okf_list_proposals: { properties: { bundle: { type: "string" }, status: { type: "string" } } },
-    okf_get_proposal: { required: ["proposalId"], properties: { proposalId: { type: "string" } } },
-    okf_accept_proposal: { required: ["proposalId"], properties: { proposalId: { type: "string" } } },
-    okf_reject_proposal: { required: ["proposalId"], properties: { proposalId: { type: "string" }, reason: { type: "string" } } },
-    export_graph: { properties: { format: { type: "string" }, includeExternal: { type: "boolean" }, maxNodes: { type: "number" }, maxEdges: { type: "number" } } },
-  };
   return {
-    tools: TOOL_NAMES.map((name) => ({
-      name,
-      description: `OKF ${name.replace(/_/g, " ")} tool.`,
-      inputSchema: {
-        type: "object",
-        additionalProperties: false,
-        properties: {},
-        ...(schemas[name] || {}),
-      },
-    })),
+    tools: TOOL_NAMES.map((name) => Object.assign({ name }, TOOL_DEFINITIONS[name])),
   };
 }
 
@@ -267,6 +519,8 @@ async function callTool(state, name, args) {
       return jsonContent(requireAuthoring(state).suggestConceptPath(args || {}));
     case "okf_propose_concept":
       return jsonContent(await requireAuthoring(state).proposeConcept(args || {}));
+    case "okf_propose_update":
+      return jsonContent(await requireAuthoring(state).proposeUpdate(args || {}));
     case "okf_list_proposals":
       return jsonContent(await requireAuthoring(state).listProposals(args || {}));
     case "okf_get_proposal":
@@ -329,7 +583,7 @@ function createServer(bundleArgs, options) {
     if (method === "initialize") {
       return {
         protocolVersion: params.protocolVersion || "2025-06-18",
-        serverInfo: { name: "okf-mcp", version: "0.2.0" },
+        serverInfo: { name: "okf-mcp", version: packageMetadata.version },
         capabilities: { resources: {}, tools: {} },
       };
     }

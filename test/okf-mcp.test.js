@@ -555,6 +555,8 @@ function makeAuthoringProject() {
     "id: okf://app/existing",
     "type: Concept",
     "title: Existing",
+    "description: Existing description",
+    "customField: preserve me",
     "---",
     "",
     "# Existing",
@@ -602,6 +604,14 @@ test("authoring rejects unsafe paths, duplicate ids, and invalid relations", () 
   });
   assert.equal(duplicate.valid, false);
   assert.equal(duplicate.errors.some((error) => error.code === "duplicate_uri"), true);
+  const duplicatePath = service.validateConcept({
+    bundle: "app",
+    path: "existing.md",
+    frontmatter: { type: "Concept", title: "Duplicate Path" },
+    body: "# Duplicate Path",
+  });
+  assert.equal(duplicatePath.valid, false);
+  assert.equal(duplicatePath.errors.some((error) => error.code === "duplicate_uri"), true);
   const badRelation = service.validateConcept({
     bundle: "app",
     path: "bad-relation.md",
@@ -630,6 +640,104 @@ test("authoring proposals are accepted into new subdirectories", async () => {
   assert.equal(service.store.getIndex().byUri.has("okf://app/tools/create-order.md"), true);
 });
 
+test("authoring updates existing concepts through stale safe proposals", async () => {
+  const { bundle, service } = makeAuthoringProject();
+  const proposed = await service.proposeUpdate({
+    uri: "okf://app/existing",
+    frontmatter: { title: "Existing Corrected" },
+    removeFrontmatterKeys: ["description"],
+    message: "Correct outdated title",
+  });
+  assert.equal(proposed.created, true);
+  assert.equal(proposed.op, "update");
+  assert.equal(proposed.proposal.op, "update");
+  assert.match(proposed.proposal.baseRevision, /^sha256:/);
+  assert.equal(fs.readFileSync(path.join(bundle, "existing.md"), "utf8").includes("Existing Corrected"), false);
+
+  const accepted = await service.acceptProposal({ proposalId: proposed.proposal.id });
+  assert.equal(accepted.accepted, true);
+  assert.equal(accepted.updated, true);
+  const updated = fs.readFileSync(path.join(bundle, "existing.md"), "utf8");
+  assert.match(updated, /title: Existing Corrected/);
+  assert.match(updated, /customField: preserve me/);
+  assert.doesNotMatch(updated, /description:/);
+  assert.match(updated, /# Existing/);
+
+  const immutableUri = await service.proposeUpdate({
+    uri: "okf://app/existing",
+    frontmatter: { id: "okf://app/renamed" },
+  });
+  assert.equal(immutableUri.created, false);
+  assert.equal(immutableUri.validation.errors.some((error) => error.code === "immutable_uri"), true);
+});
+
+test("authoring rejects an update proposal when the concept changed during review", async () => {
+  const { bundle, service } = makeAuthoringProject();
+  const proposed = await service.proposeUpdate({
+    uri: "okf://app/existing",
+    frontmatter: { title: "Proposed Title" },
+  });
+  fs.writeFileSync(path.join(bundle, "existing.md"), [
+    "---",
+    "id: okf://app/existing",
+    "type: Concept",
+    "title: Concurrent Edit",
+    "---",
+    "",
+    "# Concurrent Edit",
+    "",
+  ].join("\n"), "utf8");
+
+  const accepted = await service.acceptProposal({ proposalId: proposed.proposal.id });
+  assert.equal(accepted.accepted, false);
+  assert.equal(accepted.conflict, true);
+  const current = fs.readFileSync(path.join(bundle, "existing.md"), "utf8");
+  assert.match(current, /Concurrent Edit/);
+  assert.doesNotMatch(current, /Proposed Title/);
+});
+
+test("authoring binds update proposals to the original concept path", async () => {
+  const { bundle, proposals, service } = makeAuthoringProject();
+  const original = fs.readFileSync(path.join(bundle, "existing.md"), "utf8");
+  fs.writeFileSync(path.join(bundle, "decoy.md"), original, "utf8");
+  const proposed = await service.proposeUpdate({
+    uri: "okf://app/existing",
+    frontmatter: { title: "Tampered Target" },
+  });
+  const proposalPath = path.join(proposals, `${proposed.proposal.id}.json`);
+  const stored = JSON.parse(fs.readFileSync(proposalPath, "utf8"));
+  stored.path = "decoy.md";
+  fs.writeFileSync(proposalPath, JSON.stringify(stored, null, 2) + "\n", "utf8");
+
+  await assert.rejects(
+    () => service.acceptProposal({ proposalId: proposed.proposal.id }),
+    /target does not match/,
+  );
+  assert.equal(fs.readFileSync(path.join(bundle, "decoy.md"), "utf8"), original);
+});
+
+test("authoring rejects concept writes through symlinked directories", async (t) => {
+  if (process.platform === "win32") {
+    t.skip("Directory symlinks require elevated privileges on Windows.");
+    return;
+  }
+  const { bundle, service } = makeAuthoringProject();
+  const outside = fs.mkdtempSync(path.join(os.tmpdir(), "okf-outside-"));
+  fs.symlinkSync(outside, path.join(bundle, "linked"), "dir");
+  const proposed = await service.proposeConcept({
+    bundle: "app",
+    path: "linked/escaped.md",
+    frontmatter: { type: "Concept", title: "Escaped" },
+    body: "# Escaped",
+  });
+  assert.equal(proposed.created, true);
+  await assert.rejects(
+    () => service.acceptProposal({ proposalId: proposed.proposal.id }),
+    /symbolic link/,
+  );
+  assert.equal(fs.existsSync(path.join(outside, "escaped.md")), false);
+});
+
 test("MCP authoring tools create and accept concept proposals in project mode", async () => {
   const { root, bundle, proposals } = makeAuthoringProject();
   const server = await createServerAsync([], {
@@ -638,6 +746,7 @@ test("MCP authoring tools create and accept concept proposals in project mode", 
   });
   const tools = await server.handle({ method: "tools/list" });
   assert.equal(tools.tools.some((tool) => tool.name === "okf_propose_concept"), true);
+  assert.equal(tools.tools.some((tool) => tool.name === "okf_propose_update"), true);
   const proposed = await server.handle({
     method: "tools/call",
     params: {
@@ -662,6 +771,28 @@ test("MCP authoring tools create and accept concept proposals in project mode", 
     params: { name: "get_concept", arguments: { uri: "okf://app/mcp/runtime-tool.md" } },
   });
   assert.match(concept.content[0].text, /Runtime Tool/);
+
+  const update = await server.handle({
+    method: "tools/call",
+    params: {
+      name: "okf_propose_update",
+      arguments: {
+        uri: "okf://app/existing",
+        frontmatter: { title: "Existing Through MCP" },
+      },
+    },
+  });
+  const updateProposal = JSON.parse(update.content[0].text).proposal;
+  const updateAccepted = await server.handle({
+    method: "tools/call",
+    params: { name: "okf_accept_proposal", arguments: { proposalId: updateProposal.id } },
+  });
+  assert.equal(JSON.parse(updateAccepted.content[0].text).updated, true);
+  const updatedConcept = await server.handle({
+    method: "tools/call",
+    params: { name: "get_concept", arguments: { uri: "okf://app/existing" } },
+  });
+  assert.match(updatedConcept.content[0].text, /Existing Through MCP/);
 });
 
 async function callHttp(handler, options) {
@@ -738,6 +869,26 @@ test("HTTP authoring API protects proposal mutations with bearer auth", async ()
   assert.equal(accepted.status, 200);
   assert.equal(accepted.json.accepted, true);
   assert.equal(fs.existsSync(path.join(bundle, "http", "tool.md")), true);
+
+  const update = await callHttp(handler, {
+    method: "POST",
+    url: "/v1/proposals/update",
+    headers: { "content-type": "application/json", authorization: "Bearer test-token" },
+    body: {
+      uri: "okf://app/existing",
+      frontmatter: { title: "Existing Through HTTP" },
+    },
+  });
+  assert.equal(update.status, 200);
+  assert.equal(update.json.created, true);
+  const updateAccepted = await callHttp(handler, {
+    method: "POST",
+    url: `/v1/proposals/${update.json.proposal.id}/accept`,
+    headers: { authorization: "Bearer test-token" },
+  });
+  assert.equal(updateAccepted.status, 200);
+  assert.equal(updateAccepted.json.updated, true);
+  assert.match(fs.readFileSync(path.join(bundle, "existing.md"), "utf8"), /Existing Through HTTP/);
 });
 
 test("generator plugins write project concepts into configured outputs", () => {
@@ -849,6 +1000,65 @@ test("MCP resources and tools operate over the in-memory index", async () => {
   assert.equal(tools.tools.some((tool) => tool.name === "search_concepts"), true);
   const search = await server.handle({ method: "tools/call", params: { name: "search_concepts", arguments: { tagsAny: ["endpoint"] } } });
   assert.match(search.content[0].text, /Alpha/);
+});
+
+test("graph tools normalize path URI aliases to canonical concept ids", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "okf-graph-alias-"));
+  fs.writeFileSync(path.join(root, "source.md"), [
+    "---",
+    "id: okf://fixture/source",
+    "type: Concept",
+    "title: Source",
+    "relations:",
+    "  - type: related_to",
+    "    target: okf://fixture/target",
+    "---",
+    "",
+    "# Source",
+    "",
+  ].join("\n"), "utf8");
+  fs.writeFileSync(path.join(root, "target.md"), [
+    "---",
+    "id: okf://fixture/target",
+    "type: Concept",
+    "title: Target",
+    "---",
+    "",
+    "# Target",
+    "",
+  ].join("\n"), "utf8");
+  const index = buildIndex([`fixture=${root}`]);
+  const neighbors = getNeighbors(index, "okf://fixture/source.md");
+  assert.equal(neighbors.uri, "okf://fixture/source");
+  assert.equal(neighbors.outbound.length, 1);
+  const subgraph = getSubgraph(index, { uri: "okf://fixture/source.md", depth: 1 });
+  assert.equal(subgraph.nodes.some((node) => node.id === "okf://fixture/target"), true);
+  const paths = findPaths(index, "okf://fixture/source.md", "okf://fixture/target.md", 3);
+  assert.deepEqual(paths.paths, [["okf://fixture/source", "okf://fixture/target"]]);
+});
+
+test("MCP tools describe their purpose, parameters, and side effects", async () => {
+  const root = makeFixture();
+  const server = createServer([`fixture=${root}`]);
+  const listed = await server.handle({ method: "tools/list" });
+  listed.tools.forEach((tool) => {
+    assert.equal(typeof tool.description, "string", `${tool.name} description`);
+    assert.equal(tool.description.length > 24, true, `${tool.name} has a useful description`);
+    assert.doesNotMatch(tool.description, /^OKF .* tool\.$/, `${tool.name} does not use a placeholder description`);
+    assert.equal(typeof tool.annotations.readOnlyHint, "boolean", `${tool.name} readOnlyHint`);
+    assert.equal(typeof tool.annotations.destructiveHint, "boolean", `${tool.name} destructiveHint`);
+    assert.equal(typeof tool.annotations.idempotentHint, "boolean", `${tool.name} idempotentHint`);
+    assert.equal(typeof tool.annotations.openWorldHint, "boolean", `${tool.name} openWorldHint`);
+    Object.entries(tool.inputSchema.properties).forEach(([name, schema]) => {
+      assert.equal(typeof schema.description, "string", `${tool.name}.${name} description`);
+      assert.equal(schema.description.length > 8, true, `${tool.name}.${name} has a useful description`);
+    });
+  });
+  const byName = new Map(listed.tools.map((tool) => [tool.name, tool]));
+  assert.equal(byName.get("search_concepts").annotations.readOnlyHint, true);
+  assert.equal(byName.get("load_remote_bundle").annotations.openWorldHint, true);
+  assert.equal(byName.get("okf_propose_update").annotations.readOnlyHint, false);
+  assert.equal(byName.get("okf_accept_proposal").annotations.destructiveHint, true);
 });
 
 test("MCP validation and required argument errors are surfaced", async () => {
