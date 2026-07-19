@@ -726,27 +726,78 @@ function responseFor(id, result, error) {
 }
 
 async function runStdioServer(bundleArgs, input, output, options) {
-  const server = await createServerAsync(bundleArgs, options);
   const rl = readline.createInterface({ input, crlfDelay: Infinity });
-  rl.on("line", async (line) => {
+  let serverPromise;
+  let pending = Promise.resolve();
+
+  function writeResponse(response) {
+    return new Promise((resolve, reject) => {
+      output.write(`${JSON.stringify(response)}\n`, (error) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolve();
+      });
+    });
+  }
+
+  async function handleLine(line) {
     if (!line.trim()) {
       return;
     }
     if (line.length > 1024 * 1024) {
-      output.write(JSON.stringify(responseFor(null, null, new Error("MCP request line exceeds 1 MiB."))) + "\n");
+      await writeResponse(responseFor(null, null, new Error("MCP request line exceeds 1 MiB.")));
       return;
     }
     let request;
     try {
       request = JSON.parse(line);
+      const server = await serverPromise;
       const result = await server.handle(request);
       if (request.id !== undefined) {
-        output.write(JSON.stringify(responseFor(request.id, result, null)) + "\n");
+        await writeResponse(responseFor(request.id, result, null));
       }
     } catch (error) {
       const id = request && request.id !== undefined ? request.id : null;
-      output.write(JSON.stringify(responseFor(id, null, error)) + "\n");
+      await writeResponse(responseFor(id, null, error));
     }
+  }
+
+  rl.on("line", (line) => {
+    pending = pending.then(() => handleLine(line));
+  });
+
+  const closed = new Promise((resolve, reject) => {
+    rl.once("close", () => {
+      // A pending Promise alone does not keep a CommonJS CLI alive after stdin reaches EOF.
+      const keepAlive = setInterval(() => {}, 1000);
+      pending.then(
+        () => {
+          clearInterval(keepAlive);
+          resolve();
+        },
+        (error) => {
+          clearInterval(keepAlive);
+          reject(error);
+        },
+      );
+    });
+  });
+
+  serverPromise = createServerAsync(bundleArgs, options);
+  let server;
+  try {
+    server = await serverPromise;
+  } catch (error) {
+    rl.close();
+    throw error;
+  }
+  Object.defineProperty(server, "closed", {
+    configurable: false,
+    enumerable: false,
+    value: closed,
+    writable: false,
   });
   return server;
 }

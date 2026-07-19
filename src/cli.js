@@ -325,13 +325,29 @@ async function main(argv, runtime) {
   if (command === "mcp") {
     const bundles = resolveLegacyBundles(args);
     if (args.project) {
-      await ((runtime && runtime.runStdioServer) || runStdioServer)([], process.stdin, process.stdout, stdioServerOptions(args));
+      const server = await ((runtime && runtime.runStdioServer) || runStdioServer)(
+        [],
+        process.stdin,
+        process.stdout,
+        stdioServerOptions(args),
+      );
+      if (server && server.closed) {
+        await server.closed;
+      }
       return;
     }
     if (!bundles.length && !args.remoteBundles.length) {
       throw usageError("At least one --bundle root or --project config is required.");
     }
-    await ((runtime && runtime.runStdioServer) || runStdioServer)(bundles, process.stdin, process.stdout, stdioServerOptions(args));
+    const server = await ((runtime && runtime.runStdioServer) || runStdioServer)(
+      bundles,
+      process.stdin,
+      process.stdout,
+      stdioServerOptions(args),
+    );
+    if (server && server.closed) {
+      await server.closed;
+    }
     return;
   }
   if (command === "serve") {
