@@ -1,6 +1,6 @@
 {
   "name": "@mfdaves/okf-mcp",
-  "version": "0.3.3-rc.1",
+  "version": "0.3.3",
   "description": "Local-first Open Knowledge Format validator, graph index, CLI, and MCP stdio server.",
   "homepage": "https://github.com/mfdaves/okf-mcp#readme",
   "repository": {

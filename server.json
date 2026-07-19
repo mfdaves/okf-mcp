@@ -8,12 +8,12 @@
     "source": "github"
   },
   "websiteUrl": "https://github.com/mfdaves/okf-mcp#readme",
-  "version": "0.3.3-rc.1",
+  "version": "0.3.3",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "@mfdaves/okf-mcp",
-      "version": "0.3.3-rc.1",
+      "version": "0.3.3",
       "transport": {
         "type": "stdio"
       },
