@@ -13,6 +13,8 @@ relations:
     target: okf://okf-mcp/runtime/file-concept-store
   - type: checked_by
     target: repo://test/okf-mcp.test.js
+  - type: checked_by
+    target: repo://test/conformance.test.js
 ---
 
 # OKF Concept Format
@@ -21,8 +23,10 @@ An OKF concept is a Markdown file with YAML frontmatter. A non-empty `type` is r
 
 The optional `id` field defines a stable `okf://` URI. Without it, the URI is derived from the bundle id and relative file path. A stable id is preferred for public concepts because it survives file moves. The path-derived URI remains an alias in the index.
 
-Frontmatter intentionally supports a constrained YAML shape: scalar values, inline arrays, block arrays, and arrays of flat objects. Internal `okf://` relation targets must resolve. Other schemes such as `repo://` are retained as opaque external references.
+Frontmatter is parsed as a YAML mapping with the safe core schema. Nested mappings, arrays, block scalars, and unknown extension keys are preserved. Duplicate mapping keys and unsupported custom tags are rejected. Unknown concept type values do not fail OKF conformance.
 
-Files named `index.md` and `log.md` are reserved resources and are not concepts. Markdown links inside a bundle become graph edges and are validated against the bundle boundary.
+Files named `index.md` and `log.md` are reserved resources and are not concepts. Reserved indexes group local Markdown links under headings. Reserved logs use an H1 title followed by newest-first ISO-dated H2 sections containing list entries.
+
+Internal `okf://` relation targets and Markdown links are checked as project rules rather than redefining minimum document conformance. Other schemes such as `repo://` are retained as opaque external references.
 
 The [indexer](../runtime/indexer.md) validates this contract. Accepted proposals are rendered back into this format by the [file concept store](../runtime/file-concept-store.md).

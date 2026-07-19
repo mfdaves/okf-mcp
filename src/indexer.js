@@ -5,6 +5,7 @@ const path = require("path");
 const { normalizeSlashes, parseMarkdownFile, parseMarkdownText, safeRelativePath } = require("./parser");
 const { DEFAULT_RELATION_TYPES, loadProjectConfig } = require("./project");
 const { fetchRemoteBundles } = require("./remote");
+const { validateIndex } = require("./validation");
 
 function sanitizeBundleId(value, fallback) {
   const raw = String(value || fallback || "bundle").trim();
@@ -346,7 +347,7 @@ function buildIndex(bundleArgs, options) {
     });
   });
 
-  return {
+  const index = {
     bundles,
     documents,
     concepts,
@@ -358,6 +359,7 @@ function buildIndex(bundleArgs, options) {
     edges,
     byUri,
   };
+  return attachValidation(index);
 }
 
 function buildProjectIndex(projectPath) {
@@ -394,6 +396,15 @@ function attachProject(index, project) {
     plugins: project.plugins,
     remoteBundles: project.remoteBundles,
   };
+  return attachValidation(index);
+}
+
+function attachValidation(index) {
+  const validation = validateIndex(index);
+  index.conformant = validation.conformant;
+  index.validForProject = validation.validForProject;
+  index.valid = validation.valid;
+  index.diagnostics = validation.diagnostics;
   return index;
 }
 
@@ -422,4 +433,5 @@ module.exports = {
   parseBundleArg,
   resolveLinkPath,
   sanitizeBundleId,
+  validateIndex,
 };

@@ -4,7 +4,7 @@
 
 It consumes one or more directories of Markdown files with YAML frontmatter, treats non-reserved Markdown files as OKF concepts, and exposes those concepts through CLI commands plus MCP resources and tools for structured search, validation, graph navigation, and proposal-based authoring.
 
-The core intentionally has no runtime dependencies, no database, and no embeddings. Local bundle mode makes no network calls. Optional remote bundles can fetch public Markdown concepts from GitHub when configured. Generator plugins and accepted authoring proposals are the write paths, and both write only under configured project directories.
+The core intentionally has no database, embeddings, build step, or hosted-service dependency. It uses `js-yaml` for standards-oriented YAML parsing. Local bundle mode makes no network calls. Optional remote bundles can fetch public Markdown concepts from GitHub when configured. Generator plugins and accepted authoring proposals are the write paths, and both write only under configured project directories.
 
 ## Install And Run
 
@@ -13,10 +13,14 @@ From this repository:
 ```bash
 git clone https://github.com/mfdaves/okf-mcp.git
 cd okf-mcp
+npm ci
 npm test
+node bin/okf-mcp.js --version
 node bin/okf-mcp.js --bundle ./okf/bundles/app --inspect
 node bin/okf-mcp.js --bundle app=./okf/bundles/app
 ```
+
+Node 22 or newer is required.
 
 `--bundle` accepts either a path or `id=path`. Multiple `--bundle` flags are allowed.
 
@@ -24,7 +28,9 @@ node bin/okf-mcp.js --bundle app=./okf/bundles/app
 
 `--inspect` prints a compact graph summary and exits. Without `--inspect` and without an explicit command, the process starts a stdio MCP server.
 
-The package also exposes an `okf` binary when installed.
+The package exposes both `okf` and `okf-mcp` binaries when installed. If neither `--project` nor a bundle source is passed, the CLI discovers the nearest `okf.project.yaml` or `okf.project.json` from the current directory.
+
+CLI exit statuses are `0` for success, `1` for validation or operational failure, and `2` for invalid usage. Unknown options are rejected.
 
 ## Published OKF Reference
 
@@ -82,6 +88,8 @@ node bin/okf-mcp.js --project okf.project.yaml search "orders"
 node bin/okf-mcp.js --project okf.project.yaml graph mermaid
 node bin/okf-mcp.js --project okf.project.yaml generate
 node bin/okf-mcp.js --project okf.project.yaml mcp
+node bin/okf-mcp.js --project okf.project.yaml mcp --authoring
+node bin/okf-mcp.js --project okf.project.yaml mcp --allow-remote-tool
 OKF_WRITE_TOKEN=change-me node bin/okf-mcp.js --project okf.project.yaml serve
 node bin/okf-mcp.js --remote-bundle shared=https://github.com/example/okf-atlas/tree/main/bundles/shared --inspect
 ```
@@ -124,7 +132,7 @@ Example client configuration:
 }
 ```
 
-Project config mode, including authoring tools:
+Project config mode, with read-only project helpers but without proposal mutations:
 
 ```json
 {
@@ -141,6 +149,8 @@ Project config mode, including authoring tools:
   }
 }
 ```
+
+Add `--authoring` to enable proposal creation, acceptance, and rejection. Add `--allow-remote-tool` to let MCP clients load arbitrary supported public remote bundles at runtime. Configured remote bundles remain readable without that runtime-loading flag.
 
 ## Concept Format
 
@@ -206,11 +216,20 @@ Most MCP tools are read-only over the current index. `load_remote_bundle` mutate
 
 Every MCP tool includes a purpose-specific description, descriptions for its input parameters, and standard annotations covering read-only behavior, destructive behavior, idempotency, and external access.
 
-The `okf_*` authoring tools are proposal-first. They are enabled when the server is started with `--project`, because the project config identifies writable local bundles. Proposing a concept or update writes only a proposal record. Accepting a proposal writes the Markdown concept into the configured bundle root and refreshes the in-memory index.
+Tool discovery and direct invocation use the same capability checks:
+
+| Mode | Proposal mutations | Runtime remote load | Configured remote reads |
+| --- | --- | --- | --- |
+| default | disabled | disabled | enabled |
+| `--authoring` | enabled | disabled | enabled |
+| `--allow-remote-tool` | disabled | enabled | enabled |
+| both flags | enabled | enabled | enabled |
+
+Project mode may expose read-only concept validation, path suggestion, and proposal inspection helpers. The `okf_*` mutation tools are proposal-first and require both project mode and `--authoring`. Proposing a concept or update writes only a proposal record. Accepting a proposal writes the Markdown concept into the configured bundle root and rebuilds the complete index from configured local bundles, configured remote bundles, and runtime-loaded remote bundles.
 
 ## Authoring Concepts
 
-Concept authoring is available through MCP tools and the HTTP API. Clients never need direct local file access.
+Concept authoring is available through MCP tools started with `--authoring` and through the HTTP API. Clients never need direct local file access.
 
 MCP proposal flow:
 
@@ -323,6 +342,8 @@ node bin/okf-mcp.js --project okf.project.yaml --remote-bundle vendor=https://gi
 
 MCP runtime loading:
 
+Start the MCP server with `--allow-remote-tool` before calling `load_remote_bundle`.
+
 ```json
 {
   "name": "load_remote_bundle",
@@ -419,11 +440,18 @@ Bundle `include` and `exclude` filters use simple path patterns:
 
 ## Validation
 
-`validate_bundle` and `validate_project` report:
+`validate`, `validate_bundle`, and `validate_project` return separate `conformant` and `validForProject` fields plus structured diagnostics. `valid` remains a compatibility alias for `validForProject`.
 
-- invalid or unsupported YAML frontmatter
-- missing frontmatter on concept files
-- missing non-empty `type` on concept files
+OKF conformance covers:
+
+- parseable YAML mapping frontmatter on non-reserved concept documents
+- a non-empty `type`
+- the reserved structure of `index.md` and `log.md`
+
+Unknown frontmatter keys and unknown concept type values do not fail conformance. The YAML parser supports nested mappings, arrays, block scalars, and other structures accepted by its safe YAML core schema; duplicate keys and unsupported custom tags are rejected.
+
+Project validity additionally reports:
+
 - duplicate OKF URIs
 - broken internal Markdown links
 - invalid relation types
@@ -449,7 +477,7 @@ Generated output is regular Markdown/YAML OKF and is validated by the same index
 
 ## Limitations
 
-- The YAML parser intentionally supports the simple frontmatter shape used by OKF concept metadata: scalar keys, inline arrays, block arrays, and arrays of objects.
 - The MCP server implements the stdio JSON-RPC methods needed for resources and tools directly instead of using an SDK, so advanced SDK conveniences are out of scope.
+- MCP initialization accepts only the explicitly supported protocol versions and rejects unsupported versions.
 - There is no file watcher. Restart the server after external file changes. Concepts accepted through MCP authoring refresh the MCP server index immediately.
 - The HTTP API is a lightweight built-in server, not a full hosted multi-tenant service.

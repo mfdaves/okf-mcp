@@ -1,7 +1,7 @@
 {
   "name": "okf-mcp",
   "version": "0.3.1",
-  "description": "Project-agnostic Open Knowledge Format CLI, graph index, and MCP stdio server.",
+  "description": "Local-first Open Knowledge Format validator, graph index, CLI, and MCP stdio server.",
   "homepage": "https://github.com/mfdaves/okf-mcp#readme",
   "repository": {
     "type": "git",
@@ -10,6 +10,7 @@
   "bugs": {
     "url": "https://github.com/mfdaves/okf-mcp/issues"
   },
+  "type": "commonjs",
   "main": "src/index.js",
   "bin": {
     "okf": "bin/okf-mcp.js",
@@ -17,13 +18,18 @@
   },
   "scripts": {
     "test": "node --test",
+    "check": "node --test",
+    "self:validate": "node bin/okf-mcp.js --project okf.project.yaml validate",
+    "pack:check": "npm pack --dry-run",
+    "package:smoke": "node scripts/package-smoke.js",
+    "prepublishOnly": "npm run check && npm run self:validate",
     "inspect": "node bin/okf-mcp.js --help",
     "start": "node bin/okf-mcp.js"
   },
   "keywords": [
     "mcp",
     "okf",
-    "okf-format",
+    "open-knowledge-format",
     "markdown",
     "knowledge-graph",
     "agents"
@@ -38,6 +44,9 @@
     "LICENSE"
   ],
   "engines": {
-    "node": ">=18"
+    "node": ">=22"
+  },
+  "dependencies": {
+    "js-yaml": "^5.2.1"
   }
 }

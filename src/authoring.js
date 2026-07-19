@@ -1,6 +1,7 @@
 "use strict";
 
 const path = require("path");
+const yaml = require("js-yaml");
 const { parseMarkdownText, normalizeSlashes } = require("./parser");
 const { resolveLinkPath } = require("./indexer");
 
@@ -36,61 +37,16 @@ function normalizeConceptPath(value) {
   return normalized;
 }
 
-function scalarToYaml(value) {
-  if (value === null) {
-    return "null";
-  }
-  if (typeof value === "boolean" || typeof value === "number") {
-    return String(value);
-  }
-  const text = String(value || "");
-  if (!text || /[:#\[\]{},&*?|\-<>=!%@`]/.test(text) || /^\s|\s$/.test(text)) {
-    return JSON.stringify(text);
-  }
-  return text;
-}
-
-function arrayScalarToYaml(values) {
-  return `[${values.map(scalarToYaml).join(", ")}]`;
-}
-
 function renderFrontmatter(frontmatter) {
-  const lines = [];
-  Object.keys(frontmatter || {}).forEach((key) => {
-    const value = frontmatter[key];
-    if (value === undefined || value === "") {
-      return;
-    }
-    if (Array.isArray(value)) {
-      if (!value.length) {
-        lines.push(`${key}: []`);
-        return;
-      }
-      if (value.every((entry) => !entry || typeof entry !== "object" || Array.isArray(entry))) {
-        lines.push(`${key}: ${arrayScalarToYaml(value)}`);
-        return;
-      }
-      lines.push(`${key}:`);
-      value.forEach((entry) => {
-        if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
-          lines.push(`  - ${scalarToYaml(entry)}`);
-          return;
-        }
-        const keys = Object.keys(entry).filter((childKey) => entry[childKey] !== undefined && entry[childKey] !== "");
-        if (!keys.length) {
-          lines.push("  - {}");
-          return;
-        }
-        keys.forEach((childKey, index) => {
-          const prefix = index === 0 ? "  -" : "   ";
-          lines.push(`${prefix} ${childKey}: ${scalarToYaml(entry[childKey])}`);
-        });
-      });
-      return;
-    }
-    lines.push(`${key}: ${scalarToYaml(value)}`);
-  });
-  return lines.join("\n");
+  const values = Object.fromEntries(
+    Object.entries(frontmatter || {}).filter((entry) => entry[1] !== undefined),
+  );
+  return yaml.dump(values, {
+    schema: yaml.CORE_SCHEMA,
+    noRefs: true,
+    lineWidth: -1,
+    sortKeys: false,
+  }).trimEnd();
 }
 
 function renderConceptMarkdown(input) {

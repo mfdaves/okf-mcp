@@ -15,6 +15,8 @@ relations:
     target: repo://src/mcp-server.js
   - type: checked_by
     target: repo://test/okf-mcp.test.js
+  - type: checked_by
+    target: repo://test/mcp-hardening.test.js
 ---
 
 # MCP Tool Catalog
@@ -25,8 +27,8 @@ Discovery tools list bundles, concepts, types, tags, relation types, and loaded 
 
 Graph tools return bounded graphs, neighbors, subgraphs, paths, summaries, and rendered exports. Canonical and path-derived concept URIs are accepted for direct graph traversal.
 
-Validation tools inspect bundles, projects, and candidate concepts without writing. Remote loading fetches a public GitHub tree into the in-memory index.
+Validation tools inspect bundles, projects, and candidate concepts without writing. They report OKF conformance separately from project validity. Remote loading fetches a public GitHub tree into the in-memory index.
 
-Authoring tools validate, suggest paths, propose concepts or updates, inspect proposals, and accept or reject reviewed changes. They require project mode because only a project identifies writable bundles.
+Project mode exposes read-only candidate validation, path suggestion, and proposal inspection helpers. Proposal creation, acceptance, and rejection additionally require `--authoring`. Runtime calls to `load_remote_bundle` require `--allow-remote-tool`; configured remote bundles remain readable without that flag.
 
-Every tool supplies a purpose-specific description, descriptions for all input parameters, and MCP annotations for read behavior, destructive behavior, idempotency, and external access. These annotations are hints to clients; server-side validation remains authoritative.
+Every tool supplies a purpose-specific description, descriptions for all input parameters, and MCP annotations for read behavior, destructive behavior, idempotency, and external access. Tool discovery and direct invocation use the same capability checks, so a hidden tool also fails when called by name. Annotations remain hints to clients; server-side validation is authoritative.

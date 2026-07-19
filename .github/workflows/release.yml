@@ -1,0 +1,65 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Exact release tag, for example v0.3.2-rc.1"
+        required: true
+        type: string
+      dist_tag:
+        description: "npm distribution tag"
+        required: true
+        type: choice
+        options:
+          - next
+          - latest
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.ref }}
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+          cache: npm
+
+      - run: npm install --global "npm@^11.5.1"
+      - run: npm --version
+      - run: npm ci
+      - run: npm test
+      - run: npm run self:validate
+      - run: npm run package:smoke
+      - run: npm run pack:check
+
+      - name: Verify release identity and publish
+        shell: bash
+        env:
+          NPM_DIST_TAG: ${{ inputs.dist_tag }}
+          RELEASE_REF: ${{ inputs.ref }}
+        run: |
+          VERSION="$(node -p 'require("./package.json").version')"
+          if [[ "${RELEASE_REF}" != "v${VERSION}" ]]; then
+            echo "Release ref ${RELEASE_REF} does not match package version ${VERSION}." >&2
+            exit 1
+          fi
+          if [[ "${NPM_DIST_TAG}" == "next" && "${VERSION}" != *-* ]]; then
+            echo "The next tag requires a prerelease version." >&2
+            exit 1
+          fi
+          if [[ "${NPM_DIST_TAG}" == "latest" && "${VERSION}" == *-* ]]; then
+            echo "The latest tag cannot publish a prerelease version." >&2
+            exit 1
+          fi
+          npm publish --access public --provenance --tag "${NPM_DIST_TAG}"

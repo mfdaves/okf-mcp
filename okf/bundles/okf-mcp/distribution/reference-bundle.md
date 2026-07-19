@@ -11,10 +11,16 @@ relations:
     target: okf://okf-mcp/overview/okf-mcp
   - type: checked_by
     target: repo://test/okf-mcp.test.js
+  - type: checked_by
+    target: repo://scripts/package-smoke.js
   - type: configured_by
     target: repo://okf.project.yaml
   - type: configured_by
     target: repo://package.json
+  - type: configured_by
+    target: repo://.github/workflows/release.yml
+  - type: configured_by
+    target: repo://.agents/skills/okf-mcp-release/SKILL.md
 ---
 
 # Published okf-mcp Reference Bundle
@@ -27,7 +33,9 @@ The latest public bundle can be loaded from:
 
 Consumers that need reproducibility should replace `main` with a release tag. Remote loading indexes only the Markdown tree and does not execute repository code.
 
-The npm package allowlist includes `okf.project.yaml` and the `okf` directory so installed artifacts carry the same reference bundle. The repository project config can validate, search, render, and serve this bundle locally.
+The npm package allowlist includes `okf.project.yaml` and the `okf` directory so installed artifacts carry the same reference bundle. The package smoke gate installs the generated tarball into a clean temporary project, executes both binaries, validates this bundle, and exercises MCP initialization, tool discovery, and concept retrieval over stdio.
+
+The repository release skill defines the package identity, capability matrix, self-validation, tarball, clean-install, prerelease, and registry synchronization gates. The trusted-publishing workflow repeats those checks against an exact Git release tag before publishing.
 
 Concept ids use the stable `okf://okf-mcp/...` namespace. Internal relations target those stable ids, while `repo://` references connect durable concepts to their current implementation sources without turning source files into concepts.
 

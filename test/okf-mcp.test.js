@@ -491,7 +491,7 @@ test("MCP can load and list remote bundles at runtime", async () => {
     },
   ]);
   try {
-    const server = createServer([]);
+    const server = createServer([], { allowRuntimeRemoteLoad: true });
     const loaded = await server.handle({
       method: "tools/call",
       params: {
@@ -610,7 +610,7 @@ test("authoring validates OKF concepts and suggests safe nested paths", () => {
     body: "# Create Order\n",
   });
   assert.equal(valid.valid, true);
-  assert.match(valid.markdown, /relations:\n  - type: related_to\n    target: "okf:\/\/app\/existing"/);
+  assert.match(valid.markdown, /relations:\n  - type: related_to\n    target: "?okf:\/\/app\/existing"?/);
   assert.equal(valid.concept.uri, "okf://app/tools/create-order");
 });
 
@@ -767,6 +767,7 @@ test("MCP authoring tools create and accept concept proposals in project mode", 
   const server = await createServerAsync([], {
     projectPath: path.join(root, "okf.project.yaml"),
     proposalRoot: proposals,
+    allowAuthoring: true,
   });
   const tools = await server.handle({ method: "tools/list" });
   assert.equal(tools.tools.some((tool) => tool.name === "okf_propose_concept"), true);
@@ -1062,8 +1063,13 @@ test("graph tools normalize path URI aliases to canonical concept ids", () => {
 });
 
 test("MCP tools describe their purpose, parameters, and side effects", async () => {
-  const root = makeFixture();
-  const server = createServer([`fixture=${root}`]);
+  const { root, proposals } = makeAuthoringProject();
+  const server = await createServerAsync([], {
+    projectPath: path.join(root, "okf.project.yaml"),
+    proposalRoot: proposals,
+    allowAuthoring: true,
+    allowRuntimeRemoteLoad: true,
+  });
   const listed = await server.handle({ method: "tools/list" });
   listed.tools.forEach((tool) => {
     assert.equal(typeof tool.description, "string", `${tool.name} description`);

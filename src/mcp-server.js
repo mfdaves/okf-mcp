@@ -2,13 +2,26 @@
 
 const path = require("path");
 const readline = require("readline");
-const { attachProject, buildIndex, buildProjectIndex, conceptSummary, loadProjectBundles } = require("./indexer");
+const {
+  attachProject,
+  buildIndex,
+  conceptSummary,
+  loadProjectBundles,
+  validateIndex,
+} = require("./indexer");
 const { searchConcepts } = require("./search");
 const { exportGraph, findPaths, getGraph, getNeighbors, getSubgraph, graphSummary } = require("./graph");
 const { fetchGitHubBundle, fetchRemoteBundles } = require("./remote");
 const { ConceptAuthoringService } = require("./authoring");
 const { FileConceptStore } = require("./store");
+const { loadProjectConfig } = require("./project");
 const packageMetadata = require("../package.json");
+
+const SUPPORTED_PROTOCOL_VERSIONS = [
+  "2025-06-18",
+  "2025-03-26",
+  "2024-11-05",
+];
 
 const READ_ONLY = {
   readOnlyHint: true,
@@ -292,14 +305,14 @@ const TOOL_DEFINITIONS = {
     READ_ONLY,
   ),
   validate_bundle: defineTool(
-    "Return validation errors and warnings for one bundle or for the full current index.",
+    "Report OKF conformance separately from project validity for one bundle or the full current index.",
     READ_ONLY,
     {
       bundle: stringParameter("Optional bundle id to validate in isolation."),
     },
   ),
   validate_project: defineTool(
-    "Return validation errors and warnings for the complete configured OKF project.",
+    "Report OKF conformance, project validity, and structured diagnostics for the complete configured project.",
     READ_ONLY,
   ),
   export_graph: defineTool(
@@ -315,6 +328,21 @@ const TOOL_DEFINITIONS = {
 };
 
 const TOOL_NAMES = Object.keys(TOOL_DEFINITIONS);
+const PROJECT_HELPER_TOOL_NAMES = new Set([
+  "okf_validate_concept",
+  "okf_suggest_concept_path",
+  "okf_list_proposals",
+  "okf_get_proposal",
+]);
+const AUTHORING_MUTATION_TOOL_NAMES = new Set([
+  "okf_propose_concept",
+  "okf_propose_update",
+  "okf_accept_proposal",
+  "okf_reject_proposal",
+]);
+const RUNTIME_REMOTE_TOOL_NAMES = new Set([
+  "load_remote_bundle",
+]);
 
 function jsonContent(value) {
   return {
@@ -327,9 +355,30 @@ function jsonContent(value) {
   };
 }
 
-function listTools() {
+function toolEnabled(state, name) {
+  if (PROJECT_HELPER_TOOL_NAMES.has(name)) {
+    return Boolean(state && state.authoringService);
+  }
+  if (AUTHORING_MUTATION_TOOL_NAMES.has(name)) {
+    return Boolean(state && state.authoringService && state.allowAuthoring);
+  }
+  if (RUNTIME_REMOTE_TOOL_NAMES.has(name)) {
+    return Boolean(state && state.allowRuntimeRemoteLoad);
+  }
+  return true;
+}
+
+function requireToolEnabled(state, name) {
+  if (!toolEnabled(state, name)) {
+    throw new Error(`MCP tool is disabled by server configuration: ${name}`);
+  }
+}
+
+function listTools(state) {
   return {
-    tools: TOOL_NAMES.map((name) => Object.assign({ name }, TOOL_DEFINITIONS[name])),
+    tools: TOOL_NAMES
+      .filter((name) => toolEnabled(state, name))
+      .map((name) => Object.assign({ name }, TOOL_DEFINITIONS[name])),
   };
 }
 
@@ -440,17 +489,6 @@ function listRelationTypes(index) {
   return counts;
 }
 
-function validateBundle(index, args) {
-  const bundle = args && args.bundle;
-  const errors = bundle ? index.errors.filter((entry) => entry.bundle === bundle) : index.errors;
-  const warnings = bundle ? index.warnings.filter((entry) => entry.bundle === bundle) : index.warnings;
-  return {
-    valid: errors.length === 0 && warnings.filter((warning) => warning.code === "missing_type" || warning.code === "missing_frontmatter").length === 0,
-    errors,
-    warnings,
-  };
-}
-
 function requireAuthoring(state) {
   if (!state.authoringService) {
     throw new Error("OKF authoring is not configured. Start the server with --project to enable writable concept proposals.");
@@ -458,11 +496,13 @@ function requireAuthoring(state) {
   return state.authoringService;
 }
 
-function refreshAuthoringIndex(state) {
-  if (!state.authoringService) {
-    return;
-  }
-  state.index = attachProject(state.authoringService.store.getIndex(), state.authoringService.store.project);
+function rebuildStateIndex(state) {
+  const index = buildIndex(
+    state.localBundleArgs.concat(state.remoteBundles),
+    { relationTypes: state.relationTypes },
+  );
+  state.index = state.project ? attachProject(index, state.project) : index;
+  return state.index;
 }
 
 async function callTool(state, name, args) {
@@ -472,8 +512,13 @@ async function callTool(state, name, args) {
       localBundleArgs: [],
       remoteBundles: [],
       relationTypes: state && state.relationTypes,
+      project: null,
+      authoringService: null,
+      allowAuthoring: false,
+      allowRuntimeRemoteLoad: false,
     };
   }
+  requireToolEnabled(state, name);
   const index = state.index;
   switch (name) {
     case "list_bundles":
@@ -500,7 +545,7 @@ async function callTool(state, name, args) {
       if (provider !== "github") {
         throw new Error(`Unsupported remote bundle provider: ${provider}`);
       }
-      if (state.localBundleArgs.concat(state.remoteBundles).some((bundle) => bundle.id === args.id)) {
+      if (state.index.bundles.some((bundle) => bundle.id === args.id)) {
         throw new Error(`Bundle id already loaded: ${args.id}`);
       }
       const remoteBundle = await fetchGitHubBundle({
@@ -510,7 +555,7 @@ async function callTool(state, name, args) {
         exclude: Array.isArray(args.exclude) ? args.exclude : [],
       });
       state.remoteBundles.push(remoteBundle);
-      state.index = buildIndex(state.localBundleArgs.concat(state.remoteBundles), { relationTypes: state.relationTypes });
+      rebuildStateIndex(state);
       return jsonContent(remoteBundle.remoteSource);
     }
     case "okf_validate_concept":
@@ -528,7 +573,7 @@ async function callTool(state, name, args) {
     case "okf_accept_proposal": {
       const result = await requireAuthoring(state).acceptProposal(args || {});
       if (result.accepted) {
-        refreshAuthoringIndex(state);
+        rebuildStateIndex(state);
       }
       return jsonContent(result);
     }
@@ -551,9 +596,9 @@ async function callTool(state, name, args) {
     case "graph_summary":
       return jsonContent(graphSummary(index));
     case "validate_bundle":
-      return jsonContent(validateBundle(index, args || {}));
+      return jsonContent(validateIndex(index, args && args.bundle));
     case "validate_project":
-      return jsonContent(validateBundle(index, args || {}));
+      return jsonContent(validateIndex(index));
     case "export_graph":
       return {
         content: [
@@ -569,20 +614,48 @@ async function callTool(state, name, args) {
 }
 
 function createServer(bundleArgs, options) {
-  const localBundleArgs = (bundleArgs || []).slice();
+  const authoringService = options && options.authoringService;
+  let project = null;
+  if (authoringService && authoringService.store) {
+    project = authoringService.store.project;
+  } else if (options && options.projectPath) {
+    project = loadProjectConfig(options.projectPath);
+  }
+  const localBundleArgs = project
+    ? project.bundles.filter((bundle) => !bundle.remote)
+    : (bundleArgs || []).slice();
+  const relationTypes = (options && options.relationTypes)
+    || (project && project.relationTypes);
+  let initialIndex = options && options.initialIndex;
+  if (!initialIndex) {
+    initialIndex = buildIndex(localBundleArgs, { relationTypes });
+    if (project) {
+      initialIndex = attachProject(initialIndex, project);
+    }
+  }
   const state = {
-    index: options && options.initialIndex ? options.initialIndex : (options && options.projectPath ? buildProjectIndex(options.projectPath) : buildIndex(localBundleArgs)),
+    index: initialIndex,
     localBundleArgs,
     remoteBundles: (options && options.initialRemoteBundles) || [],
-    relationTypes: options && options.relationTypes,
-    authoringService: options && options.authoringService,
+    relationTypes,
+    project,
+    authoringService,
+    allowAuthoring: Boolean(options && options.allowAuthoring),
+    allowRuntimeRemoteLoad: Boolean(options && options.allowRuntimeRemoteLoad),
   };
   async function handle(request) {
     const method = request.method;
     const params = request.params || {};
     if (method === "initialize") {
+      const requestedVersion = params.protocolVersion;
+      if (!SUPPORTED_PROTOCOL_VERSIONS.includes(requestedVersion)) {
+        throw new Error(
+          `Unsupported MCP protocol version: ${requestedVersion || "<missing>"}. `
+          + `Supported versions: ${SUPPORTED_PROTOCOL_VERSIONS.join(", ")}`,
+        );
+      }
       return {
-        protocolVersion: params.protocolVersion || "2025-06-18",
+        protocolVersion: requestedVersion,
         serverInfo: { name: "okf-mcp", version: packageMetadata.version },
         capabilities: { resources: {}, tools: {} },
       };
@@ -597,7 +670,7 @@ function createServer(bundleArgs, options) {
       return readResource(state.index, params.uri);
     }
     if (method === "tools/list") {
-      return listTools();
+      return listTools(state);
     }
     if (method === "tools/call") {
       return callTool(state, params.name, params.arguments || {});
@@ -624,6 +697,8 @@ async function createServerAsync(bundleArgs, options) {
       initialRemoteBundles,
       relationTypes: loaded.project.relationTypes,
       authoringService,
+      allowAuthoring: options.allowAuthoring,
+      allowRuntimeRemoteLoad: options.allowRuntimeRemoteLoad,
     });
   }
   const remoteBundles = await fetchRemoteBundles((options && options.remoteBundles) || []);
@@ -631,6 +706,8 @@ async function createServerAsync(bundleArgs, options) {
   return createServer(localBundleArgs, {
     initialIndex: buildIndex(localBundleArgs.concat(remoteBundles)),
     initialRemoteBundles: remoteBundles,
+    allowAuthoring: options && options.allowAuthoring,
+    allowRuntimeRemoteLoad: options && options.allowRuntimeRemoteLoad,
   });
 }
 
@@ -675,6 +752,7 @@ async function runStdioServer(bundleArgs, input, output, options) {
 }
 
 module.exports = {
+  SUPPORTED_PROTOCOL_VERSIONS,
   TOOL_NAMES,
   callTool,
   createServer,
@@ -682,5 +760,6 @@ module.exports = {
   listResources,
   listTools,
   readResource,
+  rebuildStateIndex,
   runStdioServer,
 };
