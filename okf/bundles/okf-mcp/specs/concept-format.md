@@ -25,7 +25,7 @@ The optional `id` field defines a stable `okf://` URI. Without it, the URI is de
 
 Frontmatter is parsed as a YAML mapping with the safe core schema. Nested mappings, arrays, block scalars, and unknown extension keys are preserved. Duplicate mapping keys and unsupported custom tags are rejected. Unknown concept type values do not fail OKF conformance.
 
-Files named `index.md` and `log.md` are reserved resources and are not concepts. Reserved indexes group local Markdown links under headings. Reserved logs use an H1 title followed by newest-first ISO-dated H2 sections containing list entries.
+Files named `index.md` and `log.md` are reserved resources and are not concepts. Reserved indexes group local Markdown links under headings. A link to a bundle directory resolves to that directory's nested `index.md` when no exact document target exists. Reserved logs use an H1 title followed by newest-first ISO-dated H2 sections containing list entries.
 
 Internal `okf://` relation targets and Markdown links are checked as project rules rather than redefining minimum document conformance. Other schemes such as `repo://` are retained as opaque external references.
 

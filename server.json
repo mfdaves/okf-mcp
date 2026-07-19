@@ -1,0 +1,36 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.mfdaves/okf-mcp",
+  "title": "okf-mcp",
+  "description": "Validate, search, graph, and safely author local Open Knowledge Format bundles.",
+  "repository": {
+    "url": "https://github.com/mfdaves/okf-mcp",
+    "source": "github"
+  },
+  "websiteUrl": "https://github.com/mfdaves/okf-mcp#readme",
+  "version": "0.3.3-rc.1",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "@mfdaves/okf-mcp",
+      "version": "0.3.3-rc.1",
+      "transport": {
+        "type": "stdio"
+      },
+      "packageArguments": [
+        {
+          "type": "named",
+          "name": "--project",
+          "description": "Absolute path to the OKF project configuration.",
+          "isRequired": true,
+          "format": "filepath",
+          "placeholder": "/absolute/path/to/okf.project.yaml"
+        },
+        {
+          "type": "positional",
+          "value": "mcp"
+        }
+      ]
+    }
+  ]
+}

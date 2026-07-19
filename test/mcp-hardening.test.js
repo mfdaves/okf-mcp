@@ -122,7 +122,11 @@ test("tools/list and tools/call enforce configured MCP capabilities", async () =
         },
       },
     }),
-    /disabled by server configuration/,
+    (error) => {
+      assert.equal(error.code, -32602);
+      assert.equal(error.data.detail, "Unknown or unavailable tool");
+      return true;
+    },
   );
 
   const { projectPath } = makeProject();
@@ -144,7 +148,11 @@ test("tools/list and tools/call enforce configured MCP capabilities", async () =
         },
       },
     }),
-    /disabled by server configuration/,
+    (error) => {
+      assert.equal(error.code, -32602);
+      assert.equal(error.data.detail, "Unknown or unavailable tool");
+      return true;
+    },
   );
 
   const enabledServer = await createServerAsync([], {
@@ -259,22 +267,32 @@ test("synchronous project servers rebuild from their configured local registry",
   assert.equal(server.index.byUri.has("okf://runtime/runtime.md"), true);
 });
 
-test("initialize accepts only explicit supported MCP protocol versions", async () => {
+test("initialize negotiates supported versions and falls back to the preferred version", async () => {
   const server = createServer([`local=${makeBundle()}`]);
   for (const protocolVersion of SUPPORTED_PROTOCOL_VERSIONS) {
     const initialized = await server.handle({
       method: "initialize",
-      params: { protocolVersion },
+      params: {
+        protocolVersion,
+        capabilities: {},
+        clientInfo: { name: "hardening-test", version: "1" },
+      },
     });
     assert.equal(initialized.protocolVersion, protocolVersion);
     assert.equal(initialized.serverInfo.version, packageMetadata.version);
   }
+  const fallback = await server.handle({
+    method: "initialize",
+    params: {
+      protocolVersion: "2099-01-01",
+      capabilities: {},
+      clientInfo: { name: "hardening-test", version: "1" },
+    },
+  });
+  assert.equal(fallback.protocolVersion, SUPPORTED_PROTOCOL_VERSIONS[0]);
   await assert.rejects(
-    () => server.handle({
-      method: "initialize",
-      params: { protocolVersion: "1900-01-01" },
-    }),
-    /Unsupported MCP protocol version/,
+    () => server.handle({ method: "initialize", params: {} }),
+    (error) => error.code === -32602,
   );
 });
 
@@ -299,7 +317,11 @@ test("stdio MCP runner emits newline-delimited JSON-RPC on its output stream onl
       jsonrpc: "2.0",
       id: 1,
       method: "initialize",
-      params: { protocolVersion: "2025-06-18" },
+      params: {
+        protocolVersion: "2025-06-18",
+        capabilities: {},
+        clientInfo: { name: "hardening-test", version: "1" },
+      },
     }),
     JSON.stringify({
       jsonrpc: "2.0",

@@ -1015,7 +1015,14 @@ test("CLI rejects dangling option flags", () => {
 test("MCP resources and tools operate over the in-memory index", async () => {
   const root = makeFixture();
   const server = createServer([`fixture=${root}`]);
-  const initialized = await server.handle({ method: "initialize", params: { protocolVersion: "2025-06-18" } });
+  const initialized = await server.handle({
+    method: "initialize",
+    params: {
+      protocolVersion: "2025-06-18",
+      capabilities: {},
+      clientInfo: { name: "okf-mcp-test", version: "1" },
+    },
+  });
   assert.equal(initialized.serverInfo.name, "okf-mcp");
   const resources = await server.handle({ method: "resources/list" });
   assert.equal(resources.resources.length, 5);
@@ -1098,9 +1105,16 @@ test("MCP validation and required argument errors are surfaced", async () => {
   const validation = await server.handle({ method: "tools/call", params: { name: "validate_bundle", arguments: { bundle: "fixture" } } });
   assert.match(validation.content[0].text, /missing_frontmatter/);
   assert.match(validation.content[0].text, /"valid": false/);
-  await assert.rejects(
-    () => server.handle({ method: "tools/call", params: { name: "find_paths", arguments: {} } }),
-    /source and target/,
+  const invalidArguments = await server.handle({
+    method: "tools/call",
+    params: { name: "find_paths", arguments: {} },
+  });
+  assert.equal(invalidArguments.isError, true);
+  const invalidPayload = JSON.parse(invalidArguments.content[0].text);
+  assert.equal(invalidPayload.error, "Invalid tool arguments");
+  assert.deepEqual(
+    invalidPayload.issues.map((issue) => issue.path),
+    ["/source", "/target"],
   );
 });
 

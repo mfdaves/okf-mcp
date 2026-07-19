@@ -8,18 +8,18 @@ The core intentionally has no database, embeddings, build step, or hosted-servic
 
 ## Install And Run
 
-The stable release is published under npm's `latest` tag. Pin the exact
-version for unattended MCP clients:
+This checkout is the `0.3.3-rc.1` release candidate published under npm's
+`next` tag. Pin the exact version while testing it:
 
 ```bash
-npx -y @mfdaves/okf-mcp@0.3.2 --version
-npx -y @mfdaves/okf-mcp@0.3.2 --project ./okf.project.yaml validate
+npx -y @mfdaves/okf-mcp@0.3.3-rc.1 --version
+npx -y @mfdaves/okf-mcp@0.3.3-rc.1 --project ./okf.project.yaml validate
 ```
 
 For a persistent installation:
 
 ```bash
-npm install --global @mfdaves/okf-mcp@0.3.2
+npm install --global @mfdaves/okf-mcp@0.3.3-rc.1
 
 okf --version
 okf --project ./okf.project.yaml validate
@@ -142,7 +142,7 @@ Example client configuration:
       "command": "npx",
       "args": [
         "-y",
-        "@mfdaves/okf-mcp@0.3.2",
+        "@mfdaves/okf-mcp@0.3.3-rc.1",
         "--bundle",
         "app=/absolute/path/to/repo/okf/bundles/app",
         "mcp"
@@ -161,7 +161,7 @@ Project config mode, with read-only project helpers but without proposal mutatio
       "command": "npx",
       "args": [
         "-y",
-        "@mfdaves/okf-mcp@0.3.2",
+        "@mfdaves/okf-mcp@0.3.3-rc.1",
         "--project",
         "/absolute/path/to/repo/okf.project.yaml",
         "mcp"
@@ -172,6 +172,30 @@ Project config mode, with read-only project helpers but without proposal mutatio
 ```
 
 Add `--authoring` to enable proposal creation, acceptance, and rejection. Add `--allow-remote-tool` to let MCP clients load arbitrary supported public remote bundles at runtime. Configured remote bundles remain readable without that runtime-loading flag.
+
+The stdio server supports MCP protocol versions `2025-11-25`, `2025-06-18`,
+`2025-03-26`, and `2024-11-05`. It returns a requested supported version.
+For a well-formed unsupported version, it returns its preferred supported
+version, `2025-11-25`, so the client can continue or disconnect.
+
+The transport uses standard JSON-RPC error codes for malformed messages,
+invalid requests, unknown methods, invalid method parameters, missing
+resources, and internal failures. Notifications never receive responses.
+Expected failures from a known tool, such as a missing concept, a read-only
+bundle, a failed remote fetch, or a proposal conflict, are returned as MCP
+tool results with `isError: true`.
+
+## MCP Registry Metadata
+
+`server.json` describes the npm package as the stdio server
+`io.github.mfdaves/okf-mcp`. Registry-aware clients should prompt for an
+absolute `okf.project.yaml` path, pass it through `--project`, and append the
+fixed `mcp` command.
+
+The package, lockfile, CLI, MCP `serverInfo`, `package.json` `mcpName`, and
+both versions in `server.json` are kept synchronized by the package smoke
+gate. Release candidates remain available through npm's `next` tag; only a
+verified stable version is published to the official MCP Registry.
 
 ## Concept Format
 
@@ -236,6 +260,11 @@ relations:
 Most MCP tools are read-only over the current index. `load_remote_bundle` mutates only the server's in-memory index by fetching a public GitHub tree; it does not write files.
 
 Every MCP tool includes a purpose-specific description, descriptions for its input parameters, and standard annotations covering read-only behavior, destructive behavior, idempotency, and external access.
+
+Tool arguments are validated against the advertised input schemas before
+execution. Unsupported fields, missing required values, incorrect primitive
+types, and out-of-range integers are rejected without coercion. Unknown or
+disabled tool names remain protocol-level invalid-parameter errors.
 
 Tool discovery and direct invocation use the same capability checks:
 
@@ -396,7 +425,11 @@ Use `list_remote_bundles` to inspect what was loaded.
 - `limit`
 - `offset`
 
-Tags and types are matched case-insensitively. Arbitrary frontmatter filters support exact scalar matching and array-contains matching.
+`list_concepts` also accepts a text `query` and applies it together with its
+listing filters. Tags and types are matched case-insensitively. Arbitrary
+frontmatter filters support exact scalar matching and array-contains
+matching. `relationType` selects concepts with an outgoing relation of that
+type.
 
 Example:
 
@@ -412,6 +445,10 @@ Example:
 ## Graph Behavior
 
 Markdown links between OKF documents become `markdown_link` edges. Frontmatter `relations` become typed `relation` edges.
+
+Links to a nested bundle directory resolve to that directory's reserved
+`index.md` when there is no exact document target. This applies to local and
+remote bundles and to candidate validation during proposal authoring.
 
 Graph tools return compact JSON:
 
@@ -499,6 +536,6 @@ Generated output is regular Markdown/YAML OKF and is validated by the same index
 ## Limitations
 
 - The MCP server implements the stdio JSON-RPC methods needed for resources and tools directly instead of using an SDK, so advanced SDK conveniences are out of scope.
-- MCP initialization accepts only the explicitly supported protocol versions and rejects unsupported versions.
+- MCP initialization negotiates an explicit supported version and falls back to `2025-11-25` for well-formed unsupported versions.
 - There is no file watcher. Restart the server after external file changes. Concepts accepted through MCP authoring refresh the MCP server index immediately.
 - The HTTP API is a lightweight built-in server, not a full hosted multi-tenant service.

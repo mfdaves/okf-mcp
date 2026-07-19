@@ -17,6 +17,8 @@ relations:
     target: repo://test/okf-mcp.test.js
   - type: checked_by
     target: repo://test/conformance.test.js
+  - type: checked_by
+    target: repo://test/directory-links.test.js
 ---
 
 # OKF Indexer
@@ -26,6 +28,8 @@ The indexer loads configured bundle directories, applies include and exclude fil
 Both canonical ids and path-derived URIs resolve through the URI map. Graph operations normalize path aliases to canonical ids before traversal.
 
 Markdown links become `markdown_link` edges. Frontmatter relations become typed `relation` edges. Internal targets are validated, while non-OKF schemes are recorded as external references.
+
+Markdown targets resolve to an exact document first. When no exact document exists, a directory link resolves to that directory's reserved `index.md`. This rule is shared by local indexing, remote indexing, and authoring candidate validation, so the resulting edge uses the nested index document's canonical URI.
 
 Validation is layered. OKF conformance checks parseable mapping frontmatter, a non-empty concept `type`, and the reserved structures of `index.md` and `log.md`. Unknown fields and unknown type values remain conformant. Project validity additionally covers missing roots, invalid paths, duplicate bundle ids, duplicate concept URIs, unsupported relation types, broken Markdown links, and broken internal targets.
 

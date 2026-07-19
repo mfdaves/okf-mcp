@@ -126,27 +126,59 @@ function walkMarkdown(root) {
   return out.sort();
 }
 
-function resolveLinkPath(bundle, fromPath, href) {
+function documentAtPath(documentsByPath, pathUri) {
+  if (!documentsByPath || typeof documentsByPath.get !== "function") {
+    return null;
+  }
+  const document = documentsByPath.get(pathUri);
+  return document && document.pathUri === pathUri ? document : null;
+}
+
+function resolveIndexedLink(bundleId, resolved, href, documentsByPath) {
+  if (!documentsByPath || typeof documentsByPath.get !== "function") {
+    return resolved;
+  }
+  const directTarget = documentAtPath(documentsByPath, resolved.uri);
+  if (directTarget) {
+    return Object.assign({}, resolved, { uri: directTarget.uri });
+  }
+  const clean = String(href || "").split("#")[0];
+  if (!clean.endsWith("/") && path.posix.extname(resolved.path)) {
+    return resolved;
+  }
+  const indexPath = normalizeSlashes(path.posix.join(resolved.path, "index.md"));
+  const indexTarget = documentAtPath(documentsByPath, `okf://${bundleId}/${indexPath}`);
+  if (!indexTarget) {
+    return resolved;
+  }
+  return Object.assign({}, resolved, {
+    path: indexPath,
+    uri: indexTarget.uri,
+  });
+}
+
+function resolveLinkPath(bundle, fromPath, href, documentsByPath) {
   const clean = String(href || "").split("#")[0];
   if (!clean || clean.startsWith("http://") || clean.startsWith("https://") || clean.startsWith("mailto:")) {
     return null;
   }
   if (bundle.remote) {
-    const resolvedPath = clean.startsWith("/")
+    const normalizedPath = clean.startsWith("/")
       ? path.posix.normalize(clean.slice(1))
       : path.posix.normalize(path.posix.join(path.posix.dirname(fromPath), clean));
-    if (!resolvedPath || resolvedPath === "." || resolvedPath.startsWith("../") || resolvedPath === "..") {
+    const resolvedPath = normalizedPath === "." ? "" : normalizedPath.replace(/\/+$/g, "");
+    if (resolvedPath.startsWith("../") || resolvedPath === "..") {
       return {
         outsideRoot: true,
         path: normalizeSlashes(clean),
         uri: null,
       };
     }
-    return {
+    return resolveIndexedLink(bundle.id, {
       outsideRoot: false,
       path: resolvedPath,
       uri: `okf://${bundle.id}/${resolvedPath}`,
-    };
+    }, clean, documentsByPath);
   }
   const base = clean.startsWith("/")
     ? path.join(bundle.root, clean.slice(1))
@@ -159,11 +191,11 @@ function resolveLinkPath(bundle, fromPath, href) {
       uri: null,
     };
   }
-  return {
+  return resolveIndexedLink(bundle.id, {
     outsideRoot: false,
     path: relativePath,
     uri: `okf://${bundle.id}/${relativePath}`,
-  };
+  }, clean, documentsByPath);
 }
 
 function relationFrom(value, doc) {
@@ -262,7 +294,11 @@ function buildIndex(bundleArgs, options) {
   });
 
   const byUri = new Map();
+  const byPathUri = new Map();
   documents.forEach((doc) => {
+    if (!byPathUri.has(doc.pathUri)) {
+      byPathUri.set(doc.pathUri, doc);
+    }
     if (byUri.has(doc.uri)) {
       errors.push({ code: "duplicate_uri", uri: doc.uri, message: "Duplicate OKF URI." });
     }
@@ -280,7 +316,7 @@ function buildIndex(bundleArgs, options) {
   documents.forEach((doc) => {
     const bundle = bundles.find((entry) => entry.id === doc.bundle);
     doc.links.forEach((link) => {
-      const resolved = resolveLinkPath(bundle, doc.path, link.href);
+      const resolved = resolveLinkPath(bundle, doc.path, link.href, byPathUri);
       if (!resolved) {
         return;
       }
@@ -294,7 +330,7 @@ function buildIndex(bundleArgs, options) {
         });
         return;
       }
-      const target = byUri.get(resolved.uri);
+      const target = documentAtPath(byPathUri, `okf://${doc.bundle}/${resolved.path}`);
       const edge = {
         source: doc.uri,
         target: target ? target.uri : resolved.uri,
@@ -358,6 +394,7 @@ function buildIndex(bundleArgs, options) {
     errors,
     edges,
     byUri,
+    byPathUri,
   };
   return attachValidation(index);
 }

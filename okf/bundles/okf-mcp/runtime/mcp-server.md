@@ -13,6 +13,8 @@ relations:
     target: okf://okf-mcp/workflows/concept-authoring
   - type: configured_by
     target: repo://src/mcp-server.js
+  - type: configured_by
+    target: repo://src/mcp-protocol.js
   - type: checked_by
     target: repo://test/okf-mcp.test.js
   - type: checked_by
@@ -21,7 +23,11 @@ relations:
 
 # MCP Stdio Server
 
-The MCP server reads newline-delimited JSON-RPC messages from stdin and writes responses to stdout. It implements initialization, resource listing and reading, tool listing, and tool calls without an SDK dependency. Initialization accepts only an explicit supported protocol version and rejects unsupported client versions instead of echoing them.
+The MCP server reads newline-delimited JSON-RPC messages from stdin and writes responses to stdout. It implements initialization, ping, resource listing and reading, tool listing, and tool calls without an SDK dependency.
+
+The server supports protocol versions `2025-11-25`, `2025-06-18`, `2025-03-26`, and `2024-11-05`. Initialization returns a requested supported version. A well-formed unsupported version negotiates to the preferred supported version, `2025-11-25`, so the client can decide whether to continue. Missing or malformed initialization parameters remain invalid.
+
+The transport validates the JSON-RPC envelope before dispatch. Parse errors, invalid requests, unknown methods, invalid method parameters, missing resources, and internal failures use their corresponding protocol error classes. Valid notifications never receive responses, including notifications with unknown methods or failing handlers. Stdout is reserved for protocol messages.
 
 Each indexed Markdown document is exposed as a `text/markdown` resource. The [MCP tool catalog](../interfaces/mcp-tools.md) exposes discovery, search, graph navigation, validation, remote loading, and proposal-based authoring.
 

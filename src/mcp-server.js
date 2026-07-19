@@ -15,9 +15,21 @@ const { fetchGitHubBundle, fetchRemoteBundles } = require("./remote");
 const { ConceptAuthoringService } = require("./authoring");
 const { FileConceptStore } = require("./store");
 const { loadProjectConfig } = require("./project");
+const {
+  ERROR_CODES,
+  ProtocolError,
+  ToolExecutionError,
+  assertSupportedSchema,
+  isPlainObject,
+  isValidRequestId,
+  responseFor,
+  validateJsonRpcEnvelope,
+  validateToolArguments,
+} = require("./mcp-protocol");
 const packageMetadata = require("../package.json");
 
 const SUPPORTED_PROTOCOL_VERSIONS = [
+  "2025-11-25",
   "2025-06-18",
   "2025-03-26",
   "2024-11-05",
@@ -52,28 +64,43 @@ function stringParameter(description, extra) {
   return Object.assign({ type: "string", description }, extra || {});
 }
 
-function numberParameter(description, extra) {
-  return Object.assign({ type: "number", description }, extra || {});
+function nonEmptyStringParameter(description, extra) {
+  return stringParameter(description, Object.assign({ minLength: 1 }, extra || {}));
+}
+
+function integerParameter(description, minimum, maximum, defaultValue) {
+  return {
+    type: "integer",
+    description,
+    minimum,
+    ...(maximum === undefined ? {} : { maximum }),
+    default: defaultValue,
+  };
 }
 
 function booleanParameter(description) {
-  return { type: "boolean", description };
+  return { type: "boolean", description, default: false };
 }
 
-function stringArrayParameter(description) {
+function stringArrayParameter(description, options) {
+  const config = options || {};
   return {
     type: "array",
     description,
-    items: { type: "string" },
+    items: Object.assign(
+      { type: "string" },
+      config.nonEmptyItems ? { minLength: 1 } : {},
+    ),
+    ...(config.minItems === undefined ? {} : { minItems: config.minItems }),
   };
 }
 
-function objectParameter(description) {
-  return {
+function objectParameter(description, extra) {
+  return Object.assign({
     type: "object",
     description,
     additionalProperties: true,
-  };
+  }, extra || {});
 }
 
 function defineTool(description, annotations, properties, required, schemaExtras) {
@@ -100,20 +127,20 @@ const TOOL_DEFINITIONS = {
     READ_ONLY,
     {
       query: stringParameter("Optional text matched against concept metadata and content."),
-      bundle: stringParameter("Limit results to this bundle id."),
-      type: stringParameter("Limit results to this exact concept type."),
-      tag: stringParameter("Limit results to concepts containing this tag."),
-      limit: numberParameter("Maximum number of concepts to return."),
-      offset: numberParameter("Number of matching concepts to skip before returning results."),
+      bundle: nonEmptyStringParameter("Limit results to this bundle id."),
+      type: nonEmptyStringParameter("Limit results to this exact concept type."),
+      tag: nonEmptyStringParameter("Limit results to concepts containing this tag."),
+      limit: integerParameter("Maximum number of concepts to return.", 1, 250, 25),
+      offset: integerParameter("Number of matching concepts to skip before returning results.", 0, undefined, 0),
     },
   ),
   get_concept: defineTool(
     "Read one valid OKF concept, including its frontmatter, Markdown body, and links.",
     READ_ONLY,
     {
-      uri: stringParameter("Canonical or path based okf URI for the concept."),
-      bundle: stringParameter("Bundle id used with path when uri is not supplied."),
-      path: stringParameter("Bundle relative Markdown path used with bundle when uri is not supplied."),
+      uri: nonEmptyStringParameter("Canonical or path based okf URI for the concept."),
+      bundle: nonEmptyStringParameter("Bundle id used with path when uri is not supplied."),
+      path: nonEmptyStringParameter("Bundle relative Markdown path used with bundle when uri is not supplied."),
     },
     [],
     {
@@ -128,14 +155,14 @@ const TOOL_DEFINITIONS = {
     READ_ONLY,
     {
       query: stringParameter("Text query matched against concept metadata and content."),
-      bundle: stringParameter("Limit results to this bundle id."),
-      types: stringArrayParameter("Limit results to any of these concept types."),
-      tagsAny: stringArrayParameter("Require at least one of these tags."),
-      tagsAll: stringArrayParameter("Require all of these tags."),
+      bundle: nonEmptyStringParameter("Limit results to this bundle id."),
+      types: stringArrayParameter("Limit results to any of these concept types.", { nonEmptyItems: true }),
+      tagsAny: stringArrayParameter("Require at least one of these tags.", { nonEmptyItems: true }),
+      tagsAll: stringArrayParameter("Require all of these tags.", { nonEmptyItems: true }),
       pathPrefix: stringParameter("Limit results to bundle relative paths beginning with this prefix."),
-      relationType: stringParameter("Limit results to concepts participating in this relation type."),
-      limit: numberParameter("Maximum number of concepts to return."),
-      offset: numberParameter("Number of matching concepts to skip before returning results."),
+      relationType: nonEmptyStringParameter("Limit results to concepts with an outgoing relation of this type."),
+      limit: integerParameter("Maximum number of concepts to return.", 1, 250, 25),
+      offset: integerParameter("Number of matching concepts to skip before returning results.", 0, undefined, 0),
     },
   ),
   list_types: defineTool(
@@ -154,11 +181,11 @@ const TOOL_DEFINITIONS = {
     "Fetch a public GitHub Markdown tree and add it to the in memory index as a read only remote bundle.",
     REMOTE_LOAD,
     {
-      id: stringParameter("Unique bundle id to assign to the fetched remote tree."),
-      url: stringParameter("Public GitHub tree URL to fetch."),
-      provider: stringParameter("Remote provider name. Only github is supported.", { enum: ["github"] }),
-      include: stringArrayParameter("Optional glob patterns selecting remote Markdown paths to include."),
-      exclude: stringArrayParameter("Optional glob patterns selecting remote Markdown paths to exclude."),
+      id: nonEmptyStringParameter("Unique bundle id to assign to the fetched remote tree."),
+      url: nonEmptyStringParameter("Public GitHub tree URL to fetch."),
+      provider: stringParameter("Remote provider name. Only github is supported.", { enum: ["github"], default: "github" }),
+      include: stringArrayParameter("Optional glob patterns selecting remote Markdown paths to include.", { nonEmptyItems: true }),
+      exclude: stringArrayParameter("Optional glob patterns selecting remote Markdown paths to exclude.", { nonEmptyItems: true }),
     },
     ["id", "url"],
   ),
@@ -170,8 +197,8 @@ const TOOL_DEFINITIONS = {
     "Validate a proposed new OKF concept without writing a proposal or concept file.",
     READ_ONLY,
     {
-      bundle: stringParameter("Writable bundle id that would contain the concept."),
-      path: stringParameter("Safe bundle relative Markdown path for the concept."),
+      bundle: nonEmptyStringParameter("Writable bundle id that would contain the concept."),
+      path: nonEmptyStringParameter("Safe bundle relative Markdown path for the concept."),
       frontmatter: objectParameter("Complete YAML frontmatter represented as a JSON object."),
       body: stringParameter("Markdown body for the concept."),
     },
@@ -181,9 +208,9 @@ const TOOL_DEFINITIONS = {
     "Suggest a safe bundle relative Markdown path from a concept type and title.",
     READ_ONLY,
     {
-      bundle: stringParameter("Writable bundle id that will contain the concept."),
-      type: stringParameter("Concept type used to build the path."),
-      title: stringParameter("Concept title used to build the file name."),
+      bundle: nonEmptyStringParameter("Writable bundle id that will contain the concept."),
+      type: nonEmptyStringParameter("Concept type used to build the path."),
+      title: nonEmptyStringParameter("Concept title used to build the file name."),
       prefix: stringParameter("Optional bundle relative directory prefix."),
     },
     ["bundle", "type", "title"],
@@ -192,8 +219,8 @@ const TOOL_DEFINITIONS = {
     "Create a reviewable proposal for a new OKF concept without writing the concept file.",
     LOCAL_WRITE,
     {
-      bundle: stringParameter("Writable bundle id that will contain the concept."),
-      path: stringParameter("Safe bundle relative Markdown path for the new concept."),
+      bundle: nonEmptyStringParameter("Writable bundle id that will contain the concept."),
+      path: nonEmptyStringParameter("Safe bundle relative Markdown path for the new concept."),
       frontmatter: objectParameter("Complete YAML frontmatter represented as a JSON object."),
       body: stringParameter("Markdown body for the new concept."),
       message: stringParameter("Optional review note explaining why the concept should be created."),
@@ -204,9 +231,12 @@ const TOOL_DEFINITIONS = {
     "Create a reviewable update proposal for an existing OKF concept while preserving unspecified content.",
     LOCAL_WRITE,
     {
-      uri: stringParameter("Canonical or path based okf URI of the existing concept."),
-      frontmatter: objectParameter("Frontmatter fields to add or replace; unspecified fields are preserved."),
-      removeFrontmatterKeys: stringArrayParameter("Frontmatter keys to remove; the id field cannot be removed."),
+      uri: nonEmptyStringParameter("Canonical or path based okf URI of the existing concept."),
+      frontmatter: objectParameter(
+        "Frontmatter fields to add or replace; unspecified fields are preserved.",
+        { minProperties: 1 },
+      ),
+      removeFrontmatterKeys: stringArrayParameter("Frontmatter keys to remove; the id field cannot be removed.", { minItems: 1, nonEmptyItems: true }),
       body: stringParameter("Replacement Markdown body; omit it to preserve the current body."),
       message: stringParameter("Optional review note explaining why the concept should be updated."),
     },
@@ -223,7 +253,7 @@ const TOOL_DEFINITIONS = {
     "List compact metadata for stored authoring proposals.",
     READ_ONLY,
     {
-      bundle: stringParameter("Limit results to proposals for this bundle id."),
+      bundle: nonEmptyStringParameter("Limit results to proposals for this bundle id."),
       status: stringParameter("Limit results to this proposal status.", { enum: ["proposed", "accepted", "rejected"] }),
     },
   ),
@@ -231,7 +261,7 @@ const TOOL_DEFINITIONS = {
     "Read one authoring proposal, including its candidate content and validation result.",
     READ_ONLY,
     {
-      proposalId: stringParameter("Identifier returned when the proposal was created."),
+      proposalId: nonEmptyStringParameter("Identifier returned when the proposal was created."),
     },
     ["proposalId"],
   ),
@@ -239,7 +269,7 @@ const TOOL_DEFINITIONS = {
     "Accept a reviewed proposal and write its new or updated concept file after revalidation.",
     DESTRUCTIVE_WRITE,
     {
-      proposalId: stringParameter("Identifier of the proposed change to accept."),
+      proposalId: nonEmptyStringParameter("Identifier of the proposed change to accept."),
     },
     ["proposalId"],
   ),
@@ -247,7 +277,7 @@ const TOOL_DEFINITIONS = {
     "Reject a reviewed proposal so it can no longer be accepted.",
     DESTRUCTIVE_WRITE,
     {
-      proposalId: stringParameter("Identifier of the proposed change to reject."),
+      proposalId: nonEmptyStringParameter("Identifier of the proposed change to reject."),
       reason: stringParameter("Optional explanation recorded with the rejection."),
     },
     ["proposalId"],
@@ -256,20 +286,20 @@ const TOOL_DEFINITIONS = {
     "Return a bounded set of OKF graph nodes and edges with optional concept filters.",
     READ_ONLY,
     {
-      bundle: stringParameter("Limit graph nodes to this bundle id."),
-      type: stringParameter("Limit graph nodes to this exact concept type."),
-      tag: stringParameter("Limit graph nodes to concepts containing this tag."),
+      bundle: nonEmptyStringParameter("Limit graph nodes to this bundle id."),
+      type: nonEmptyStringParameter("Limit graph nodes to this exact concept type."),
+      tag: nonEmptyStringParameter("Limit graph nodes to concepts containing this tag."),
       pathPrefix: stringParameter("Limit graph nodes to bundle relative paths beginning with this prefix."),
       includeExternal: booleanParameter("Include opaque external relation targets in the graph."),
-      maxNodes: numberParameter("Maximum number of graph nodes to return."),
-      maxEdges: numberParameter("Maximum number of graph edges to return."),
+      maxNodes: integerParameter("Maximum number of graph nodes to return.", 1, 1000, 100),
+      maxEdges: integerParameter("Maximum number of graph edges to return.", 1, 5000, 300),
     },
   ),
   get_neighbors: defineTool(
     "Return the incoming and outgoing graph relationships for one OKF concept.",
     READ_ONLY,
     {
-      uri: stringParameter("Canonical or path based okf URI of the center concept."),
+      uri: nonEmptyStringParameter("Canonical or path based okf URI of the center concept."),
     },
     ["uri"],
   ),
@@ -277,10 +307,10 @@ const TOOL_DEFINITIONS = {
     "Traverse a bounded OKF subgraph outward from one or more seed concepts.",
     READ_ONLY,
     {
-      uri: stringParameter("Single canonical or path based okf URI to use as a seed."),
-      seeds: stringArrayParameter("One or more okf URIs to use as traversal seeds."),
-      depth: numberParameter("Maximum relationship depth to traverse from the seeds."),
-      maxNodes: numberParameter("Maximum number of graph nodes to return."),
+      uri: nonEmptyStringParameter("Single canonical or path based okf URI to use as a seed."),
+      seeds: stringArrayParameter("One or more okf URIs to use as traversal seeds.", { minItems: 1, nonEmptyItems: true }),
+      depth: integerParameter("Maximum relationship depth to traverse from the seeds.", 0, 10, 1),
+      maxNodes: integerParameter("Maximum number of graph nodes to return.", 1, 1000, 50),
     },
     [],
     {
@@ -294,9 +324,9 @@ const TOOL_DEFINITIONS = {
     "Find bounded relationship paths between two OKF concepts.",
     READ_ONLY,
     {
-      source: stringParameter("Canonical or path based okf URI where path search begins."),
-      target: stringParameter("Canonical or path based okf URI where path search ends."),
-      maxPaths: numberParameter("Maximum number of distinct paths to return."),
+      source: nonEmptyStringParameter("Canonical or path based okf URI where path search begins."),
+      target: nonEmptyStringParameter("Canonical or path based okf URI where path search ends."),
+      maxPaths: integerParameter("Maximum number of distinct paths to return.", 1, 50, 3),
     },
     ["source", "target"],
   ),
@@ -308,7 +338,7 @@ const TOOL_DEFINITIONS = {
     "Report OKF conformance separately from project validity for one bundle or the full current index.",
     READ_ONLY,
     {
-      bundle: stringParameter("Optional bundle id to validate in isolation."),
+      bundle: nonEmptyStringParameter("Optional bundle id to validate in isolation."),
     },
   ),
   validate_project: defineTool(
@@ -319,15 +349,18 @@ const TOOL_DEFINITIONS = {
     "Render the current OKF graph as JSON, Graphviz DOT, or Mermaid text.",
     READ_ONLY,
     {
-      format: stringParameter("Output format for the graph.", { enum: ["json", "dot", "mermaid"] }),
+      format: stringParameter("Output format for the graph.", { enum: ["json", "dot", "mermaid"], default: "json" }),
       includeExternal: booleanParameter("Include opaque external relation targets in the export."),
-      maxNodes: numberParameter("Maximum number of graph nodes to export."),
-      maxEdges: numberParameter("Maximum number of graph edges to export."),
+      maxNodes: integerParameter("Maximum number of graph nodes to export.", 1, 1000, 100),
+      maxEdges: integerParameter("Maximum number of graph edges to export.", 1, 5000, 300),
     },
   ),
 };
 
 const TOOL_NAMES = Object.keys(TOOL_DEFINITIONS);
+TOOL_NAMES.forEach((name) => {
+  assertSupportedSchema(TOOL_DEFINITIONS[name].inputSchema, `#/tools/${name}/inputSchema`);
+});
 const PROJECT_HELPER_TOOL_NAMES = new Set([
   "okf_validate_concept",
   "okf_suggest_concept_path",
@@ -344,8 +377,8 @@ const RUNTIME_REMOTE_TOOL_NAMES = new Set([
   "load_remote_bundle",
 ]);
 
-function jsonContent(value) {
-  return {
+function jsonContent(value, options) {
+  const result = {
     content: [
       {
         type: "text",
@@ -353,6 +386,10 @@ function jsonContent(value) {
       },
     ],
   };
+  if (options && options.isError) {
+    result.isError = true;
+  }
+  return result;
 }
 
 function toolEnabled(state, name) {
@@ -369,8 +406,15 @@ function toolEnabled(state, name) {
 }
 
 function requireToolEnabled(state, name) {
+  if (!Object.prototype.hasOwnProperty.call(TOOL_DEFINITIONS, name)) {
+    throw new ProtocolError(ERROR_CODES.INVALID_PARAMS, "Invalid params", {
+      detail: "Unknown or unavailable tool",
+    });
+  }
   if (!toolEnabled(state, name)) {
-    throw new Error(`MCP tool is disabled by server configuration: ${name}`);
+    throw new ProtocolError(ERROR_CODES.INVALID_PARAMS, "Invalid params", {
+      detail: "Unknown or unavailable tool",
+    });
   }
 }
 
@@ -423,7 +467,9 @@ function publicBundles(index) {
 function readResource(index, uri) {
   const doc = index.byUri.get(uri);
   if (!doc) {
-    throw new Error(`Unknown OKF resource URI: ${uri}`);
+    throw new ProtocolError(ERROR_CODES.RESOURCE_NOT_FOUND, "Resource not found", {
+      uri,
+    });
   }
   return {
     contents: [
@@ -444,17 +490,17 @@ function listConcepts(index, args) {
   if (options.tag && !options.tagsAny) {
     options.tagsAny = [options.tag];
   }
-  return searchConcepts(index, Object.assign(options, { query: "" }));
+  return searchConcepts(index, options);
 }
 
 function getConcept(index, args) {
   const uri = args && args.uri ? args.uri : args && args.bundle && args.path ? `okf://${args.bundle}/${args.path}` : null;
   if (!uri || !index.byUri.has(uri)) {
-    throw new Error(`Unknown OKF concept URI: ${uri || "<missing>"}`);
+    throw new ToolExecutionError(`Unknown OKF concept URI: ${uri || "<missing>"}`);
   }
   const doc = index.byUri.get(uri);
   if (!doc.valid || doc.reserved) {
-    throw new Error(`URI is not a valid OKF concept: ${uri}`);
+    throw new ToolExecutionError(`URI is not a valid OKF concept: ${uri}`);
   }
   return Object.assign(conceptSummary(doc), {
     frontmatter: doc.frontmatter,
@@ -505,6 +551,46 @@ function rebuildStateIndex(state) {
   return state.index;
 }
 
+function invalidParams(detail) {
+  throw new ProtocolError(ERROR_CODES.INVALID_PARAMS, "Invalid params", { detail });
+}
+
+function objectParams(request, method) {
+  if (!request || !Object.prototype.hasOwnProperty.call(request, "params")) {
+    return {};
+  }
+  if (!isPlainObject(request.params)) {
+    invalidParams(`${method} params must be an object.`);
+  }
+  return request.params;
+}
+
+async function expectedToolOperation(operation, options) {
+  try {
+    return await operation();
+  } catch (error) {
+    if (error instanceof ProtocolError || error instanceof ToolExecutionError) {
+      throw error;
+    }
+    const programmingError = error instanceof ReferenceError
+      || error instanceof SyntaxError
+      || error instanceof RangeError
+      || (error instanceof TypeError && !(options && options.translateTypeError));
+    if (programmingError) {
+      throw error;
+    }
+    throw new ToolExecutionError(error && error.message ? error.message : String(error));
+  }
+}
+
+function requireGraphConcept(index, uri) {
+  const doc = uri && index.byUri.get(uri);
+  if (!doc || !doc.valid || doc.reserved) {
+    throw new ToolExecutionError(`Unknown valid OKF concept: ${uri || "<missing>"}`);
+  }
+  return doc;
+}
+
 async function callTool(state, name, args) {
   if (!state || !state.index) {
     state = {
@@ -519,97 +605,146 @@ async function callTool(state, name, args) {
     };
   }
   requireToolEnabled(state, name);
+  if (!isPlainObject(args)) {
+    throw new ProtocolError(ERROR_CODES.INVALID_PARAMS, "Invalid params", {
+      detail: "tools/call arguments must be an object.",
+    });
+  }
+  const issues = validateToolArguments(TOOL_DEFINITIONS[name].inputSchema, args);
+  if (issues.length) {
+    return jsonContent({
+      error: "Invalid tool arguments",
+      tool: name,
+      issues,
+    }, { isError: true });
+  }
   const index = state.index;
-  switch (name) {
-    case "list_bundles":
-      return jsonContent(publicBundles(index));
-    case "list_concepts":
-      return jsonContent(listConcepts(index, args));
-    case "get_concept":
-      return jsonContent(getConcept(index, args));
-    case "search_concepts":
-      return jsonContent(searchConcepts(index, args || {}));
-    case "list_types":
-      return jsonContent(listTypes(index));
-    case "list_tags":
-      return jsonContent(listTags(index));
-    case "list_relation_types":
-      return jsonContent(listRelationTypes(index));
-    case "list_remote_bundles":
-      return jsonContent(state.remoteBundles.map((bundle) => bundle.remoteSource));
-    case "load_remote_bundle": {
-      if (!args || !args.id || !args.url) {
-        throw new Error("load_remote_bundle requires id and url.");
-      }
-      const provider = String(args.provider || "github");
-      if (provider !== "github") {
-        throw new Error(`Unsupported remote bundle provider: ${provider}`);
-      }
-      if (state.index.bundles.some((bundle) => bundle.id === args.id)) {
-        throw new Error(`Bundle id already loaded: ${args.id}`);
-      }
-      const remoteBundle = await fetchGitHubBundle({
-        id: args.id,
-        url: args.url,
-        include: Array.isArray(args.include) ? args.include : [],
-        exclude: Array.isArray(args.exclude) ? args.exclude : [],
-      });
-      state.remoteBundles.push(remoteBundle);
-      rebuildStateIndex(state);
-      return jsonContent(remoteBundle.remoteSource);
-    }
-    case "okf_validate_concept":
-      return jsonContent(requireAuthoring(state).validateConcept(args || {}));
-    case "okf_suggest_concept_path":
-      return jsonContent(requireAuthoring(state).suggestConceptPath(args || {}));
-    case "okf_propose_concept":
-      return jsonContent(await requireAuthoring(state).proposeConcept(args || {}));
-    case "okf_propose_update":
-      return jsonContent(await requireAuthoring(state).proposeUpdate(args || {}));
-    case "okf_list_proposals":
-      return jsonContent(await requireAuthoring(state).listProposals(args || {}));
-    case "okf_get_proposal":
-      return jsonContent(await requireAuthoring(state).getProposal(args || {}));
-    case "okf_accept_proposal": {
-      const result = await requireAuthoring(state).acceptProposal(args || {});
-      if (result.accepted) {
+  try {
+    switch (name) {
+      case "list_bundles":
+        return jsonContent(publicBundles(index));
+      case "list_concepts":
+        return jsonContent(listConcepts(index, args));
+      case "get_concept":
+        return jsonContent(getConcept(index, args));
+      case "search_concepts":
+        return jsonContent(searchConcepts(index, args));
+      case "list_types":
+        return jsonContent(listTypes(index));
+      case "list_tags":
+        return jsonContent(listTags(index));
+      case "list_relation_types":
+        return jsonContent(listRelationTypes(index));
+      case "list_remote_bundles":
+        return jsonContent(state.remoteBundles.map((bundle) => bundle.remoteSource));
+      case "load_remote_bundle": {
+        const provider = String(args.provider || "github");
+        if (provider !== "github") {
+          throw new ToolExecutionError(`Unsupported remote bundle provider: ${provider}`);
+        }
+        if (state.index.bundles.some((bundle) => bundle.id === args.id)) {
+          throw new ToolExecutionError(`Bundle id already loaded: ${args.id}`);
+        }
+        const remoteBundle = await expectedToolOperation(
+          () => fetchGitHubBundle({
+            id: args.id,
+            url: args.url,
+            include: args.include || [],
+            exclude: args.exclude || [],
+          }),
+          { translateTypeError: true },
+        );
+        state.remoteBundles.push(remoteBundle);
         rebuildStateIndex(state);
+        return jsonContent(remoteBundle.remoteSource);
       }
-      return jsonContent(result);
+      case "okf_validate_concept":
+        return jsonContent(await expectedToolOperation(
+          () => requireAuthoring(state).validateConcept(args),
+        ));
+      case "okf_suggest_concept_path":
+        return jsonContent(await expectedToolOperation(
+          () => requireAuthoring(state).suggestConceptPath(args),
+        ));
+      case "okf_propose_concept": {
+        const result = await expectedToolOperation(
+          () => requireAuthoring(state).proposeConcept(args),
+        );
+        return jsonContent(result, { isError: result.created === false });
+      }
+      case "okf_propose_update": {
+        const result = await expectedToolOperation(
+          () => requireAuthoring(state).proposeUpdate(args),
+        );
+        return jsonContent(result, { isError: result.created === false });
+      }
+      case "okf_list_proposals":
+        return jsonContent(await expectedToolOperation(
+          () => requireAuthoring(state).listProposals(args),
+        ));
+      case "okf_get_proposal":
+        return jsonContent(await expectedToolOperation(
+          () => requireAuthoring(state).getProposal(args),
+        ));
+      case "okf_accept_proposal": {
+        const result = await expectedToolOperation(
+          () => requireAuthoring(state).acceptProposal(args),
+        );
+        if (result.accepted) {
+          rebuildStateIndex(state);
+        }
+        return jsonContent(result, { isError: result.accepted === false });
+      }
+      case "okf_reject_proposal":
+        return jsonContent(await expectedToolOperation(
+          () => requireAuthoring(state).rejectProposal(args),
+        ));
+      case "get_graph":
+        return jsonContent(getGraph(index, args));
+      case "get_neighbors":
+        requireGraphConcept(index, args.uri);
+        return jsonContent(getNeighbors(index, args.uri));
+      case "get_subgraph": {
+        const seeds = args.seeds || [args.uri];
+        seeds.forEach((uri) => requireGraphConcept(index, uri));
+        return jsonContent(getSubgraph(index, args));
+      }
+      case "find_paths":
+        requireGraphConcept(index, args.source);
+        requireGraphConcept(index, args.target);
+        return jsonContent(findPaths(index, args.source, args.target, args.maxPaths));
+      case "graph_summary":
+        return jsonContent(graphSummary(index));
+      case "validate_bundle":
+        if (args.bundle && !index.bundles.some((bundle) => bundle.id === args.bundle)) {
+          throw new ToolExecutionError(`Unknown OKF bundle: ${args.bundle}`);
+        }
+        return jsonContent(validateIndex(index, args.bundle));
+      case "validate_project":
+        return jsonContent(validateIndex(index));
+      case "export_graph":
+        return {
+          content: [
+            {
+              type: "text",
+              text: exportGraph(index, args),
+            },
+          ],
+        };
+      default:
+        throw new ProtocolError(ERROR_CODES.INVALID_PARAMS, "Invalid params", {
+          detail: "Unknown or unavailable tool",
+        });
     }
-    case "okf_reject_proposal":
-      return jsonContent(await requireAuthoring(state).rejectProposal(args || {}));
-    case "get_graph":
-      return jsonContent(getGraph(index, args || {}));
-    case "get_neighbors":
-      if (!args || !args.uri) {
-        throw new Error("get_neighbors requires uri.");
-      }
-      return jsonContent(getNeighbors(index, args && args.uri));
-    case "get_subgraph":
-      return jsonContent(getSubgraph(index, args || {}));
-    case "find_paths":
-      if (!args || !args.source || !args.target) {
-        throw new Error("find_paths requires source and target.");
-      }
-      return jsonContent(findPaths(index, args && args.source, args && args.target, args && args.maxPaths));
-    case "graph_summary":
-      return jsonContent(graphSummary(index));
-    case "validate_bundle":
-      return jsonContent(validateIndex(index, args && args.bundle));
-    case "validate_project":
-      return jsonContent(validateIndex(index));
-    case "export_graph":
-      return {
-        content: [
-          {
-            type: "text",
-            text: exportGraph(index, args || {}),
-          },
-        ],
-      };
-    default:
-      throw new Error(`Unknown OKF MCP tool: ${name}`);
+  } catch (error) {
+    if (!(error instanceof ToolExecutionError)) {
+      throw error;
+    }
+    return jsonContent({
+      error: "Tool execution failed",
+      tool: name,
+      message: error.message,
+    }, { isError: true });
   }
 }
 
@@ -644,38 +779,84 @@ function createServer(bundleArgs, options) {
     allowRuntimeRemoteLoad: Boolean(options && options.allowRuntimeRemoteLoad),
   };
   async function handle(request) {
+    if (!isPlainObject(request) || typeof request.method !== "string" || !request.method.trim()) {
+      throw new ProtocolError(ERROR_CODES.INVALID_REQUEST, "Invalid Request", {
+        detail: "The request method must be a non-empty string.",
+      });
+    }
     const method = request.method;
-    const params = request.params || {};
     if (method === "initialize") {
+      const params = objectParams(request, method);
       const requestedVersion = params.protocolVersion;
-      if (!SUPPORTED_PROTOCOL_VERSIONS.includes(requestedVersion)) {
-        throw new Error(
-          `Unsupported MCP protocol version: ${requestedVersion || "<missing>"}. `
-          + `Supported versions: ${SUPPORTED_PROTOCOL_VERSIONS.join(", ")}`,
-        );
+      if (typeof requestedVersion !== "string" || !requestedVersion.trim()) {
+        invalidParams("initialize.protocolVersion must be a non-empty string.");
+      }
+      if (!isPlainObject(params.capabilities)) {
+        invalidParams("initialize.capabilities must be an object.");
+      }
+      if (!isPlainObject(params.clientInfo)) {
+        invalidParams("initialize.clientInfo must be an object.");
+      }
+      if (typeof params.clientInfo.name !== "string" || !params.clientInfo.name.trim()) {
+        invalidParams("initialize.clientInfo.name must be a non-empty string.");
+      }
+      if (typeof params.clientInfo.version !== "string" || !params.clientInfo.version.trim()) {
+        invalidParams("initialize.clientInfo.version must be a non-empty string.");
       }
       return {
-        protocolVersion: requestedVersion,
+        protocolVersion: SUPPORTED_PROTOCOL_VERSIONS.includes(requestedVersion)
+          ? requestedVersion
+          : SUPPORTED_PROTOCOL_VERSIONS[0],
         serverInfo: { name: "okf-mcp", version: packageMetadata.version },
         capabilities: { resources: {}, tools: {} },
       };
     }
     if (method === "notifications/initialized") {
+      objectParams(request, method);
       return null;
     }
+    if (method === "ping") {
+      objectParams(request, method);
+      return {};
+    }
     if (method === "resources/list") {
+      const params = objectParams(request, method);
+      if (params.cursor !== undefined && typeof params.cursor !== "string") {
+        invalidParams("resources/list cursor must be a string when supplied.");
+      }
       return listResources(state.index);
     }
     if (method === "resources/read") {
+      const params = objectParams(request, method);
+      if (typeof params.uri !== "string" || !params.uri) {
+        invalidParams("resources/read uri must be a non-empty string.");
+      }
       return readResource(state.index, params.uri);
     }
     if (method === "tools/list") {
+      const params = objectParams(request, method);
+      if (params.cursor !== undefined && typeof params.cursor !== "string") {
+        invalidParams("tools/list cursor must be a string when supplied.");
+      }
       return listTools(state);
     }
     if (method === "tools/call") {
-      return callTool(state, params.name, params.arguments || {});
+      const params = objectParams(request, method);
+      if (typeof params.name !== "string" || !params.name.trim()) {
+        invalidParams("tools/call name must be a non-empty string.");
+      }
+      let args = {};
+      if (Object.prototype.hasOwnProperty.call(params, "arguments")) {
+        if (!isPlainObject(params.arguments)) {
+          invalidParams("tools/call arguments must be an object.");
+        }
+        args = params.arguments;
+      }
+      return callTool(state, params.name, args);
     }
-    throw new Error(`Unsupported MCP method: ${method}`);
+    throw new ProtocolError(ERROR_CODES.METHOD_NOT_FOUND, "Method not found", {
+      method,
+    });
   }
   return { get index() { return state.index; }, handle };
 }
@@ -711,20 +892,6 @@ async function createServerAsync(bundleArgs, options) {
   });
 }
 
-function responseFor(id, result, error) {
-  if (error) {
-    return {
-      jsonrpc: "2.0",
-      id,
-      error: {
-        code: -32000,
-        message: error.message || String(error),
-      },
-    };
-  }
-  return { jsonrpc: "2.0", id, result };
-}
-
 async function runStdioServer(bundleArgs, input, output, options) {
   const rl = readline.createInterface({ input, crlfDelay: Infinity });
   let serverPromise;
@@ -746,21 +913,50 @@ async function runStdioServer(bundleArgs, input, output, options) {
     if (!line.trim()) {
       return;
     }
-    if (line.length > 1024 * 1024) {
-      await writeResponse(responseFor(null, null, new Error("MCP request line exceeds 1 MiB.")));
+    if (Buffer.byteLength(line, "utf8") > 1024 * 1024) {
+      await writeResponse(responseFor(null, null, new ProtocolError(
+        ERROR_CODES.INVALID_REQUEST,
+        "Invalid Request",
+        { detail: "MCP request line exceeds 1 MiB." },
+      )));
       return;
     }
     let request;
     try {
       request = JSON.parse(line);
-      const server = await serverPromise;
-      const result = await server.handle(request);
-      if (request.id !== undefined) {
-        await writeResponse(responseFor(request.id, result, null));
-      }
     } catch (error) {
-      const id = request && request.id !== undefined ? request.id : null;
-      await writeResponse(responseFor(id, null, error));
+      await writeResponse(responseFor(null, null, new ProtocolError(
+        ERROR_CODES.PARSE_ERROR,
+        "Parse error",
+      )));
+      return;
+    }
+    let envelope;
+    try {
+      envelope = validateJsonRpcEnvelope(request);
+    } catch (error) {
+      const errorId = isPlainObject(request)
+        && Object.prototype.hasOwnProperty.call(request, "id")
+        && isValidRequestId(request.id)
+        ? request.id
+        : null;
+      await writeResponse(responseFor(errorId, null, error));
+      return;
+    }
+    const server = await serverPromise;
+    if (envelope.notification) {
+      try {
+        await server.handle(request);
+      } catch {
+        // JSON-RPC notifications are one-way, including when their handling fails.
+      }
+      return;
+    }
+    try {
+      const result = await server.handle(request);
+      await writeResponse(responseFor(envelope.id, result, null));
+    } catch (error) {
+      await writeResponse(responseFor(envelope.id, null, error));
     }
   }
 

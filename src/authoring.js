@@ -158,7 +158,7 @@ class ConceptAuthoringService {
     }
 
     doc.links.forEach((link) => {
-      const resolved = resolveLinkPath(bundle, doc.path, link.href);
+      const resolved = resolveLinkPath(bundle, doc.path, link.href, index.byPathUri);
       if (!resolved) {
         return;
       }
@@ -166,7 +166,10 @@ class ConceptAuthoringService {
         warnings.push({ code: "link_outside_root", bundle: bundleId, path: doc.path, href: link.href, message: "Markdown link resolves outside bundle root." });
         return;
       }
-      if (!index.byUri.has(resolved.uri) && resolved.uri !== doc.uri && resolved.uri !== doc.pathUri) {
+      const targetPathUri = `okf://${bundleId}/${resolved.path}`;
+      const target = index.byPathUri && index.byPathUri.get(targetPathUri);
+      const targetExists = Boolean(target && target.pathUri === targetPathUri);
+      if (!targetExists && resolved.uri !== doc.uri && resolved.uri !== doc.pathUri) {
         warnings.push({ code: "broken_link", bundle: bundleId, path: doc.path, href: link.href, target: resolved.path, message: "Markdown link target does not exist in bundle." });
       }
     });

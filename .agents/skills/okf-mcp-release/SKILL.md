@@ -37,6 +37,7 @@ Stop before changing identity or publishing when any condition holds:
 - source tests, self-OKF validation, package smoke, or stdio checks fail;
 - package, lockfile, CLI, MCP, or registry versions disagree;
 - `server.json` and `mcpName` disagree when registry publication is enabled.
+- npm trusted publishing is not configured for the repository and `release.yml`.
 
 Never print npm tokens, copy credentials into files, rewrite an existing release tag, or republish an existing version.
 
@@ -68,14 +69,21 @@ npm run pack:check
 Require all of the following:
 
 - remote concepts and relationships survive an accepted local proposal;
-- unsupported MCP protocol versions return an initialization error;
-- a real newline-delimited stdio session initializes, lists tools, and calls a read-only tool;
+- supported MCP protocol versions are echoed and a well-formed unsupported version negotiates to the server's preferred supported version;
+- malformed JSON, invalid envelopes, unknown methods, invalid method parameters, missing resources, and internal failures use the appropriate JSON-RPC error classes;
+- valid notifications, including unknown notifications, never receive a response;
+- known-tool validation and execution failures return MCP tool results with `isError: true`;
+- advertised tool input schemas are enforced without coercion, including required fields, extra properties, primitive types, integers, and bounds;
+- a real newline-delimited stdio session initializes with the current stable MCP version, pings, lists tools, reads a resource, and calls a read-only tool;
+- `list_concepts` applies its documented text query and relation filtering is documented as outgoing;
+- local, remote, and authoring-candidate directory links resolve to nested reserved `index.md` documents;
 - YAML accepts supported standard structures and preserves unknown keys;
 - validation reports `conformant` separately from `validForProject`;
 - valid `index.md` and `log.md` pass, malformed reserved files fail conformance;
 - the generated tarball installs into a fresh temporary project without using the source checkout;
 - both installed binaries report the package version;
 - the packed self-OKF project is present and validates;
+- the tarball includes `server.json`, whose package name, version, and server name match `package.json`, `package-lock.json`, CLI output, and MCP `serverInfo`;
 - tests, proposal records, credentials, and unrelated development files are absent from the tarball.
 
 Use Node 22 and Node 24 for runtime CI. Use Node 24 with npm 11.5.1 or newer for trusted publication.
@@ -85,14 +93,13 @@ Use Node 22 and Node 24 for runtime CI. Use Node 24 with npm 11.5.1 or newer for
 After the gate passes and identity is confirmed:
 
 1. Update all identity-bearing metadata together.
-2. Set a fresh prerelease version such as `0.3.2-rc.1`.
+2. Set a fresh prerelease version such as `0.3.3-rc.1`.
 3. Re-run the complete source and artifact gate.
 4. Commit and tag the exact verified state.
-5. Bootstrap a new npm package manually with two-factor authentication when trusted publishing cannot create it.
-6. Configure this repository's `release.yml` as the npm trusted publisher.
-7. For subsequent releases, dispatch `release.yml` with the exact Git tag and npm dist-tag.
-8. Verify the registry artifact with exact-version `npx`.
-9. Connect an MCP client to the `npx` command and repeat initialize, tool-list, resource-read, and read-only tool checks.
+5. Configure this repository's `release.yml` as the npm trusted publisher.
+6. Dispatch `release.yml` with the exact Git tag and npm dist-tag.
+7. Verify the registry artifact with a fresh cache and exact-version `npx`.
+8. Connect an MCP client to the `npx` command and repeat initialize, ping, tool-list, resource-read, and read-only tool checks.
 
 Do not promote merely because `npm publish` succeeded.
 
@@ -106,7 +113,7 @@ Create a new stable version; do not retag prerelease bytes.
 4. Verify exact-version and dist-tag installations.
 5. Confirm Git HEAD, remote branch, release tag, and npm integrity identify the verified release.
 
-Publish MCP Registry metadata only after npm verification. Synchronize `package.json` name/version/`mcpName`, MCP `serverInfo`, and `server.json` before calling the registry publisher.
+Publish MCP Registry metadata only after stable npm verification. Synchronize `package.json` name/version/`mcpName`, `package-lock.json`, MCP `serverInfo`, and `server.json` before calling the registry publisher. Do not publish release-candidate metadata to the Registry.
 
 ## Report
 

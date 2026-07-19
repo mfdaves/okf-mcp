@@ -18,6 +18,8 @@ relations:
   - type: configured_by
     target: repo://package.json
   - type: configured_by
+    target: repo://server.json
+  - type: configured_by
     target: repo://.github/workflows/release.yml
   - type: configured_by
     target: repo://.agents/skills/okf-mcp-release/SKILL.md
@@ -33,9 +35,11 @@ The latest public bundle can be loaded from:
 
 Consumers that need reproducibility should replace `main` with a release tag. Remote loading indexes only the Markdown tree and does not execute repository code.
 
-The public npm package is `@mfdaves/okf-mcp`. Its allowlist includes `okf.project.yaml` and the `okf` directory so installed artifacts carry the same reference bundle. The package smoke gate installs the generated tarball into a clean temporary project, executes both binaries, validates this bundle, and exercises MCP initialization, tool discovery, and concept retrieval over stdio.
+The public npm package is `@mfdaves/okf-mcp`. Its allowlist includes `okf.project.yaml`, `server.json`, and the `okf` directory so installed artifacts carry the same reference bundle and MCP Registry metadata. The package declares the Registry name `io.github.mfdaves/okf-mcp`.
 
-The repository release skill defines the package identity, capability matrix, self-validation, tarball, clean-install, prerelease, and registry synchronization gates. The trusted-publishing workflow repeats those checks against an exact Git release tag before publishing.
+The package smoke gate verifies that package, lockfile, CLI, MCP server, and Registry versions and identities agree. It installs the generated tarball into a clean temporary project, executes both binaries, validates this bundle, negotiates MCP `2025-11-25`, checks fallback negotiation and notification silence, pings the server, discovers tools, and retrieves a concept over stdio.
+
+The repository release skill defines the package identity, capability matrix, protocol, schema enforcement, self-validation, tarball, clean-install, prerelease, and registry synchronization gates. The trusted-publishing workflow repeats those checks against an exact Git release tag before publishing. Release-candidate metadata is not published to the MCP Registry; stable Registry publication follows successful npm and `npx` verification.
 
 Concept ids use the stable `okf://okf-mcp/...` namespace. Internal relations target those stable ids, while `repo://` references connect durable concepts to their current implementation sources without turning source files into concepts.
 
