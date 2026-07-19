@@ -270,6 +270,30 @@ test("project config loads multiple bundles and validates typed cross-bundle rel
   assert.equal(getGraph(index, { includeExternal: true }).nodes.some((node) => node.id === "repo://specs/alpha.json"), true);
 });
 
+test("published okf-mcp reference bundle is complete, valid, and packaged", () => {
+  const repositoryRoot = path.resolve(__dirname, "..");
+  const index = buildProjectIndex(path.join(repositoryRoot, "okf.project.yaml"));
+  const packageMetadata = JSON.parse(fs.readFileSync(path.join(repositoryRoot, "package.json"), "utf8"));
+
+  assert.equal(index.errors.length, 0);
+  assert.equal(index.warnings.length, 0);
+  assert.equal(index.concepts.length, 11);
+  assert.equal(index.reserved.length, 1);
+  assert.equal(index.byUri.has("okf://okf-mcp/overview/okf-mcp"), true);
+  assert.equal(index.byUri.has("okf://okf-mcp/policies/authoring-safety"), true);
+  assert.equal(
+    index.edges.some((edge) => (
+      edge.source === "okf://okf-mcp/workflows/concept-update"
+      && edge.target === "okf://okf-mcp/policies/authoring-safety"
+      && edge.relationType === "checked_by"
+    )),
+    true,
+  );
+  assert.equal(searchConcepts(index, { query: "proposal" }).total > 0, true);
+  assert.equal(packageMetadata.files.includes("okf"), true);
+  assert.equal(packageMetadata.files.includes("okf.project.yaml"), true);
+});
+
 test("project validation reports broken and invalid typed relations as errors", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "okf-project-bad-"));
   const bundle = path.join(root, "okf", "bundle");

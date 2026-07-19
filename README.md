@@ -26,6 +26,26 @@ node bin/okf-mcp.js --bundle app=./okf/bundles/app
 
 The package also exposes an `okf` binary when installed.
 
+## Published OKF Reference
+
+This repository publishes a self-describing OKF bundle for the product, its runtime boundaries, interfaces, authoring workflows, and safety policy. The canonical entry point is `okf://okf-mcp/overview/okf-mcp`.
+
+Validate and query the bundled reference from a checkout or installed package:
+
+```bash
+node bin/okf-mcp.js --project okf.project.yaml validate
+node bin/okf-mcp.js --project okf.project.yaml search "proposal"
+node bin/okf-mcp.js --project okf.project.yaml concept okf://okf-mcp/overview/okf-mcp
+```
+
+Load the latest published reference directly from GitHub:
+
+```bash
+node bin/okf-mcp.js --remote-bundle okf-mcp=https://github.com/mfdaves/okf-mcp/tree/main/okf/bundles/okf-mcp --inspect
+```
+
+For reproducible consumption, replace `main` with a release tag. The npm package includes both `okf.project.yaml` and the complete reference bundle.
+
 ## Project Config
 
 For project-agnostic use, create an `okf.project.yaml` at a repository root:

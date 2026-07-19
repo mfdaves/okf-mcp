@@ -1,0 +1,5 @@
+project: okf-mcp
+bundles:
+  - id: okf-mcp
+    root: okf/bundles/okf-mcp
+    include: ["*.md", "**/*.md"]

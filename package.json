@@ -1,6 +1,6 @@
 {
   "name": "okf-mcp",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Project-agnostic Open Knowledge Format CLI, graph index, and MCP stdio server.",
   "homepage": "https://github.com/mfdaves/okf-mcp#readme",
   "repository": {
@@ -32,6 +32,8 @@
   "files": [
     "bin",
     "src",
+    "okf",
+    "okf.project.yaml",
     "README.md",
     "LICENSE"
   ],
