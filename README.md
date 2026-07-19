@@ -8,7 +8,25 @@ The core intentionally has no database, embeddings, build step, or hosted-servic
 
 ## Install And Run
 
-From this repository:
+The current release candidate is published under npm's `next` tag. Pin the
+exact version for unattended MCP clients:
+
+```bash
+npx -y @mfdaves/okf-mcp@0.3.2-rc.1 --version
+npx -y @mfdaves/okf-mcp@0.3.2-rc.1 --project ./okf.project.yaml validate
+```
+
+For a persistent installation:
+
+```bash
+npm install --global @mfdaves/okf-mcp@0.3.2-rc.1
+
+okf --version
+okf --project ./okf.project.yaml validate
+okf-mcp --project ./okf.project.yaml mcp
+```
+
+To work from the source repository:
 
 ```bash
 git clone https://github.com/mfdaves/okf-mcp.git
@@ -16,8 +34,6 @@ cd okf-mcp
 npm ci
 npm test
 node bin/okf-mcp.js --version
-node bin/okf-mcp.js --bundle ./okf/bundles/app --inspect
-node bin/okf-mcp.js --bundle app=./okf/bundles/app
 ```
 
 Node 22 or newer is required.
@@ -39,18 +55,20 @@ This repository publishes a self-describing OKF bundle for the product, its runt
 Validate and query the bundled reference from a checkout or installed package:
 
 ```bash
-node bin/okf-mcp.js --project okf.project.yaml validate
-node bin/okf-mcp.js --project okf.project.yaml search "proposal"
-node bin/okf-mcp.js --project okf.project.yaml concept okf://okf-mcp/overview/okf-mcp
+okf --project okf.project.yaml validate
+okf --project okf.project.yaml search "proposal"
+okf --project okf.project.yaml concept okf://okf-mcp/overview/okf-mcp
 ```
 
 Load the latest published reference directly from GitHub:
 
 ```bash
-node bin/okf-mcp.js --remote-bundle okf-mcp=https://github.com/mfdaves/okf-mcp/tree/main/okf/bundles/okf-mcp --inspect
+okf --remote-bundle okf-mcp=https://github.com/mfdaves/okf-mcp/tree/main/okf/bundles/okf-mcp --inspect
 ```
 
-For reproducible consumption, replace `main` with a release tag. The npm package includes both `okf.project.yaml` and the complete reference bundle.
+For reproducible consumption, replace `main` with a release tag. The
+`@mfdaves/okf-mcp` npm package includes both `okf.project.yaml` and the
+complete reference bundle.
 
 ## Project Config
 
@@ -83,15 +101,15 @@ plugins:
 Run project commands:
 
 ```bash
-node bin/okf-mcp.js --project okf.project.yaml validate
-node bin/okf-mcp.js --project okf.project.yaml search "orders"
-node bin/okf-mcp.js --project okf.project.yaml graph mermaid
-node bin/okf-mcp.js --project okf.project.yaml generate
-node bin/okf-mcp.js --project okf.project.yaml mcp
-node bin/okf-mcp.js --project okf.project.yaml mcp --authoring
-node bin/okf-mcp.js --project okf.project.yaml mcp --allow-remote-tool
-OKF_WRITE_TOKEN=change-me node bin/okf-mcp.js --project okf.project.yaml serve
-node bin/okf-mcp.js --remote-bundle shared=https://github.com/example/okf-atlas/tree/main/bundles/shared --inspect
+okf --project okf.project.yaml validate
+okf --project okf.project.yaml search "orders"
+okf --project okf.project.yaml graph mermaid
+okf --project okf.project.yaml generate
+okf --project okf.project.yaml mcp
+okf --project okf.project.yaml mcp --authoring
+okf --project okf.project.yaml mcp --allow-remote-tool
+OKF_WRITE_TOKEN=change-me okf --project okf.project.yaml serve
+okf --remote-bundle shared=https://github.com/example/okf-atlas/tree/main/bundles/shared --inspect
 ```
 
 Commands:
@@ -121,11 +139,13 @@ Example client configuration:
 {
   "mcpServers": {
     "okf": {
-      "command": "node",
+      "command": "npx",
       "args": [
-        "/absolute/path/to/okf-mcp/bin/okf-mcp.js",
+        "-y",
+        "@mfdaves/okf-mcp@0.3.2-rc.1",
         "--bundle",
-        "app=/absolute/path/to/repo/okf/bundles/app"
+        "app=/absolute/path/to/repo/okf/bundles/app",
+        "mcp"
       ]
     }
   }
@@ -138,9 +158,10 @@ Project config mode, with read-only project helpers but without proposal mutatio
 {
   "mcpServers": {
     "okf": {
-      "command": "node",
+      "command": "npx",
       "args": [
-        "/absolute/path/to/okf-mcp/bin/okf-mcp.js",
+        "-y",
+        "@mfdaves/okf-mcp@0.3.2-rc.1",
         "--project",
         "/absolute/path/to/repo/okf.project.yaml",
         "mcp"
@@ -292,7 +313,7 @@ Safety rules:
 Start the HTTP server:
 
 ```bash
-OKF_WRITE_TOKEN=change-me node bin/okf-mcp.js --project okf.project.yaml serve --host 127.0.0.1 --port 8765
+OKF_WRITE_TOKEN=change-me okf --project okf.project.yaml serve --host 127.0.0.1 --port 8765
 ```
 
 Read/validation endpoints:
@@ -336,8 +357,8 @@ Remote loading:
 CLI examples:
 
 ```bash
-node bin/okf-mcp.js --remote-bundle shared=https://github.com/example/okf-atlas/tree/main/bundles/shared --inspect
-node bin/okf-mcp.js --project okf.project.yaml --remote-bundle vendor=https://github.com/example/vendor-okf/tree/main/bundles/catalog validate
+okf --remote-bundle shared=https://github.com/example/okf-atlas/tree/main/bundles/shared --inspect
+okf --project okf.project.yaml --remote-bundle vendor=https://github.com/example/vendor-okf/tree/main/bundles/catalog validate
 ```
 
 MCP runtime loading:

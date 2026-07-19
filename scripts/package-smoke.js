@@ -47,6 +47,7 @@ function main() {
       ["pack", "--json", "--ignore-scripts", "--pack-destination", packRoot],
     ).stdout)[0];
     const packedPaths = new Set(packed.files.map((entry) => entry.path));
+    assert.equal(packed.name, packageMetadata.name);
     assert.equal(packed.version, packageMetadata.version);
     assert.equal(packedPaths.has("okf.project.yaml"), true);
     assert.equal(packedPaths.has("okf/bundles/okf-mcp/index.md"), true);

@@ -33,7 +33,7 @@ The latest public bundle can be loaded from:
 
 Consumers that need reproducibility should replace `main` with a release tag. Remote loading indexes only the Markdown tree and does not execute repository code.
 
-The npm package allowlist includes `okf.project.yaml` and the `okf` directory so installed artifacts carry the same reference bundle. The package smoke gate installs the generated tarball into a clean temporary project, executes both binaries, validates this bundle, and exercises MCP initialization, tool discovery, and concept retrieval over stdio.
+The public npm package is `@mfdaves/okf-mcp`. Its allowlist includes `okf.project.yaml` and the `okf` directory so installed artifacts carry the same reference bundle. The package smoke gate installs the generated tarball into a clean temporary project, executes both binaries, validates this bundle, and exercises MCP initialization, tool discovery, and concept retrieval over stdio.
 
 The repository release skill defines the package identity, capability matrix, self-validation, tarball, clean-install, prerelease, and registry synchronization gates. The trusted-publishing workflow repeats those checks against an exact Git release tag before publishing.
 
