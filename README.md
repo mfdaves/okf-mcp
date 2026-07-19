@@ -8,18 +8,18 @@ The core intentionally has no database, embeddings, build step, or hosted-servic
 
 ## Install And Run
 
-The current release candidate is published under npm's `next` tag. Pin the
-exact version for unattended MCP clients:
+The stable release is published under npm's `latest` tag. Pin the exact
+version for unattended MCP clients:
 
 ```bash
-npx -y @mfdaves/okf-mcp@0.3.2-rc.1 --version
-npx -y @mfdaves/okf-mcp@0.3.2-rc.1 --project ./okf.project.yaml validate
+npx -y @mfdaves/okf-mcp@0.3.2 --version
+npx -y @mfdaves/okf-mcp@0.3.2 --project ./okf.project.yaml validate
 ```
 
 For a persistent installation:
 
 ```bash
-npm install --global @mfdaves/okf-mcp@0.3.2-rc.1
+npm install --global @mfdaves/okf-mcp@0.3.2
 
 okf --version
 okf --project ./okf.project.yaml validate
@@ -142,7 +142,7 @@ Example client configuration:
       "command": "npx",
       "args": [
         "-y",
-        "@mfdaves/okf-mcp@0.3.2-rc.1",
+        "@mfdaves/okf-mcp@0.3.2",
         "--bundle",
         "app=/absolute/path/to/repo/okf/bundles/app",
         "mcp"
@@ -161,7 +161,7 @@ Project config mode, with read-only project helpers but without proposal mutatio
       "command": "npx",
       "args": [
         "-y",
-        "@mfdaves/okf-mcp@0.3.2-rc.1",
+        "@mfdaves/okf-mcp@0.3.2",
         "--project",
         "/absolute/path/to/repo/okf.project.yaml",
         "mcp"
