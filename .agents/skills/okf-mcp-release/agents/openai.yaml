@@ -1,4 +1,0 @@
-interface:
-  display_name: "okf-mcp Release"
-  short_description: "Validate and publish okf-mcp releases"
-  default_prompt: "Use $okf-mcp-release to prepare and verify an okf-mcp prerelease."
