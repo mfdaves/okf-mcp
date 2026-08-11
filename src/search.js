@@ -1,6 +1,8 @@
 "use strict";
 
 const { conceptSummary } = require("./indexer");
+const { normalizeV02Signals } = require("./v02");
+const { resolveConcept } = require("./indexer");
 
 function lower(value) {
   return String(value || "").toLowerCase();
@@ -66,13 +68,36 @@ function linkedSets(index) {
   return { outbound, inbound };
 }
 
+function signalsForDoc(doc, asOf) {
+  if (!asOf) {
+    return doc.signals || {};
+  }
+  const signals = normalizeV02Signals(doc, { asOf });
+  if (signals.computation && doc.signals && doc.signals.computation) {
+    signals.computation.structuralReady = signals.computation.ready;
+    signals.computation.assetsReady = doc.signals.computation.assetsReady;
+    signals.computation.attestationReady = Boolean(
+      signals.computation.structuralReady && signals.computation.assetsReady,
+    );
+  }
+  return signals;
+}
+
 function applyFilters(index, options) {
   const config = options || {};
   const typeFilters = asArray(config.types || config.type).map(lower);
   const tagsAny = asArray(config.tagsAny || config.tag).map(lower);
   const tagsAll = asArray(config.tagsAll).map(lower);
+  const statuses = asArray(config.statuses || config.status).map(lower);
+  const trustTiers = asArray(config.trustTiers || config.trustTier).map(lower);
+  const freshness = asArray(config.freshness).map(lower);
+  const linkedToDoc = resolveConcept(index, config.linkedTo);
+  const linkedFromDoc = resolveConcept(index, config.linkedFrom);
+  const linkedTo = linkedToDoc ? linkedToDoc.uri : config.linkedTo;
+  const linkedFrom = linkedFromDoc ? linkedFromDoc.uri : config.linkedFrom;
   const { outbound, inbound } = linkedSets(index);
   return index.concepts.filter((doc) => {
+    const signals = signalsForDoc(doc, config.asOf);
     if (config.bundle && doc.bundle !== config.bundle) {
       return false;
     }
@@ -92,10 +117,10 @@ function applyFilters(index, options) {
     if (config.frontmatter && !frontmatterMatches(doc.frontmatter, config.frontmatter)) {
       return false;
     }
-    if (config.linkedTo && !(outbound.get(doc.uri) || new Set()).has(config.linkedTo)) {
+    if (linkedTo && !(outbound.get(doc.uri) || new Set()).has(linkedTo)) {
       return false;
     }
-    if (config.linkedFrom && !(inbound.get(doc.uri) || new Set()).has(config.linkedFrom)) {
+    if (linkedFrom && !(inbound.get(doc.uri) || new Set()).has(linkedFrom)) {
       return false;
     }
     if (config.orphanOnly && ((outbound.get(doc.uri) || new Set()).size > 0 || (inbound.get(doc.uri) || new Set()).size > 0)) {
@@ -111,6 +136,31 @@ function applyFilters(index, options) {
       if (!hasRelation) {
         return false;
       }
+    }
+    if (statuses.length && !statuses.includes(lower(signals.status))) {
+      return false;
+    }
+    if (trustTiers.length && !trustTiers.includes(lower(signals.trustTier))) {
+      return false;
+    }
+    if (freshness.length && !freshness.includes(lower(signals.freshness))) {
+      return false;
+    }
+    if (config.hasSources !== undefined && Boolean(signals.sources && signals.sources.length) !== config.hasSources) {
+      return false;
+    }
+    if (config.runtime && lower(signals.computation && signals.computation.runtime) !== lower(config.runtime)) {
+      return false;
+    }
+    if (config.attestationReady !== undefined
+      && Boolean(signals.computation && signals.computation.attestationReady) !== config.attestationReady) {
+      return false;
+    }
+    if (config.generatedBy && lower(signals.generated && signals.generated.by) !== lower(config.generatedBy)) {
+      return false;
+    }
+    if (config.verifiedBy && !(signals.verifiedEvents || []).some((event) => lower(event.by) === lower(config.verifiedBy))) {
+      return false;
     }
     return true;
   });
@@ -161,10 +211,23 @@ function searchConcepts(index, options) {
   } else {
     results.sort((a, b) => a.doc.path.localeCompare(b.doc.path));
   }
-  const page = results.slice(offset, offset + limit).map((entry) => Object.assign(conceptSummary(entry.doc), {
-    score: entry.score,
-    snippet: snippetFor(entry.doc, query),
-  }));
+  const page = results.slice(offset, offset + limit).map((entry) => {
+    const summary = conceptSummary(entry.doc);
+    if (config.asOf) {
+      const signals = signalsForDoc(entry.doc, config.asOf);
+      summary.signals = Object.assign({}, summary.signals, {
+        status: signals.status,
+        staleAfter: signals.staleAfter,
+        freshness: signals.freshness,
+        asOf: signals.asOf,
+        trustTier: signals.trustTier,
+      });
+    }
+    return Object.assign(summary, {
+      score: entry.score,
+      snippet: snippetFor(entry.doc, query),
+    });
+  });
   return {
     total: results.length,
     limit,

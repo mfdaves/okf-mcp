@@ -2,7 +2,7 @@
 
 const fs = require("fs");
 const path = require("path");
-const { parseFrontmatterYaml } = require("./parser");
+const { parseFrontmatterYaml, splitFrontmatter } = require("./parser");
 
 const DEFAULT_RELATION_TYPES = [
   "depends_on",
@@ -27,27 +27,54 @@ function isInsidePath(root, target) {
   return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
 }
 
-function resolveProjectPath(projectRoot, value, field, errors) {
+function safeProjectPath(projectRoot, value, field) {
+  const label = field || "project path";
   if (!value || path.isAbsolute(String(value))) {
-    errors.push({
-      code: "invalid_project_path",
-      field,
-      path: value || "",
-      message: `${field} must be a relative path inside the project root.`,
-    });
-    return null;
+    const error = new Error(`${label} must be a relative path inside the project root.`);
+    error.code = "invalid_project_path";
+    throw error;
   }
-  const resolved = path.resolve(projectRoot, value);
-  if (!isInsidePath(projectRoot, resolved)) {
-    errors.push({
-      code: "project_path_outside_root",
-      field,
-      path: value,
-      message: `${field} resolves outside the project root.`,
-    });
-    return null;
+  const realRoot = fs.realpathSync(projectRoot);
+  const resolved = path.resolve(realRoot, String(value));
+  if (!isInsidePath(realRoot, resolved)) {
+    const error = new Error(`${label} resolves outside the project root.`);
+    error.code = "project_path_outside_root";
+    throw error;
+  }
+  const relative = path.relative(realRoot, resolved);
+  let current = realRoot;
+  for (const segment of relative.split(path.sep).filter(Boolean)) {
+    current = path.join(current, segment);
+    let stat;
+    try {
+      stat = fs.lstatSync(current);
+    } catch (error) {
+      if (error && error.code === "ENOENT") {
+        break;
+      }
+      throw error;
+    }
+    if (stat.isSymbolicLink()) {
+      const error = new Error(`${label} cannot traverse a symbolic link inside the project root.`);
+      error.code = "project_path_symlink";
+      throw error;
+    }
   }
   return resolved;
+}
+
+function resolveProjectPath(projectRoot, value, field, errors) {
+  try {
+    return safeProjectPath(projectRoot, value, field);
+  } catch (error) {
+    errors.push({
+      code: error.code || "invalid_project_path",
+      field,
+      path: value || "",
+      message: error.message,
+    });
+    return null;
+  }
 }
 
 function findProjectConfig(startDir) {
@@ -60,6 +87,29 @@ function findProjectConfig(startDir) {
     }
     if (fs.existsSync(jsonPath)) {
       return jsonPath;
+    }
+    const parent = path.dirname(current);
+    if (parent === current) {
+      return null;
+    }
+    current = parent;
+  }
+}
+
+function findOkfRoot(startDir) {
+  let current = path.resolve(startDir || process.cwd());
+  while (true) {
+    const indexPath = path.join(current, "index.md");
+    if (fs.existsSync(indexPath) && fs.statSync(indexPath).isFile()) {
+      try {
+        const split = splitFrontmatter(fs.readFileSync(indexPath, "utf8"));
+        if (split.frontmatter
+          && Object.prototype.hasOwnProperty.call(split.frontmatter, "okf_version")) {
+          return current;
+        }
+      } catch {
+        // Discovery is best effort; validation reports malformed root indexes.
+      }
     }
     const parent = path.dirname(current);
     if (parent === current) {
@@ -189,12 +239,13 @@ function normalizeRemoteBundles(config, errors) {
 }
 
 function loadProjectConfig(configPath) {
-  const resolvedPath = configPath
+  const requestedPath = configPath
     ? path.resolve(configPath)
     : findProjectConfig(process.cwd());
-  if (!resolvedPath) {
+  if (!requestedPath) {
     throw new Error("No okf.project.yaml or okf.project.json found. Pass --project or --bundle.");
   }
+  const resolvedPath = fs.realpathSync(requestedPath);
   const rawConfig = readConfigFile(resolvedPath);
   const errors = [];
   if (!rawConfig || typeof rawConfig !== "object" || Array.isArray(rawConfig)) {
@@ -202,6 +253,9 @@ function loadProjectConfig(configPath) {
   }
   const config = (!rawConfig || typeof rawConfig !== "object" || Array.isArray(rawConfig)) ? {} : rawConfig;
   validateRelationTypes(config, errors);
+  if (config.strictLinks !== undefined && typeof config.strictLinks !== "boolean") {
+    errors.push({ code: "invalid_strict_links", field: "strictLinks", message: "strictLinks must be a boolean." });
+  }
   const relationTypes = new Set(DEFAULT_RELATION_TYPES.concat(Array.isArray(config.relationTypes) ? config.relationTypes.map(String) : []));
   const bundles = normalizeBundles(config, resolvedPath, errors);
   const remoteBundles = normalizeRemoteBundles(config, errors);
@@ -221,6 +275,7 @@ function loadProjectConfig(configPath) {
     remoteBundles,
     relationTypes: Array.from(relationTypes),
     plugins: Array.isArray(config.plugins) ? config.plugins : [],
+    strictLinks: Boolean(config.strictLinks),
     errors,
     raw: config,
   };
@@ -228,8 +283,10 @@ function loadProjectConfig(configPath) {
 
 module.exports = {
   DEFAULT_RELATION_TYPES,
+  findOkfRoot,
   findProjectConfig,
   isInsidePath,
   loadProjectConfig,
   resolveProjectPath,
+  safeProjectPath,
 };

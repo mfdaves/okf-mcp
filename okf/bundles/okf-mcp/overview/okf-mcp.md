@@ -19,9 +19,9 @@ relations:
 
 # okf-mcp
 
-`okf-mcp` turns directories of OKF Markdown concepts into a searchable in-memory knowledge graph. It provides a command-line interface, a JSON-RPC stdio MCP server, generator plugins, remote GitHub bundles, and an optional HTTP authoring API.
+`okf-mcp` turns one OKF v0.2 root and its explicitly referenced inert assets into a searchable in-memory knowledge graph. It provides a CLI, JSON-RPC stdio MCP server, pinned Git-source reads, optional workspace federation, generator plugins, remote GitHub bundles, and an HTTP authoring API.
 
-The runtime uses `js-yaml` for standards-oriented YAML parsing and has no database, embedding service, or build step. Local bundle mode performs no network calls. Project mode adds configuration, typed relations, proposal storage, and guarded writes to local bundle directories.
+The runtime uses `js-yaml` and CommonMark and has no database, embedding service, computation executor, attester runtime, or build step. `--root` is the normal single-catalog interface and performs no network calls. The optional project manifest federates multiple roots and generator configuration; it is an okf-mcp extension rather than part of OKF v0.2.
 
 The primary runtime entry is the [MCP stdio server](../runtime/mcp-server.md). Concept interpretation and graph construction belong to the [indexer](../runtime/indexer.md). Durable knowledge changes follow the [concept authoring workflow](../workflows/concept-authoring.md) and [authoring safety policy](../policies/authoring-safety.md).
 

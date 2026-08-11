@@ -5,16 +5,27 @@ const readline = require("readline");
 const {
   attachProject,
   buildIndex,
+  conceptSignals,
   conceptSummary,
   loadProjectBundles,
+  resolveConcept,
   validateIndex,
 } = require("./indexer");
 const { searchConcepts } = require("./search");
 const { exportGraph, findPaths, getGraph, getNeighbors, getSubgraph, graphSummary } = require("./graph");
-const { fetchGitHubBundle, fetchRemoteBundles } = require("./remote");
+const { fetchGitHubBundle, fetchRemoteBundles, sanitizeRemoteId } = require("./remote");
 const { ConceptAuthoringService } = require("./authoring");
 const { FileConceptStore } = require("./store");
 const { loadProjectConfig } = require("./project");
+const {
+  checkComputationReceipt,
+  getProvenance,
+  inspectAttestedComputation,
+  prepareAttestedComputation,
+  readBundleAsset,
+} = require("./computation");
+const { checkV02Migration } = require("./migration");
+const { describeConceptGitSources, readConceptGitSource } = require("./git-source");
 const {
   ERROR_CODES,
   ProtocolError,
@@ -82,6 +93,10 @@ function booleanParameter(description) {
   return { type: "boolean", description, default: false };
 }
 
+function optionalBooleanParameter(description) {
+  return { type: "boolean", description };
+}
+
 function stringArrayParameter(description, options) {
   const config = options || {};
   return {
@@ -138,6 +153,7 @@ const TOOL_DEFINITIONS = {
     "Read one valid OKF concept, including its frontmatter, Markdown body, and links.",
     READ_ONLY,
     {
+      id: nonEmptyStringParameter("Portable extensionless Concept ID or bundle-relative Markdown path."),
       uri: nonEmptyStringParameter("Canonical or path based okf URI for the concept."),
       bundle: nonEmptyStringParameter("Bundle id used with path when uri is not supplied."),
       path: nonEmptyStringParameter("Bundle relative Markdown path used with bundle when uri is not supplied."),
@@ -145,6 +161,7 @@ const TOOL_DEFINITIONS = {
     [],
     {
       anyOf: [
+        { required: ["id"] },
         { required: ["uri"] },
         { required: ["bundle", "path"] },
       ],
@@ -161,6 +178,19 @@ const TOOL_DEFINITIONS = {
       tagsAll: stringArrayParameter("Require all of these tags.", { nonEmptyItems: true }),
       pathPrefix: stringParameter("Limit results to bundle relative paths beginning with this prefix."),
       relationType: nonEmptyStringParameter("Limit results to concepts with an outgoing relation of this type."),
+      frontmatter: objectParameter("Exact frontmatter filters; array fields use contains matching."),
+      linkedTo: nonEmptyStringParameter("Require an outgoing edge to this concept URI."),
+      linkedFrom: nonEmptyStringParameter("Require an incoming edge from this concept URI."),
+      orphanOnly: booleanParameter("Return only concepts without incoming or outgoing resolved edges."),
+      statuses: stringArrayParameter("Limit results to lifecycle statuses.", { nonEmptyItems: true }),
+      trustTiers: stringArrayParameter("Limit results to unverified, machine-confirmed, or human-reviewed trust tiers.", { nonEmptyItems: true }),
+      freshness: stringArrayParameter("Limit results to unspecified, fresh, stale, or invalid freshness states.", { nonEmptyItems: true }),
+      asOf: nonEmptyStringParameter("UTC ISO date or datetime used for deterministic freshness evaluation."),
+      hasSources: optionalBooleanParameter("Require concepts to have or not have normalized sources."),
+      runtime: nonEmptyStringParameter("Limit results to this Attested Computation runtime."),
+      attestationReady: optionalBooleanParameter("Require static Attested Computation readiness."),
+      generatedBy: nonEmptyStringParameter("Limit results to this generator actor."),
+      verifiedBy: nonEmptyStringParameter("Limit results to concepts verified by this actor."),
       limit: integerParameter("Maximum number of concepts to return.", 1, 250, 25),
       offset: integerParameter("Number of matching concepts to skip before returning results.", 0, undefined, 0),
     },
@@ -176,6 +206,83 @@ const TOOL_DEFINITIONS = {
   list_relation_types: defineTool(
     "Count the typed relations present in the current OKF graph.",
     READ_ONLY,
+  ),
+  list_edge_kinds: defineTool(
+    "Count standard semantic and extension edge kinds in the current graph.",
+    READ_ONLY,
+  ),
+  get_provenance: defineTool(
+    "Trace normalized source provenance through internal concepts without fetching external resources.",
+    READ_ONLY,
+    {
+      uri: nonEmptyStringParameter("Canonical or compatibility OKF URI of the root concept."),
+      maxDepth: integerParameter("Maximum internal source depth.", 0, 10, 3),
+      maxNodes: integerParameter("Maximum provenance nodes.", 1, 1000, 100),
+      includeExternal: booleanParameter("Include URL and opaque provenance leaves without fetching them."),
+    },
+    ["uri"],
+  ),
+  inspect_attested_computation: defineTool(
+    "Statically inspect an Attested Computation contract and indexed inert artifacts; never execute it.",
+    READ_ONLY,
+    {
+      uri: nonEmptyStringParameter("Canonical or compatibility URI of the Attested Computation."),
+      asOf: nonEmptyStringParameter("UTC ISO date or datetime for freshness evaluation."),
+      includeComputation: booleanParameter("Include bounded inline or text computation content."),
+      maxContentBytes: integerParameter("Maximum computation bytes to include.", 1, 1048576, 65536),
+    },
+    ["uri"],
+  ),
+  read_bundle_asset: defineTool(
+    "Read one explicitly referenced, already indexed bundle asset with digest verification and byte bounds.",
+    READ_ONLY,
+    {
+      uri: nonEmptyStringParameter("Indexed okf-asset URI."),
+      bundle: nonEmptyStringParameter("Bundle id used with path when uri is omitted."),
+      path: nonEmptyStringParameter("Bundle-relative indexed asset path used with bundle."),
+      maxContentBytes: integerParameter("Maximum asset bytes to return.", 1, 1048576, 65536),
+    },
+    [],
+    { anyOf: [{ required: ["uri"] }, { required: ["bundle", "path"] }] },
+  ),
+  read_git_source: defineTool(
+    "Read one pinned sources[].git entry from an explicitly mapped checkout or bare repository without fetching.",
+    READ_ONLY,
+    {
+      concept: nonEmptyStringParameter("Concept ID, Markdown path, custom ID, or compatibility URI declaring the source."),
+      sourceId: nonEmptyStringParameter("Exact sources[].id value to read."),
+      maxContentBytes: integerParameter("Maximum Git blob bytes to read.", 1, 1048576, 65536),
+    },
+    ["concept", "sourceId"],
+  ),
+  prepare_attested_computation: defineTool(
+    "Check declared parameters and produce non-executing digests without echoing parameter values.",
+    READ_ONLY,
+    {
+      uri: nonEmptyStringParameter("Canonical or compatibility URI of the Attested Computation."),
+      parameters: objectParameter("Parameter values keyed only by declared names."),
+      asOf: nonEmptyStringParameter("UTC ISO date or datetime for freshness evaluation."),
+    },
+    ["uri", "parameters"],
+  ),
+  check_computation_receipt: defineTool(
+    "Check receipt field presence only; never attest, echo values, or persist the receipt.",
+    READ_ONLY,
+    {
+      uri: nonEmptyStringParameter("Canonical or compatibility URI of the Attested Computation."),
+      receipt: objectParameter("Ephemeral receipt object; only its field names are returned."),
+    },
+    ["uri", "receipt"],
+  ),
+  check_v02_migration: defineTool(
+    "Analyze a local or remote bundle for safe staged OKF v0.2 migration without creating proposals or writes.",
+    READ_ONLY,
+    {
+      bundle: nonEmptyStringParameter("Bundle id to analyze; optional when exactly one root is loaded."),
+      actorMappings: objectParameter("Mappings keyed by URI, path, or $default; each value requires by plus confirmed: true."),
+      generatedPaths: stringArrayParameter("Paths generated elsewhere and therefore skipped from direct proposals.", { nonEmptyItems: true }),
+    },
+    [],
   ),
   load_remote_bundle: defineTool(
     "Fetch a public GitHub Markdown tree and add it to the in memory index as a read only remote bundle.",
@@ -197,35 +304,35 @@ const TOOL_DEFINITIONS = {
     "Validate a proposed new OKF concept without writing a proposal or concept file.",
     READ_ONLY,
     {
-      bundle: nonEmptyStringParameter("Writable bundle id that would contain the concept."),
+      bundle: nonEmptyStringParameter("Writable root id; optional when exactly one local root is configured."),
       path: nonEmptyStringParameter("Safe bundle relative Markdown path for the concept."),
       frontmatter: objectParameter("Complete YAML frontmatter represented as a JSON object."),
       body: stringParameter("Markdown body for the concept."),
     },
-    ["bundle", "path", "frontmatter"],
+    ["path", "frontmatter"],
   ),
   okf_suggest_concept_path: defineTool(
     "Suggest a safe bundle relative Markdown path from a concept type and title.",
     READ_ONLY,
     {
-      bundle: nonEmptyStringParameter("Writable bundle id that will contain the concept."),
+      bundle: nonEmptyStringParameter("Writable root id; optional when exactly one local root is configured."),
       type: nonEmptyStringParameter("Concept type used to build the path."),
       title: nonEmptyStringParameter("Concept title used to build the file name."),
       prefix: stringParameter("Optional bundle relative directory prefix."),
     },
-    ["bundle", "type", "title"],
+    ["type", "title"],
   ),
   okf_propose_concept: defineTool(
     "Create a reviewable proposal for a new OKF concept without writing the concept file.",
     LOCAL_WRITE,
     {
-      bundle: nonEmptyStringParameter("Writable bundle id that will contain the concept."),
+      bundle: nonEmptyStringParameter("Writable root id; optional when exactly one local root is configured."),
       path: nonEmptyStringParameter("Safe bundle relative Markdown path for the new concept."),
       frontmatter: objectParameter("Complete YAML frontmatter represented as a JSON object."),
       body: stringParameter("Markdown body for the new concept."),
       message: stringParameter("Optional review note explaining why the concept should be created."),
     },
-    ["bundle", "path", "frontmatter"],
+    ["path", "frontmatter"],
   ),
   okf_propose_update: defineTool(
     "Create a reviewable update proposal for an existing OKF concept while preserving unspecified content.",
@@ -248,6 +355,31 @@ const TOOL_DEFINITIONS = {
         { required: ["body"] },
       ],
     },
+  ),
+  okf_propose_attested_computation: defineTool(
+    "Create one coordinated review proposal for an Attested Computation concept and optional external computation file; never execute it.",
+    LOCAL_WRITE,
+    {
+      bundle: nonEmptyStringParameter("Writable root id; optional when exactly one local root is configured."),
+      path: nonEmptyStringParameter("Safe bundle-relative Markdown path for the computation concept."),
+      frontmatter: objectParameter("Complete strict OKF v0.2 Attested Computation frontmatter."),
+      body: stringParameter("Markdown body, including inline computation when no computation file is declared."),
+      computationPath: nonEmptyStringParameter("Bundle-relative path of the optional external computation file."),
+      computationContent: stringParameter("Text content for the optional external computation file."),
+      message: stringParameter("Optional review note."),
+    },
+    ["path", "frontmatter"],
+  ),
+  okf_propose_v02_migration: defineTool(
+    "Create a review-only Stage-A migration manifest plus individual child proposals; never accept them automatically.",
+    LOCAL_WRITE,
+    {
+      bundle: nonEmptyStringParameter("Writable root id; optional when exactly one local root is configured."),
+      actorMappings: objectParameter("Mappings keyed by URI, path, or $default; each value requires by plus confirmed: true."),
+      generatedPaths: stringArrayParameter("Generated concept paths that must be migrated through their generator.", { nonEmptyItems: true }),
+      message: stringParameter("Optional migration review note."),
+    },
+    [],
   ),
   okf_list_proposals: defineTool(
     "List compact metadata for stored authoring proposals.",
@@ -291,6 +423,8 @@ const TOOL_DEFINITIONS = {
       tag: nonEmptyStringParameter("Limit graph nodes to concepts containing this tag."),
       pathPrefix: stringParameter("Limit graph nodes to bundle relative paths beginning with this prefix."),
       includeExternal: booleanParameter("Include opaque external relation targets in the graph."),
+      includeAssets: booleanParameter("Include explicitly referenced bundle assets as graph nodes."),
+      edgeKinds: stringArrayParameter("Limit returned edges to these edge kinds.", { nonEmptyItems: true }),
       maxNodes: integerParameter("Maximum number of graph nodes to return.", 1, 1000, 100),
       maxEdges: integerParameter("Maximum number of graph edges to return.", 1, 5000, 300),
     },
@@ -300,6 +434,9 @@ const TOOL_DEFINITIONS = {
     READ_ONLY,
     {
       uri: nonEmptyStringParameter("Canonical or path based okf URI of the center concept."),
+      includeExternal: booleanParameter("Include opaque external neighbors without fetching them."),
+      includeAssets: booleanParameter("Include referenced asset neighbors."),
+      edgeKinds: stringArrayParameter("Limit neighbors to these edge kinds.", { nonEmptyItems: true }),
     },
     ["uri"],
   ),
@@ -311,6 +448,7 @@ const TOOL_DEFINITIONS = {
       seeds: stringArrayParameter("One or more okf URIs to use as traversal seeds.", { minItems: 1, nonEmptyItems: true }),
       depth: integerParameter("Maximum relationship depth to traverse from the seeds.", 0, 10, 1),
       maxNodes: integerParameter("Maximum number of graph nodes to return.", 1, 1000, 50),
+      edgeKinds: stringArrayParameter("Limit traversal to these edge kinds.", { nonEmptyItems: true }),
     },
     [],
     {
@@ -327,6 +465,7 @@ const TOOL_DEFINITIONS = {
       source: nonEmptyStringParameter("Canonical or path based okf URI where path search begins."),
       target: nonEmptyStringParameter("Canonical or path based okf URI where path search ends."),
       maxPaths: integerParameter("Maximum number of distinct paths to return.", 1, 50, 3),
+      edgeKinds: stringArrayParameter("Limit path traversal to these edge kinds.", { nonEmptyItems: true }),
     },
     ["source", "target"],
   ),
@@ -351,6 +490,8 @@ const TOOL_DEFINITIONS = {
     {
       format: stringParameter("Output format for the graph.", { enum: ["json", "dot", "mermaid"], default: "json" }),
       includeExternal: booleanParameter("Include opaque external relation targets in the export."),
+      includeAssets: booleanParameter("Include explicitly referenced bundle assets in the export."),
+      edgeKinds: stringArrayParameter("Limit exported edges to these edge kinds.", { nonEmptyItems: true }),
       maxNodes: integerParameter("Maximum number of graph nodes to export.", 1, 1000, 100),
       maxEdges: integerParameter("Maximum number of graph edges to export.", 1, 5000, 300),
     },
@@ -372,6 +513,10 @@ const AUTHORING_MUTATION_TOOL_NAMES = new Set([
   "okf_propose_update",
   "okf_accept_proposal",
   "okf_reject_proposal",
+  "okf_propose_v02_migration",
+]);
+const COMPUTATION_AUTHORING_TOOL_NAMES = new Set([
+  "okf_propose_attested_computation",
 ]);
 const RUNTIME_REMOTE_TOOL_NAMES = new Set([
   "load_remote_bundle",
@@ -398,6 +543,14 @@ function toolEnabled(state, name) {
   }
   if (AUTHORING_MUTATION_TOOL_NAMES.has(name)) {
     return Boolean(state && state.authoringService && state.allowAuthoring);
+  }
+  if (COMPUTATION_AUTHORING_TOOL_NAMES.has(name)) {
+    return Boolean(
+      state
+      && state.authoringService
+      && state.allowAuthoring
+      && state.allowComputationAuthoring,
+    );
   }
   if (RUNTIME_REMOTE_TOOL_NAMES.has(name)) {
     return Boolean(state && state.allowRuntimeRemoteLoad);
@@ -439,6 +592,9 @@ function listResources(index) {
 
 function publicBundles(index) {
   return index.bundles.map((bundle) => {
+    const documentCount = index.documents.filter((doc) => doc.bundle === bundle.id).length;
+    const conceptCount = index.concepts.filter((doc) => doc.bundle === bundle.id).length;
+    const assetCount = (index.assets || []).filter((asset) => asset.bundle === bundle.id).length;
     if (bundle.remote) {
       return {
         id: bundle.id,
@@ -448,6 +604,12 @@ function publicBundles(index) {
         ref: bundle.remoteSource && bundle.remoteSource.ref,
         path: bundle.remoteSource && bundle.remoteSource.path,
         fileCount: bundle.remoteSource && bundle.remoteSource.fileCount,
+        documentCount,
+        conceptCount,
+        assetCount,
+        okfVersion: bundle.okfVersion || null,
+        versionStatus: bundle.versionStatus,
+        revision: bundle.remoteSource && (bundle.remoteSource.commitSha || bundle.remoteSource.ref),
         include: bundle.include || [],
         exclude: bundle.exclude || [],
       };
@@ -458,6 +620,11 @@ function publicBundles(index) {
     return {
       id: bundle.id,
       root,
+      documentCount,
+      conceptCount,
+      assetCount,
+      okfVersion: bundle.okfVersion || null,
+      versionStatus: bundle.versionStatus,
       include: bundle.include || [],
       exclude: bundle.exclude || [],
     };
@@ -493,19 +660,36 @@ function listConcepts(index, args) {
   return searchConcepts(index, options);
 }
 
-function getConcept(index, args) {
-  const uri = args && args.uri ? args.uri : args && args.bundle && args.path ? `okf://${args.bundle}/${args.path}` : null;
-  if (!uri || !index.byUri.has(uri)) {
-    throw new ToolExecutionError(`Unknown OKF concept URI: ${uri || "<missing>"}`);
+function getConcept(index, args, repositoryMappings) {
+  const locator = args && (args.id || args.uri)
+    ? (args.id || args.uri)
+    : args && args.bundle && args.path
+      ? `okf://${args.bundle}/${args.path}`
+      : null;
+  const doc = resolveConcept(index, locator);
+  if (!doc) {
+    throw new ToolExecutionError(`Unknown OKF concept URI or ID: ${locator || "<missing>"}`);
   }
-  const doc = index.byUri.get(uri);
   if (!doc.valid || doc.reserved) {
-    throw new ToolExecutionError(`URI is not a valid OKF concept: ${uri}`);
+    throw new ToolExecutionError(`Locator is not a valid OKF concept: ${locator}`);
   }
   return Object.assign(conceptSummary(doc), {
     frontmatter: doc.frontmatter,
     body: doc.body,
     links: doc.links,
+    signals: conceptSignals(doc, true),
+    referencedAssets: (index.assets || []).filter((asset) => (
+      (asset.referencedBy || []).some((reference) => reference.uri === doc.uri)
+    )).map((asset) => ({
+      uri: asset.uri,
+      bundle: asset.bundle,
+      path: asset.path,
+      mimeType: asset.mimeType,
+      size: asset.size,
+      sha256: asset.sha256,
+      roles: asset.roles,
+    })),
+    gitSources: describeConceptGitSources(index, doc, repositoryMappings),
   });
 }
 
@@ -535,9 +719,21 @@ function listRelationTypes(index) {
   return counts;
 }
 
+function listEdgeKinds(index) {
+  const counts = {};
+  index.edges.forEach((edge) => {
+    if (!counts[edge.kind]) {
+      counts[edge.kind] = { total: 0, resolved: 0, broken: 0 };
+    }
+    counts[edge.kind].total += 1;
+    counts[edge.kind][edge.broken ? "broken" : "resolved"] += 1;
+  });
+  return counts;
+}
+
 function requireAuthoring(state) {
   if (!state.authoringService) {
-    throw new Error("OKF authoring is not configured. Start the server with --project to enable writable concept proposals.");
+    throw new Error("OKF authoring is not configured. Start the server with --root or --project to enable writable concept proposals.");
   }
   return state.authoringService;
 }
@@ -545,7 +741,11 @@ function requireAuthoring(state) {
 function rebuildStateIndex(state) {
   const index = buildIndex(
     state.localBundleArgs.concat(state.remoteBundles),
-    { relationTypes: state.relationTypes },
+    {
+      relationTypes: state.relationTypes,
+      strictLinks: state.strictLinks,
+      allowCustomRelationTypes: state.allowCustomRelationTypes,
+    },
   );
   state.index = state.project ? attachProject(index, state.project) : index;
   return state.index;
@@ -584,7 +784,7 @@ async function expectedToolOperation(operation, options) {
 }
 
 function requireGraphConcept(index, uri) {
-  const doc = uri && index.byUri.get(uri);
+  const doc = resolveConcept(index, uri);
   if (!doc || !doc.valid || doc.reserved) {
     throw new ToolExecutionError(`Unknown valid OKF concept: ${uri || "<missing>"}`);
   }
@@ -602,6 +802,8 @@ async function callTool(state, name, args) {
       authoringService: null,
       allowAuthoring: false,
       allowRuntimeRemoteLoad: false,
+      allowComputationAuthoring: false,
+      strictLinks: false,
     };
   }
   requireToolEnabled(state, name);
@@ -626,28 +828,86 @@ async function callTool(state, name, args) {
       case "list_concepts":
         return jsonContent(listConcepts(index, args));
       case "get_concept":
-        return jsonContent(getConcept(index, args));
+        return jsonContent(getConcept(index, args, state.repositoryMappings));
       case "search_concepts":
-        return jsonContent(searchConcepts(index, args));
+        return jsonContent(await expectedToolOperation(
+          () => searchConcepts(index, args),
+          { translateTypeError: true },
+        ));
       case "list_types":
         return jsonContent(listTypes(index));
       case "list_tags":
         return jsonContent(listTags(index));
       case "list_relation_types":
         return jsonContent(listRelationTypes(index));
+      case "list_edge_kinds":
+        return jsonContent(listEdgeKinds(index));
+      case "get_provenance":
+        return jsonContent(await expectedToolOperation(
+          () => getProvenance(index, args.uri, args),
+          { translateTypeError: true },
+        ));
+      case "inspect_attested_computation":
+        return jsonContent(await expectedToolOperation(
+          () => inspectAttestedComputation(index, args.uri, args),
+          { translateTypeError: true },
+        ));
+      case "read_bundle_asset":
+        return jsonContent(await expectedToolOperation(
+          () => readBundleAsset(index, args),
+          { translateTypeError: true },
+        ));
+      case "read_git_source":
+        return jsonContent(await expectedToolOperation(
+          () => readConceptGitSource(
+            index,
+            args.concept,
+            args.sourceId,
+            state.repositoryMappings,
+            { maxBytes: args.maxContentBytes || 65536 },
+          ),
+          { translateTypeError: true },
+        ));
+      case "prepare_attested_computation":
+        return jsonContent(await expectedToolOperation(
+          () => prepareAttestedComputation(index, args.uri, args.parameters, args),
+          { translateTypeError: true },
+        ));
+      case "check_computation_receipt":
+        return jsonContent(await expectedToolOperation(
+          () => checkComputationReceipt(index, args.uri, args.receipt),
+          { translateTypeError: true },
+        ));
+      case "check_v02_migration": {
+        const bundleId = args.bundle || (index.bundles.length === 1 ? index.bundles[0].id : "");
+        if (!bundleId) {
+          throw new ToolExecutionError("A bundle id is required when more than one OKF root is loaded.");
+        }
+        if (!index.bundles.some((bundle) => bundle.id === bundleId)) {
+          throw new ToolExecutionError(`Unknown OKF bundle: ${bundleId}`);
+        }
+        return jsonContent(await expectedToolOperation(
+          () => checkV02Migration(index, Object.assign({}, args, { bundle: bundleId })),
+          { translateTypeError: true },
+        ));
+      }
       case "list_remote_bundles":
-        return jsonContent(state.remoteBundles.map((bundle) => bundle.remoteSource));
+        return jsonContent(state.remoteBundles.map((bundle) => Object.assign({ id: bundle.id }, bundle.remoteSource)));
       case "load_remote_bundle": {
         const provider = String(args.provider || "github");
         if (provider !== "github") {
           throw new ToolExecutionError(`Unsupported remote bundle provider: ${provider}`);
         }
-        if (state.index.bundles.some((bundle) => bundle.id === args.id)) {
-          throw new ToolExecutionError(`Bundle id already loaded: ${args.id}`);
+        const normalizedId = sanitizeRemoteId(args.id);
+        if (normalizedId !== args.id) {
+          throw new ToolExecutionError("Remote bundle id may contain only letters, numbers, underscores, dots, and hyphens.");
+        }
+        if (state.index.bundles.some((bundle) => bundle.id === normalizedId)) {
+          throw new ToolExecutionError(`Bundle id already loaded: ${normalizedId}`);
         }
         const remoteBundle = await expectedToolOperation(
           () => fetchGitHubBundle({
-            id: args.id,
+            id: normalizedId,
             url: args.url,
             include: args.include || [],
             exclude: args.exclude || [],
@@ -678,6 +938,18 @@ async function callTool(state, name, args) {
         );
         return jsonContent(result, { isError: result.created === false });
       }
+      case "okf_propose_attested_computation": {
+        const result = await expectedToolOperation(
+          () => requireAuthoring(state).proposeAttestedComputation(args),
+        );
+        return jsonContent(result, { isError: result.created === false });
+      }
+      case "okf_propose_v02_migration": {
+        const result = await expectedToolOperation(
+          () => requireAuthoring(state).proposeV02Migration(args),
+        );
+        return jsonContent(result, { isError: result.created === false });
+      }
       case "okf_list_proposals":
         return jsonContent(await expectedToolOperation(
           () => requireAuthoring(state).listProposals(args),
@@ -688,7 +960,9 @@ async function callTool(state, name, args) {
         ));
       case "okf_accept_proposal": {
         const result = await expectedToolOperation(
-          () => requireAuthoring(state).acceptProposal(args),
+          () => requireAuthoring(state).acceptProposal(Object.assign({}, args, {
+            allowComputation: state.allowComputationAuthoring,
+          })),
         );
         if (result.accepted) {
           rebuildStateIndex(state);
@@ -703,7 +977,7 @@ async function callTool(state, name, args) {
         return jsonContent(getGraph(index, args));
       case "get_neighbors":
         requireGraphConcept(index, args.uri);
-        return jsonContent(getNeighbors(index, args.uri));
+        return jsonContent(getNeighbors(index, args.uri, args));
       case "get_subgraph": {
         const seeds = args.seeds || [args.uri];
         seeds.forEach((uri) => requireGraphConcept(index, uri));
@@ -712,7 +986,7 @@ async function callTool(state, name, args) {
       case "find_paths":
         requireGraphConcept(index, args.source);
         requireGraphConcept(index, args.target);
-        return jsonContent(findPaths(index, args.source, args.target, args.maxPaths));
+        return jsonContent(findPaths(index, args.source, args.target, args.maxPaths, args));
       case "graph_summary":
         return jsonContent(graphSummary(index));
       case "validate_bundle":
@@ -761,9 +1035,17 @@ function createServer(bundleArgs, options) {
     : (bundleArgs || []).slice();
   const relationTypes = (options && options.relationTypes)
     || (project && project.relationTypes);
+  const allowCustomRelationTypes = Boolean(
+    (options && options.allowCustomRelationTypes)
+    || (project && project.rootMode),
+  );
   let initialIndex = options && options.initialIndex;
   if (!initialIndex) {
-    initialIndex = buildIndex(localBundleArgs, { relationTypes });
+    initialIndex = buildIndex(localBundleArgs, {
+      relationTypes,
+      strictLinks: Boolean((options && options.strictLinks) || (project && project.strictLinks)),
+      allowCustomRelationTypes,
+    });
     if (project) {
       initialIndex = attachProject(initialIndex, project);
     }
@@ -777,6 +1059,10 @@ function createServer(bundleArgs, options) {
     authoringService,
     allowAuthoring: Boolean(options && options.allowAuthoring),
     allowRuntimeRemoteLoad: Boolean(options && options.allowRuntimeRemoteLoad),
+    allowComputationAuthoring: Boolean(options && options.allowComputationAuthoring),
+    strictLinks: Boolean((options && options.strictLinks) || (project && project.strictLinks)),
+    allowCustomRelationTypes,
+    repositoryMappings: (options && options.repositoryMappings) || new Map(),
   };
   async function handle(request) {
     if (!isPlainObject(request) || typeof request.method !== "string" || !request.method.trim()) {
@@ -870,7 +1156,10 @@ async function createServerAsync(bundleArgs, options) {
     const store = options.authoringStore || FileConceptStore.fromProject(options.projectPath, { proposalRoot: options.proposalRoot });
     const authoringService = options.authoringService || new ConceptAuthoringService(store);
     const initialIndex = attachProject(
-      buildIndex(localBundleArgs.concat(initialRemoteBundles), { relationTypes: loaded.project.relationTypes }),
+      buildIndex(localBundleArgs.concat(initialRemoteBundles), {
+        relationTypes: loaded.project.relationTypes,
+        strictLinks: options.strictLinks || loaded.project.strictLinks,
+      }),
       loaded.project,
     );
     return createServer(localBundleArgs, {
@@ -880,15 +1169,51 @@ async function createServerAsync(bundleArgs, options) {
       authoringService,
       allowAuthoring: options.allowAuthoring,
       allowRuntimeRemoteLoad: options.allowRuntimeRemoteLoad,
+      allowComputationAuthoring: options.allowComputationAuthoring,
+      strictLinks: options.strictLinks || loaded.project.strictLinks,
+      repositoryMappings: options.repositoryMappings,
+    });
+  }
+  if (options && options.rootPath) {
+    const store = options.authoringStore || FileConceptStore.fromRoot(options.rootPath, {
+      proposalRoot: options.proposalRoot,
+      strictLinks: options.strictLinks,
+    });
+    const authoringService = options.authoringService || new ConceptAuthoringService(store);
+    const localBundleArgs = store.getBundles();
+    const remoteBundles = await fetchRemoteBundles(options.remoteBundles || []);
+    const initialIndex = attachProject(buildIndex(localBundleArgs.concat(remoteBundles), {
+      relationTypes: store.getRelationTypes(),
+      strictLinks: options.strictLinks,
+      allowCustomRelationTypes: true,
+    }), store.project);
+    return createServer(localBundleArgs, {
+      initialIndex,
+      initialRemoteBundles: remoteBundles,
+      relationTypes: store.getRelationTypes(),
+      authoringService,
+      allowAuthoring: options.allowAuthoring,
+      allowRuntimeRemoteLoad: options.allowRuntimeRemoteLoad,
+      allowComputationAuthoring: options.allowComputationAuthoring,
+      strictLinks: options.strictLinks,
+      allowCustomRelationTypes: true,
+      repositoryMappings: options.repositoryMappings,
     });
   }
   const remoteBundles = await fetchRemoteBundles((options && options.remoteBundles) || []);
   const localBundleArgs = (bundleArgs || []).slice();
   return createServer(localBundleArgs, {
-    initialIndex: buildIndex(localBundleArgs.concat(remoteBundles)),
+    initialIndex: buildIndex(localBundleArgs.concat(remoteBundles), {
+      strictLinks: options && options.strictLinks,
+      allowCustomRelationTypes: true,
+    }),
     initialRemoteBundles: remoteBundles,
     allowAuthoring: options && options.allowAuthoring,
     allowRuntimeRemoteLoad: options && options.allowRuntimeRemoteLoad,
+    allowComputationAuthoring: options && options.allowComputationAuthoring,
+    strictLinks: options && options.strictLinks,
+    allowCustomRelationTypes: true,
+    repositoryMappings: options && options.repositoryMappings,
   });
 }
 

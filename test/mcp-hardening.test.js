@@ -63,7 +63,11 @@ function installRemoteFetch(t) {
   });
   globalThis.fetch = async (url) => {
     const textUrl = String(url);
-    const apiMatch = textUrl.match(/^https:\/\/api\.github\.com\/repos\/acme\/([^/]+)\/contents\/([^?]+)\?ref=main$/);
+    const commitMatch = textUrl.match(/^https:\/\/api\.github\.com\/repos\/acme\/([^/]+)\/commits\//);
+    if (commitMatch) {
+      return { ok: true, async json() { return { sha: "a".repeat(40) }; } };
+    }
+    const apiMatch = textUrl.match(/^https:\/\/api\.github\.com\/repos\/acme\/([^/]+)\/contents\/([^?]+)\?ref=[^&]+$/);
     if (apiMatch) {
       const repo = apiMatch[1];
       const rootPath = decodeURIComponent(apiMatch[2]);
@@ -236,8 +240,8 @@ test("accepted local proposals retain configured and runtime remote bundles and 
   assert.equal(server.index.byUri.has("okf://runtime/runtime.md"), true);
   assert.equal(server.index.byUri.has("okf://local/accepted.md"), true);
   assert.equal(server.index.edges.some((edge) => (
-    edge.source === "okf://local/source.md"
-    && edge.target === "okf://configured/configured.md"
+    edge.source === "okf://local/source"
+    && edge.target === "okf://configured/configured"
     && edge.relationType === "related_to"
     && !edge.broken
   )), true);

@@ -1,0 +1,6 @@
+interface:
+  display_name: "OKF v0.2 Migration"
+  short_description: "Safely stage catalog migrations to OKF v0.2"
+  default_prompt: "Use $okf-v02-migration to check and preview this catalog's staged OKF v0.2 migration."
+policy:
+  allow_implicit_invocation: false

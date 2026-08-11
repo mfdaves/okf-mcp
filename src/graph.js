@@ -1,19 +1,28 @@
 "use strict";
 
 const { applyFilters } = require("./search");
-const { conceptSummary } = require("./indexer");
+const { conceptSummary, resolveConcept } = require("./indexer");
 
 function nodeFor(doc) {
+  const summary = conceptSummary(doc);
+  return Object.assign({ id: doc.uri }, summary);
+}
+
+function assetNodeFor(asset) {
   return {
-    id: doc.uri,
-    bundle: doc.bundle,
-    path: doc.path,
-    pathUri: doc.pathUri,
-    type: doc.type,
-    title: doc.title,
-    tags: doc.tags,
-    aliases: doc.aliases,
-    description: doc.description,
+    id: asset.uri,
+    bundle: asset.bundle,
+    path: asset.path,
+    type: "Bundle Asset",
+    title: asset.path,
+    tags: ["asset"].concat(asset.roles || []),
+    aliases: [],
+    description: `${asset.mimeType} (${asset.size} bytes)`,
+    asset: true,
+    mimeType: asset.mimeType,
+    size: asset.size,
+    sha256: asset.sha256,
+    roles: asset.roles || [],
   };
 }
 
@@ -74,8 +83,13 @@ function trimGraph(nodes, edges, options) {
 }
 
 function canonicalUri(index, uri) {
-  const doc = uri ? index.byUri.get(uri) : null;
+  const doc = resolveConcept(index, uri);
   return doc ? doc.uri : uri;
+}
+
+function edgeAllowed(edge, options) {
+  const kinds = options && Array.isArray(options.edgeKinds) ? options.edgeKinds : [];
+  return !kinds.length || kinds.includes(edge.kind);
 }
 
 function getGraph(index, options) {
@@ -83,9 +97,11 @@ function getGraph(index, options) {
   const uris = new Set(docs.map((doc) => doc.uri));
   const nodes = docs.map(nodeFor).sort((a, b) => a.id.localeCompare(b.id));
   const includeExternal = Boolean(options && options.includeExternal);
+  const includeAssets = Boolean(options && options.includeAssets);
   const externalUris = new Set();
+  const assetUris = new Set();
   const edges = index.edges.filter((edge) => {
-    if (edge.broken || !uris.has(edge.source)) {
+    if (edge.broken || !edgeAllowed(edge, options) || !uris.has(edge.source)) {
       return false;
     }
     if (uris.has(edge.target)) {
@@ -95,21 +111,31 @@ function getGraph(index, options) {
       externalUris.add(edge.target);
       return true;
     }
+    if (includeAssets && index.byAssetUri && index.byAssetUri.has(edge.target)) {
+      assetUris.add(edge.target);
+      return true;
+    }
     return false;
   });
   externalUris.forEach((uri) => nodes.push(externalNodeFor(uri)));
+  assetUris.forEach((uri) => nodes.push(assetNodeFor(index.byAssetUri.get(uri))));
   return trimGraph(nodes, edges, options || {});
 }
 
-function getNeighbors(index, uri) {
+function getNeighbors(index, uri, options) {
   const canonical = canonicalUri(index, uri);
   const inbound = [];
   const outbound = [];
   index.edges.forEach((edge) => {
+    if (edge.broken || !edgeAllowed(edge, options)) {
+      return;
+    }
     if (edge.source === canonical && index.byUri.has(edge.target)) {
       outbound.push({ edge, node: nodeFor(index.byUri.get(edge.target)) });
-    } else if (edge.source === canonical && edge.external) {
+    } else if (edge.source === canonical && edge.external && options && options.includeExternal) {
       outbound.push({ edge, node: externalNodeFor(edge.target) });
+    } else if (edge.source === canonical && options && options.includeAssets && index.byAssetUri && index.byAssetUri.has(edge.target)) {
+      outbound.push({ edge, node: assetNodeFor(index.byAssetUri.get(edge.target)) });
     }
     if (edge.target === canonical && index.byUri.has(edge.source)) {
       inbound.push({ edge, node: nodeFor(index.byUri.get(edge.source)) });
@@ -129,7 +155,7 @@ function getSubgraph(index, options) {
   frontier.forEach((uri) => seen.add(uri));
   for (let level = 0; level < depth && frontier.length && seen.size < maxNodes; level += 1) {
     const next = [];
-    index.edges.filter((edge) => !edge.broken).forEach((edge) => {
+    index.edges.filter((edge) => !edge.broken && edgeAllowed(edge, options)).forEach((edge) => {
       if (frontier.includes(edge.source) && allowedUris.has(edge.target) && !seen.has(edge.target)) {
         seen.add(edge.target);
         next.push(edge.target);
@@ -143,16 +169,16 @@ function getSubgraph(index, options) {
   }
   const nodes = Array.from(seen).map((uri) => index.byUri.get(uri)).filter(Boolean).map(nodeFor);
   const uris = new Set(nodes.map((node) => node.id));
-  const edges = index.edges.filter((edge) => !edge.broken && uris.has(edge.source) && uris.has(edge.target));
+  const edges = index.edges.filter((edge) => !edge.broken && edgeAllowed(edge, options) && uris.has(edge.source) && uris.has(edge.target));
   return trimGraph(nodes, edges, Object.assign({}, options, { maxNodes }));
 }
 
-function findPaths(index, source, target, maxPaths) {
+function findPaths(index, source, target, maxPaths, options) {
   const canonicalSource = canonicalUri(index, source);
   const canonicalTarget = canonicalUri(index, target);
   const limit = boundedInteger(maxPaths, 3, 1, 50);
   const adjacency = new Map();
-  index.edges.filter((edge) => !edge.broken).forEach((edge) => {
+  index.edges.filter((edge) => !edge.broken && edgeAllowed(edge, options)).forEach((edge) => {
     if (!adjacency.has(edge.source)) {
       adjacency.set(edge.source, []);
     }
@@ -188,9 +214,26 @@ function graphSummary(index) {
   const byTag = {};
   const byBundle = {};
   const byRelationType = {};
+  const byEdgeKind = {};
+  const byStatus = {};
+  const byTrustTier = {};
+  const byFreshness = {};
+  const byRuntime = {};
+  let attestationReady = 0;
   index.concepts.forEach((doc) => {
     byType[doc.type] = (byType[doc.type] || 0) + 1;
     byBundle[doc.bundle] = (byBundle[doc.bundle] || 0) + 1;
+    const signals = doc.signals || {};
+    byStatus[signals.status || "unknown"] = (byStatus[signals.status || "unknown"] || 0) + 1;
+    byTrustTier[signals.trustTier || "unverified"] = (byTrustTier[signals.trustTier || "unverified"] || 0) + 1;
+    byFreshness[signals.freshness || "unspecified"] = (byFreshness[signals.freshness || "unspecified"] || 0) + 1;
+    if (signals.computation) {
+      const runtime = signals.computation.runtime || "invalid";
+      byRuntime[runtime] = (byRuntime[runtime] || 0) + 1;
+      if (signals.computation.attestationReady) {
+        attestationReady += 1;
+      }
+    }
     doc.tags.forEach((tag) => {
       byTag[tag] = (byTag[tag] || 0) + 1;
     });
@@ -198,6 +241,7 @@ function graphSummary(index) {
   const inbound = new Map();
   const outbound = new Map();
   index.edges.filter((edge) => !edge.broken).forEach((edge) => {
+    byEdgeKind[edge.kind] = (byEdgeKind[edge.kind] || 0) + 1;
     outbound.set(edge.source, (outbound.get(edge.source) || 0) + 1);
     inbound.set(edge.target, (inbound.get(edge.target) || 0) + 1);
     if (edge.kind === "relation") {
@@ -217,15 +261,23 @@ function graphSummary(index) {
     documents: index.documents.length,
     concepts: index.concepts.length,
     reserved: index.reserved.length,
+    assets: (index.assets || []).length,
     edges: index.edges.length,
     brokenLinks: index.edges.filter((edge) => edge.kind === "markdown_link" && edge.broken).length,
     brokenRelations: index.edges.filter((edge) => edge.kind === "relation" && edge.broken).length,
     relations: index.edges.filter((edge) => edge.kind === "relation").length,
+    brokenSemanticReferences: index.edges.filter((edge) => ["resource", "source", "computation", "executor", "attester"].includes(edge.kind) && edge.broken).length,
+    attestationReady,
     externalReferences: index.externalReferences ? index.externalReferences.length : 0,
     byBundle,
     byType,
     byTag,
     byRelationType,
+    byEdgeKind,
+    byStatus,
+    byTrustTier,
+    byFreshness,
+    byRuntime,
     orphanConcepts,
     topLinkedConcepts,
     warnings: index.warnings,
@@ -275,4 +327,5 @@ module.exports = {
   getSubgraph,
   graphSummary,
   nodeFor,
+  assetNodeFor,
 };

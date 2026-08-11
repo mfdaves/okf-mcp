@@ -3,14 +3,27 @@
 const fs = require("fs");
 const path = require("path");
 const yaml = require("js-yaml");
+const { normalizeV02Signals } = require("./v02");
+const { markdownStructure, nodeText } = require("./markdown");
 
 function normalizeSlashes(value) {
   return String(value || "").replace(/\\/g, "/");
 }
 
 function isReservedPath(relativePath) {
-  const base = path.basename(relativePath).toLowerCase();
+  const base = path.basename(relativePath);
   return base === "index.md" || base === "log.md";
+}
+
+function validOkfConceptUri(value) {
+  if (typeof value !== "string" || value.trim() !== value) {
+    return false;
+  }
+  const match = value.match(/^okf:\/\/([^/\s?#]+)\/([^\s?#]+)$/);
+  return Boolean(
+    match
+    && match[2].split("/").every((segment) => segment && segment !== "." && segment !== ".."),
+  );
 }
 
 function parseFrontmatterYaml(source) {
@@ -57,25 +70,59 @@ function splitFrontmatter(text) {
 }
 
 function extractTitle(body, fallback) {
-  const match = String(body || "").match(/^#\s+(.+)$/m);
-  return match ? match[1].trim() : fallback;
+  const heading = markdownStructure(body).headings.find((entry) => entry.level === 1);
+  return heading ? heading.text || fallback : fallback;
+}
+
+function isExternalMarkdownTarget(target) {
+  return /^[A-Za-z][A-Za-z0-9+.-]*:/.test(target) || target.startsWith("//");
 }
 
 function extractMarkdownLinks(body) {
   const out = [];
-  const regex = /!?\[([^\]]*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g;
-  let match;
-  while ((match = regex.exec(String(body || "")))) {
-    const target = match[2].trim();
-    if (!target || target.startsWith("http://") || target.startsWith("https://") || target.startsWith("mailto:") || target.startsWith("#")) {
+  const tree = markdownStructure(body).tree;
+  const walker = tree.walker();
+  let event;
+  while ((event = walker.next())) {
+    const node = event.node;
+    if (!event.entering || node.type !== "link") {
+      continue;
+    }
+    const target = String(node.destination || "").trim();
+    if (!target || isExternalMarkdownTarget(target) || target.startsWith("#")) {
       continue;
     }
     out.push({
-      text: match[1],
+      text: nodeText(node),
       href: target,
     });
   }
   return out;
+}
+
+function topLevelBlocks(tree) {
+  const blocks = [];
+  let current = tree && tree.firstChild;
+  while (current) {
+    blocks.push(current);
+    current = current.next;
+  }
+  return blocks;
+}
+
+function hasLocalLink(node) {
+  const walker = node.walker();
+  let event;
+  while ((event = walker.next())) {
+    if (event.entering
+      && event.node.type === "link"
+      && event.node.destination
+      && !isExternalMarkdownTarget(event.node.destination)
+      && !String(event.node.destination).startsWith("#")) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function safeRelativePath(root, absolutePath) {
@@ -97,24 +144,6 @@ function conformanceDiagnostic(bundle, relativePath, code, message) {
     path: relativePath,
     message,
   };
-}
-
-function markdownLines(body) {
-  const lines = String(body || "").split(/\r?\n/);
-  let fence = null;
-  return lines.map((text, index) => {
-    const marker = text.match(/^\s*(```+|~~~+)/);
-    const hidden = Boolean(fence);
-    if (marker) {
-      if (!fence) {
-        fence = marker[1][0];
-      } else if (marker[1][0] === fence) {
-        fence = null;
-      }
-      return { index, text, hidden: true };
-    }
-    return { index, text, hidden };
-  });
 }
 
 function validIsoDate(value) {
@@ -169,8 +198,9 @@ function validateReservedIndex(bundle, relativePath, split) {
       }
     }
   }
-  const visible = markdownLines(split.body).filter((line) => !line.hidden);
-  if (!visible.some((line) => /^#{1,6}[ \t]+\S/.test(line.text))) {
+  const structure = markdownStructure(split.body);
+  const blocks = topLevelBlocks(structure.tree);
+  if (!structure.headings.length) {
     diagnostics.push(conformanceDiagnostic(
       bundle,
       relativePath,
@@ -178,7 +208,20 @@ function validateReservedIndex(bundle, relativePath, split) {
       "Reserved index.md must contain at least one Markdown heading.",
     ));
   }
-  if (!extractMarkdownLinks(split.body).length) {
+  if (blocks.length && blocks[0].type !== "heading") {
+    diagnostics.push(conformanceDiagnostic(
+      bundle,
+      relativePath,
+      "reserved_index_heading_order",
+      "Reserved index.md content must begin with a heading.",
+    ));
+  }
+  const groupedLink = blocks.some((block, index) => (
+    block.type === "list"
+    && blocks.slice(0, index).some((entry) => entry.type === "heading")
+    && hasLocalLink(block)
+  ));
+  if (!groupedLink) {
     diagnostics.push(conformanceDiagnostic(
       bundle,
       relativePath,
@@ -199,11 +242,9 @@ function validateReservedLog(bundle, relativePath, split) {
       "Reserved log.md must not declare YAML frontmatter.",
     ));
   }
-  const visible = markdownLines(split.body).filter((line) => !line.hidden);
-  const headings = visible.map((line) => {
-    const match = line.text.match(/^(#{1,6})[ \t]+(.+?)[ \t]*$/);
-    return match ? { index: line.index, level: match[1].length, text: match[2].trim() } : null;
-  }).filter(Boolean);
+  const structure = markdownStructure(split.body);
+  const blocks = topLevelBlocks(structure.tree);
+  const headings = structure.headings;
   const h1 = headings.filter((heading) => heading.level === 1);
   if (!h1.length) {
     diagnostics.push(conformanceDiagnostic(
@@ -212,12 +253,20 @@ function validateReservedLog(bundle, relativePath, split) {
       "reserved_log_missing_h1",
       "Reserved log.md must start with an H1 title.",
     ));
-  } else if (headings[0] !== h1[0]) {
+  } else if (!blocks.length || blocks[0] !== h1[0].node) {
     diagnostics.push(conformanceDiagnostic(
       bundle,
       relativePath,
       "reserved_log_h1_order",
       "The H1 title in reserved log.md must precede its dated sections.",
+    ));
+  }
+  if (h1.length > 1) {
+    diagnostics.push(conformanceDiagnostic(
+      bundle,
+      relativePath,
+      "reserved_log_multiple_h1",
+      "Reserved log.md must contain exactly one H1 title.",
     ));
   }
 
@@ -264,12 +313,12 @@ function validateReservedLog(bundle, relativePath, split) {
     }
   }
   sections.forEach((section) => {
-    const nextH2 = h2.find((heading) => heading.index > section.index);
-    const end = nextH2 ? nextH2.index : Number.POSITIVE_INFINITY;
-    const hasListItem = visible.some((line) => (
-      line.index > section.index
-      && line.index < end
-      && /^\s*(?:[-+*]|\d+[.)])\s+\S/.test(line.text)
+    const nextHeading = headings.find((heading) => (
+      heading.startLine > section.startLine && heading.level <= section.level
+    ));
+    const end = nextHeading ? nextHeading.startLine : Number.POSITIVE_INFINITY;
+    const hasListItem = structure.items.some((item) => (
+      item.startLine > section.startLine && item.startLine < end
     ));
     if (!hasListItem) {
       diagnostics.push(conformanceDiagnostic(
@@ -284,7 +333,7 @@ function validateReservedLog(bundle, relativePath, split) {
 }
 
 function validateReservedDocument(bundle, relativePath, split) {
-  const base = path.basename(relativePath).toLowerCase();
+  const base = path.basename(relativePath);
   if (base === "index.md") {
     return validateReservedIndex(bundle, relativePath, split);
   }
@@ -294,7 +343,7 @@ function validateReservedDocument(bundle, relativePath, split) {
   return [];
 }
 
-function parseMarkdownText(bundle, relativePath, text, sourcePath) {
+function parseMarkdownText(bundle, relativePath, text, sourcePath, options) {
   const reserved = isReservedPath(relativePath);
   const split = splitFrontmatter(text);
   const frontmatter = split.frontmatter || {};
@@ -302,20 +351,39 @@ function parseMarkdownText(bundle, relativePath, text, sourcePath) {
   if (!reserved && !split.frontmatter) {
     warnings.push({ code: "missing_frontmatter", path: relativePath, message: "Concept file has no YAML frontmatter." });
   }
-  if (!reserved && (!frontmatter.type || String(frontmatter.type).trim() === "")) {
-    warnings.push({ code: "missing_type", path: relativePath, message: "Concept file has no non-empty type field." });
+  const validType = typeof frontmatter.type === "string" && frontmatter.type.trim() !== "";
+  if (!reserved && !validType) {
+    warnings.push({ code: "missing_type", path: relativePath, message: "Concept file type must be a non-empty string." });
   }
-  if (!reserved && frontmatter.id && !String(frontmatter.id).startsWith("okf://")) {
-    warnings.push({ code: "invalid_id", path: relativePath, message: "Concept id must start with okf://." });
+  const hasCustomId = Object.prototype.hasOwnProperty.call(frontmatter, "id");
+  const customIdValid = hasCustomId && validOkfConceptUri(frontmatter.id);
+  if (!reserved && hasCustomId && !customIdValid) {
+    warnings.push({
+      code: "invalid_id",
+      path: relativePath,
+      message: "Concept id must match okf://<bundle>/<concept-id> with non-empty safe path segments.",
+    });
   }
   const conformanceDiagnostics = reserved
     ? validateReservedDocument(bundle, relativePath, split)
     : warnings
       .filter((warning) => warning.code === "missing_frontmatter" || warning.code === "missing_type")
       .map((warning) => conformanceDiagnostic(bundle, relativePath, warning.code, warning.message));
-  const title = frontmatter.title || extractTitle(split.body, path.basename(relativePath, ".md"));
+  const title = frontmatter.title || extractTitle(split.body, path.basename(relativePath).replace(/\.md$/i, ""));
   const pathUri = `okf://${bundle.id}/${relativePath}`;
-  const uri = frontmatter.id && String(frontmatter.id).startsWith("okf://") ? String(frontmatter.id) : pathUri;
+  const conceptId = reserved
+    ? relativePath
+    : normalizeSlashes(relativePath).replace(/\.md$/i, "");
+  const uri = `okf://${bundle.id}/${conceptId}`;
+  const customId = customIdValid ? frontmatter.id : null;
+  const signals = normalizeV02Signals({ frontmatter, body: split.body }, {
+    asOf: options && options.asOf,
+  });
+  const v02Diagnostics = signals.diagnostics.map((entry) => Object.assign({
+    bundle: bundle.id,
+    path: relativePath,
+  }, entry));
+  warnings.push.apply(warnings, v02Diagnostics);
   return {
     bundle: bundle.id,
     bundleRoot: bundle.root,
@@ -323,36 +391,49 @@ function parseMarkdownText(bundle, relativePath, text, sourcePath) {
     absolutePath: sourcePath || relativePath,
     uri,
     pathUri,
+    conceptId,
+    customId,
+    uriAliases: Array.from(new Set([pathUri, customId].filter((alias) => alias && alias !== uri))),
     reserved,
     kind: reserved ? "reserved" : "concept",
     frontmatter,
     rawFrontmatter: split.rawFrontmatter,
     body: split.body,
     text,
-    type: frontmatter.type || null,
+    type: validType ? frontmatter.type : null,
     title,
     description: frontmatter.description || "",
     tags: Array.isArray(frontmatter.tags) ? frontmatter.tags.map(String) : [],
     aliases: Array.isArray(frontmatter.aliases) ? frontmatter.aliases.map(String) : [],
     relations: Array.isArray(frontmatter.relations) ? frontmatter.relations : [],
+    signals,
+    v02Diagnostics,
     links: extractMarkdownLinks(split.body),
     warnings,
     diagnostics: conformanceDiagnostics,
     conformanceDiagnostics,
-    valid: reserved || Boolean(frontmatter.type && String(frontmatter.type).trim() !== ""),
+    valid: reserved || validType,
   };
 }
 
-function parseMarkdownFile(bundle, absolutePath) {
+function parseMarkdownFile(bundle, absolutePath, options) {
   const relativePath = safeRelativePath(bundle.root, absolutePath);
   if (relativePath === null) {
     throw new Error(`Path is outside bundle root: ${absolutePath}`);
   }
-  return parseMarkdownText(bundle, relativePath, fs.readFileSync(absolutePath, "utf8"), absolutePath);
+  const bytes = fs.readFileSync(absolutePath);
+  let text;
+  try {
+    text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch {
+    throw new Error("Concept document is not valid UTF-8.");
+  }
+  return parseMarkdownText(bundle, relativePath, text, absolutePath, options);
 }
 
 module.exports = {
   extractMarkdownLinks,
+  extractTitle,
   isReservedPath,
   normalizeSlashes,
   parseFrontmatterYaml,

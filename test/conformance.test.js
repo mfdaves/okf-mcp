@@ -66,6 +66,53 @@ test("an invalid extension id is a project diagnostic, not a conformance failure
   )), true);
 });
 
+test("custom ids require a complete OKF URI and uppercase Markdown suffixes remain extensionless", () => {
+  const root = fixture({
+    "Alpha.MD": concept("type: Concept", "# Alpha"),
+    "Index.MD": concept("type: Concept", "# Capitalized Index"),
+    "empty.md": concept("type: Concept\nid: ''", "# Empty"),
+    "host-only.md": concept("type: Concept\nid: okf://fixture", "# Host only"),
+    "unsafe.md": concept("type: Concept\nid: okf://fixture/../unsafe", "# Unsafe"),
+  });
+  const index = buildIndex([`fixture=${root}`]);
+
+  assert.equal(index.byUri.get("okf://fixture/Alpha").path, "Alpha.MD");
+  assert.equal(index.byUri.get("okf://fixture/Alpha.MD").uri, "okf://fixture/Alpha");
+  assert.equal(index.byUri.get("okf://fixture/Index").reserved, false);
+  assert.equal(index.warnings.filter((entry) => entry.code === "invalid_id").length, 3);
+  assert.equal(validateIndex(index).validForProject, false);
+});
+
+test("relations cannot resolve to reserved or invalid documents", () => {
+  const root = fixture({
+    "index.md": "# Index\n\n- [Source](source.md)\n",
+    "invalid.md": concept("title: Missing type", "# Invalid"),
+    "source.md": concept([
+      "type: Concept",
+      "relations:",
+      "  - type: related_to",
+      "    target: okf://fixture/index.md",
+      "  - type: related_to",
+      "    target: okf://fixture/invalid",
+    ].join("\n"), "# Source"),
+  });
+  const index = buildIndex([`fixture=${root}`]);
+
+  assert.equal(index.edges.filter((edge) => edge.kind === "relation").every((edge) => edge.broken), true);
+  assert.equal(index.errors.filter((entry) => entry.code === "broken_relation").length, 2);
+  assert.equal(validateIndex(index).validForProject, false);
+});
+
+test("present scalar version values are classified consistently even when unsupported", () => {
+  const root = fixture({
+    "index.md": "---\nokf_version: false\n---\n\n# Index\n\n- [Concept](concept.md)\n",
+    "concept.md": concept("type: Concept", "# Concept"),
+  });
+  const index = buildIndex([{ id: "versioned", root }]);
+  assert.equal(index.bundles[0].okfVersion, "false");
+  assert.equal(index.bundles[0].versionStatus, "unsupported");
+});
+
 test("authoring preserves nested extension frontmatter through YAML serialization", () => {
   const frontmatter = {
     type: "Vendor Specific Runtime",
@@ -118,7 +165,7 @@ test("YAML requires a mapping root and rejects duplicate mapping keys", () => {
   assert.equal(validation.diagnostics.filter((entry) => entry.layer === "conformance").length, 2);
 });
 
-test("a broken Markdown link is conformant but invalid for the project", () => {
+test("a broken Markdown link is advisory by default and strict only when configured", () => {
   const root = fixture({
     "source.md": concept("type: Concept\ntitle: Source", "# Source\n\n[Missing](missing.md)"),
   });
@@ -126,8 +173,8 @@ test("a broken Markdown link is conformant but invalid for the project", () => {
   const validation = validateIndex(index);
 
   assert.equal(validation.conformant, true);
-  assert.equal(validation.validForProject, false);
-  assert.equal(validation.valid, false);
+  assert.equal(validation.validForProject, true);
+  assert.equal(validation.valid, true);
   assert.equal(validation.errors.length, 0);
   assert.equal(validation.warnings.some((entry) => entry.code === "broken_link"), true);
   assert.equal(validation.diagnostics.some((entry) => (
@@ -135,6 +182,9 @@ test("a broken Markdown link is conformant but invalid for the project", () => {
     && entry.layer === "project"
     && entry.severity === "warning"
   )), true);
+  const strict = validateIndex(buildIndex([`fixture=${root}`], { strictLinks: true }));
+  assert.equal(strict.conformant, true);
+  assert.equal(strict.validForProject, false);
 });
 
 test("project graph errors do not redefine document conformance", () => {
@@ -170,7 +220,7 @@ test("validateIndex can scope project validity to one bundle", () => {
   const index = buildIndex([
     { id: "good", root: good },
     { id: "broken", root: broken },
-  ]);
+  ], { strictLinks: true });
 
   assert.equal(validateIndex(index).validForProject, false);
   assert.equal(validateIndex(index, "good").validForProject, true);

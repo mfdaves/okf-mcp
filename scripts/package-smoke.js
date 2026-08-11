@@ -60,7 +60,7 @@ function main() {
     [
       {
         type: "named",
-        name: "--project",
+        name: "--root",
         value: undefined,
         format: "filepath",
         isRequired: true,
@@ -92,8 +92,10 @@ function main() {
     assert.equal(packedPaths.has("okf.project.yaml"), true);
     assert.equal(packedPaths.has("okf/bundles/okf-mcp/index.md"), true);
     assert.equal(packedPaths.has("server.json"), true);
+    assert.equal(packedPaths.has(".agents/skills/okf-v02-migration/SKILL.md"), true);
+    assert.equal(packedPaths.has(".agents/skills/okf-v02-migration/agents/openai.yaml"), true);
+    assert.equal(packedPaths.has(".agents/skills/okf-v02-migration/references/field-mapping.md"), true);
     [
-      ".agents/",
       ".github/",
       ".okf-proposals/",
       "scripts/",
@@ -119,7 +121,7 @@ function main() {
     ]);
 
     const installedPackageRoot = path.join(installRoot, "node_modules", ...packageMetadata.name.split("/"));
-    const installedProject = path.join(installedPackageRoot, "okf.project.yaml");
+    const installedRoot = path.join(installedPackageRoot, "okf", "bundles", "okf-mcp");
     const installedServerMetadata = JSON.parse(fs.readFileSync(path.join(installedPackageRoot, "server.json"), "utf8"));
     const okf = executable(installRoot, "okf");
     const okfMcp = executable(installRoot, "okf-mcp");
@@ -131,7 +133,7 @@ function main() {
     assert.equal(run(okf, ["--version"]).stdout.trim(), packageMetadata.version);
     assert.equal(run(okfMcp, ["--version"]).stdout.trim(), packageMetadata.version);
 
-    const validation = JSON.parse(run(okf, ["--project", installedProject, "validate"]).stdout);
+    const validation = JSON.parse(run(okf, ["--root", installedRoot, "validate"]).stdout);
     assert.equal(validation.conformant, true);
     assert.equal(validation.validForProject, true);
 
@@ -160,7 +162,7 @@ function main() {
         params: { name: "get_concept", arguments: { uri: "okf://okf-mcp/overview/okf-mcp" } },
       },
     ].map((message) => JSON.stringify(message)).join("\n") + "\n";
-    const protocol = run(okfMcp, ["--project", installedProject, "mcp"], { input: rpcInput });
+    const protocol = run(okfMcp, ["--root", installedRoot, "mcp"], { input: rpcInput });
     assert.equal(protocol.stderr, "");
     const responses = parseRpcLines(protocol.stdout);
     assert.deepEqual(responses.map((response) => response.id), [1, 2, 3, 4, 5, 6]);
@@ -189,7 +191,7 @@ function main() {
         clientInfo: { name: "package-smoke", version: "1" },
       },
     }) + "\n";
-    const fallbackProtocol = run(okfMcp, ["--project", installedProject, "mcp"], { input: fallbackInput });
+    const fallbackProtocol = run(okfMcp, ["--root", installedRoot, "mcp"], { input: fallbackInput });
     assert.equal(fallbackProtocol.stderr, "");
     const fallbackResponses = parseRpcLines(fallbackProtocol.stdout);
     assert.equal(fallbackResponses.length, 1);
@@ -199,7 +201,7 @@ function main() {
     process.stdout.write(JSON.stringify({
       package: `${packageMetadata.name}@${packageMetadata.version}`,
       entries: packed.entryCount,
-      concepts: 11,
+      concepts: 14,
       binaries: ["okf", "okf-mcp"],
       stdio: "passed",
     }, null, 2) + "\n");

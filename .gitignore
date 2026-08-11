@@ -1,6 +1,10 @@
 node_modules/
 coverage/
-.agents/
+.agents/*
+!.agents/skills/
+.agents/skills/*
+!.agents/skills/okf-v02-migration/
+!.agents/skills/okf-v02-migration/**
 .okf-cache/
 .okf-proposals/
 *.tgz

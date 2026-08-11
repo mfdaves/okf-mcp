@@ -1,32 +1,64 @@
 # okf-mcp
 
-`okf-mcp` is a project-agnostic Open Knowledge Format CLI, graph index, generator runner, MCP stdio server, and optional HTTP authoring API.
+`okf-mcp` is a local-first consumer, validator, graph index, CLI, and MCP server for [Open Knowledge Format v0.2](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md).
 
-It consumes one or more directories of Markdown files with YAML frontmatter, treats non-reserved Markdown files as OKF concepts, and exposes those concepts through CLI commands plus MCP resources and tools for structured search, validation, graph navigation, and proposal-based authoring.
+It consumes an OKF bundle directory of Markdown files with YAML frontmatter. An optional workspace mode can federate several bundles. Concepts are exposed through CLI commands and MCP resources and tools for validation, structured search, graph navigation, provenance inspection, and proposal-based authoring.
 
-The core intentionally has no database, embeddings, build step, or hosted-service dependency. It uses `js-yaml` for standards-oriented YAML parsing. Local bundle mode makes no network calls. Optional remote bundles can fetch public Markdown concepts from GitHub when configured. Generator plugins and accepted authoring proposals are the write paths, and both write only under configured project directories.
+The core intentionally has no database, embeddings, build step, or hosted-service dependency. It uses `js-yaml` for safe YAML and CommonMark for Markdown structure. Local root mode makes no network calls. Optional remote loading fetches public Markdown concepts and only their explicitly referenced inert assets from GitHub. Nothing in the v0.2 computation support executes code or attests a receipt.
+
+## OKF v0.2 Support And Extensions
+
+OKF v0.2 intentionally specifies a portable file format, not a serving or query runtime. `okf-mcp` keeps that boundary explicit:
+
+| Area | Official OKF v0.2 | okf-mcp behavior |
+| --- | --- | --- |
+| Bundle and identity | A directory tree of Markdown files; a Concept ID is its bundle-relative path without `.md` | `--root` maps directly to one bundle; `okf://` is an optional workspace locator, not the portable Concept ID |
+| Concept metadata | Required `type`; recommended `title`, `description`, `resource`, and `tags`; unknown keys are allowed | Preserves extension fields and unknown types while reporting normative conformance separately from workspace policy |
+| Provenance and lifecycle | `sources`, `usage_window`, `generated`, `verified`, `status`, and `stale_after` | Normalizes these fields for search, provenance traversal, trust tiers, and deterministic freshness checks |
+| References | Markdown links and path-valued `resource`, `sources[].resource`, `computation`, `executor.resource`, and `attester.resource` fields | Builds graph edges and bounded inert asset snapshots without executing or implicitly fetching referenced code |
+| Attested Computation | Defines contract fields and an informative consumer flow while deferring runtime wire protocols and attester packaging | Statically inspects contracts and digests, checks declared parameter and receipt field names, and never executes or claims attestation |
+| v0.1 compatibility | Allows `timestamp` fallback when the whole `generated` mapping is absent and `# Citations` fallback when the `sources` key is absent | Consumes both forms and adds review-only migration checks and proposals |
+
+The following are okf-mcp extensions rather than requirements of the format:
+
+- CLI, MCP, and HTTP interfaces; in-memory search and graph views
+- optional multi-bundle `okf.project.yaml` workspaces and typed `relations`
+- compatibility `id`, `aliases`, and `okf://` locators
+- proposal-backed authoring with explicit acceptance
+- bounded GitHub remote loading and explicitly mapped pinned Git sources
+- generator plugins and stricter opt-in project policies such as `strictLinks`
 
 ## Install And Run
 
-The current stable release is `0.3.3`, published under npm's `latest` tag.
-Pin the exact version for reproducible use:
+Node 22 or newer is required.
+
+Install from the GitHub release:
 
 ```bash
-npx -y @mfdaves/okf-mcp@0.3.3 --version
-npx -y @mfdaves/okf-mcp@0.3.3 --project ./okf.project.yaml validate
+git clone --branch v0.4.0 https://github.com/mfdaves/okf-mcp.git
+cd okf-mcp
+npm ci
+node bin/okf-mcp.js --root ./path/to/okf validate
+```
+
+After version `0.4.0` is published on npm, pin it for reproducible use:
+
+```bash
+npx -y @mfdaves/okf-mcp@0.4.0 --version
+npx -y @mfdaves/okf-mcp@0.4.0 --root ./path/to/okf validate
 ```
 
 For a persistent installation:
 
 ```bash
-npm install --global @mfdaves/okf-mcp@0.3.3
+npm install --global @mfdaves/okf-mcp@0.4.0
 
 okf --version
-okf --project ./okf.project.yaml validate
-okf-mcp --project ./okf.project.yaml mcp
+okf --root ./path/to/okf validate
+okf-mcp --root ./path/to/okf mcp
 ```
 
-To work from the source repository:
+To work from the current source branch:
 
 ```bash
 git clone https://github.com/mfdaves/okf-mcp.git
@@ -36,46 +68,46 @@ npm test
 node bin/okf-mcp.js --version
 ```
 
-Node 22 or newer is required.
+`--root` accepts one local OKF bundle directory and is the recommended okf-mcp interface for a single bundle. The portable identity of each concept is its extensionless path inside that root.
 
-`--bundle` accepts either a path or `id=path`. Multiple `--bundle` flags are allowed.
+`--bundle` accepts either a path or `id=path`. Multiple flags remain supported for compatibility. `--project` and its `bundles:` list are an optional okf-mcp federation/authoring extension, not part of OKF v0.2.
 
-`--remote-bundle` accepts `id=https://github.com/<owner>/<repo>/tree/<ref>/<path>`. It fetches public Markdown files from that GitHub tree and indexes them as a read-only bundle.
+`--remote-bundle` accepts `id=https://github.com/<owner>/<repo>/tree/<ref>/<path>`. It fetches public Markdown first, then only bundle-local files explicitly named by standard v0.2 resource fields. Remote content remains read-only and inert.
 
 `--inspect` prints a compact graph summary and exits. Without `--inspect` and without an explicit command, the process starts a stdio MCP server.
 
-The package exposes both `okf` and `okf-mcp` binaries when installed. If neither `--project` nor a bundle source is passed, the CLI discovers the nearest `okf.project.yaml` or `okf.project.json` from the current directory.
+The package exposes both `okf` and `okf-mcp` binaries when installed. Without an explicit source, the CLI first discovers the nearest root `index.md` declaring `okf_version`; nearest-project discovery remains a compatibility fallback.
 
 CLI exit statuses are `0` for success, `1` for validation or operational failure, and `2` for invalid usage. Unknown options are rejected.
 
-## Published OKF Reference
+## Included OKF Reference
 
-This repository publishes a self-describing OKF bundle for the product, its runtime boundaries, interfaces, authoring workflows, and safety policy. The canonical entry point is `okf://okf-mcp/overview/okf-mcp`.
+This repository publishes a self-describing OKF bundle for the product, its runtime boundaries, interfaces, authoring workflows, and safety policy. Its portable entry Concept ID is `overview/okf-mcp`; `okf://okf-mcp/overview/okf-mcp` remains the workspace/MCP resource locator.
 
 Validate and query the bundled reference from a checkout or installed package:
 
 ```bash
-okf --project okf.project.yaml validate
-okf --project okf.project.yaml search "proposal"
-okf --project okf.project.yaml concept okf://okf-mcp/overview/okf-mcp
+okf --root okf/bundles/okf-mcp validate
+okf --root okf/bundles/okf-mcp search "proposal"
+okf --root okf/bundles/okf-mcp concept overview/okf-mcp
 ```
 
-Load the latest published reference directly from GitHub:
+Load the reference bundle directly from this release:
 
 ```bash
-okf --remote-bundle okf-mcp=https://github.com/mfdaves/okf-mcp/tree/main/okf/bundles/okf-mcp --inspect
+okf --remote-bundle okf-mcp=https://github.com/mfdaves/okf-mcp/tree/v0.4.0/okf/bundles/okf-mcp --inspect
 ```
 
-For reproducible consumption, replace `main` with a release tag. The
-`@mfdaves/okf-mcp` npm package includes both `okf.project.yaml` and the
+The `@mfdaves/okf-mcp` npm package includes both `okf.project.yaml` and the
 complete reference bundle.
 
-## Project Config
+## Optional Multi-Bundle Project Config
 
-For project-agnostic use, create an `okf.project.yaml` at a repository root:
+Use `okf.project.yaml` only when one process must federate multiple roots, configure generators, or enforce a project-wide relation vocabulary:
 
 ```yaml
 project: Example
+strictLinks: false
 bundles:
   - id: app
     root: okf/bundles/app
@@ -118,9 +150,15 @@ Commands:
 - `validate`
 - `graph [json|dot|mermaid]`
 - `search <query>`
-- `concept <uri>`
-- `neighbors <uri>`
+- `concept <concept-id-or-locator>`
+- `neighbors <concept-id-or-locator>`
 - `paths <from> <to>`
+- `provenance <uri>`
+- `edge-kinds`
+- `computation inspect|prepare|check-receipt`
+- `asset <okf-asset-uri>`
+- `source <concept-id-or-locator> <source-id>`
+- `migrate check|preview`
 - `generate`
 - `serve`
 
@@ -129,9 +167,11 @@ Commands:
 - `--host <host>`: bind host, default `127.0.0.1`
 - `--port <port>`: bind port, default `8765`
 - `--write-token <token>`: bearer token for write endpoints; defaults to `OKF_WRITE_TOKEN`
-- `--proposal-root <path>`: proposal JSON directory; defaults to `.okf-proposals` under the project root
+- `--proposal-root <path>`: proposal JSON directory; defaults to `.okf-proposals` under the selected local root or project
 
 ## MCP Client Config
+
+The npm-based examples below apply after version `0.4.0` is published there. A source checkout can invoke its executable `bin/okf-mcp.js` with the same arguments.
 
 Example client configuration:
 
@@ -142,9 +182,9 @@ Example client configuration:
       "command": "npx",
       "args": [
         "-y",
-        "@mfdaves/okf-mcp@0.3.3",
-        "--bundle",
-        "app=/absolute/path/to/repo/okf/bundles/app",
+        "@mfdaves/okf-mcp@0.4.0",
+        "--root",
+        "/absolute/path/to/okf",
         "mcp"
       ]
     }
@@ -161,7 +201,7 @@ Project config mode, with read-only project helpers but without proposal mutatio
       "command": "npx",
       "args": [
         "-y",
-        "@mfdaves/okf-mcp@0.3.3",
+        "@mfdaves/okf-mcp@0.4.0",
         "--project",
         "/absolute/path/to/repo/okf.project.yaml",
         "mcp"
@@ -189,25 +229,20 @@ tool results with `isError: true`.
 
 `server.json` describes the npm package as the stdio server
 `io.github.mfdaves/okf-mcp`. Registry-aware clients should prompt for an
-absolute `okf.project.yaml` path, pass it through `--project`, and append the
-fixed `mcp` command.
+absolute OKF root path, pass it through `--root`, and append the fixed `mcp`
+command.
 
-The package, lockfile, CLI, MCP `serverInfo`, `package.json` `mcpName`, and
-both versions in `server.json` are kept synchronized by the package smoke
-gate. Release candidates remain available through npm's `next` tag; only a
-verified stable version is published to the official MCP Registry.
+## Concept Identity And Extensions
 
-## Concept Format
-
-The server exposes one resource per Markdown document:
+Concept IDs are their bundle-relative Markdown paths with `.md` removed. This extensionless path is the portable OKF identity. okf-mcp also exposes a workspace-scoped compatibility locator:
 
 ```text
-okf://<bundle-id>/<relative-path>
+okf://<bundle-id>/<extensionless-concept-id>
 ```
 
-Resources use `text/markdown`. Reserved `index.md` and `log.md` files are resources, but they are not concept documents.
+The former `.md` URI and a valid custom `id` remain compatibility lookup aliases. A bare Concept ID resolves only when unique across loaded bundles; `okf://` remains deterministic for federated workspaces. Reserved `index.md` and `log.md` resources retain their filenames because they are not concepts.
 
-Concept files may use a path-derived URI or set a stable `id`:
+The `id`, `aliases`, and typed `relations` fields below are `okf-mcp` extensions. The standard v0.2 identity remains path-derived:
 
 ```markdown
 ---
@@ -227,7 +262,31 @@ relations:
 # Order Status Route
 ```
 
-`okf://` relation targets must resolve to a known concept. Non-OKF targets such as `repo://` are treated as external opaque references.
+New content should use normal relative or bundle-root Markdown paths for internal links and extension relation targets. Existing `okf://` targets remain supported; non-OKF schemes such as `repo://` remain opaque compatibility references.
+
+### Pinned Git Sources
+
+Code knowledge may live outside the code repository without recording a machine-specific path. Point a standard `sources` entry at a `Git Repository` concept and add the okf-mcp `git` extension below:
+
+```yaml
+sources:
+  - id: implementation
+    resource: /repositories/application.md
+    git:
+      revision: 0123456789abcdef0123456789abcdef01234567
+      path: src/application.js
+      lines: { from: 10, to: 30 }
+```
+
+Map the repository concept only in the local process configuration:
+
+```bash
+okf --root /path/to/catalog \
+  --repo repositories/application=/work/application \
+  source architecture/application implementation
+```
+
+`read_git_source` and the `source` CLI command read the pinned blob from the mapped Git object database. They never read the dirty worktree or fetch. Missing mappings and unpinned revisions remain visible but unavailable. Repository mappings may point to normal checkouts, bare repositories, or mounted paths; credentials and local paths stay outside the OKF bundle.
 
 ## Tools
 
@@ -238,12 +297,22 @@ relations:
 - `list_types`
 - `list_tags`
 - `list_relation_types`
+- `list_edge_kinds`
+- `get_provenance`
+- `inspect_attested_computation`
+- `read_bundle_asset`
+- `read_git_source`
+- `prepare_attested_computation`
+- `check_computation_receipt`
+- `check_v02_migration`
 - `load_remote_bundle`
 - `list_remote_bundles`
 - `okf_validate_concept`
 - `okf_suggest_concept_path`
 - `okf_propose_concept`
 - `okf_propose_update`
+- `okf_propose_attested_computation`
+- `okf_propose_v02_migration`
 - `okf_list_proposals`
 - `okf_get_proposal`
 - `okf_accept_proposal`
@@ -268,14 +337,16 @@ disabled tool names remain protocol-level invalid-parameter errors.
 
 Tool discovery and direct invocation use the same capability checks:
 
-| Mode | Proposal mutations | Runtime remote load | Configured remote reads |
+| Mode | Normal proposals | Computation proposal | Runtime remote load |
 | --- | --- | --- | --- |
-| default | disabled | disabled | enabled |
-| `--authoring` | enabled | disabled | enabled |
-| `--allow-remote-tool` | disabled | enabled | enabled |
-| both flags | enabled | enabled | enabled |
+| default | disabled | disabled | disabled |
+| `--authoring` | enabled | disabled | disabled |
+| `--authoring --allow-computation-authoring` | enabled | enabled | disabled |
+| `--allow-remote-tool` | disabled | disabled | enabled |
 
-Project mode may expose read-only concept validation, path suggestion, and proposal inspection helpers. The `okf_*` mutation tools are proposal-first and require both project mode and `--authoring`. Proposing a concept or update writes only a proposal record. Accepting a proposal writes the Markdown concept into the configured bundle root and rebuilds the complete index from configured local bundles, configured remote bundles, and runtime-loaded remote bundles.
+An explicit local root or project workspace exposes concept validation, path suggestion, and proposal inspection helpers. The `okf_*` mutation tools are proposal-first and require `--authoring`. In normal single-root mode, callers omit `bundle`; it is required only to select among multiple project roots. Proposing a concept or update writes only a proposal record. Acceptance writes Markdown inside the selected local root and rebuilds the index; remote roots remain read only.
+
+Generic concept tools cannot create or change an Attested Computation contract. `okf_propose_attested_computation` additionally requires `--allow-computation-authoring` and creates one coordinated review proposal for the concept plus an optional external computation file.
 
 ## Authoring Concepts
 
@@ -287,7 +358,6 @@ MCP proposal flow:
 {
   "name": "okf_propose_concept",
   "arguments": {
-    "bundle": "app",
     "path": "tools/create-order.md",
     "frontmatter": {
       "type": "MCP Tool",
@@ -295,7 +365,7 @@ MCP proposal flow:
       "relations": [
         {
           "type": "related_to",
-          "target": "okf://app/workflows/order-creation"
+          "target": "/workflows/order-creation.md"
         }
       ]
     },
@@ -342,7 +412,7 @@ Safety rules:
 Start the HTTP server:
 
 ```bash
-OKF_WRITE_TOKEN=change-me okf --project okf.project.yaml serve --host 127.0.0.1 --port 8765
+OKF_WRITE_TOKEN=change-me okf --root /path/to/catalog serve --host 127.0.0.1 --port 8765
 ```
 
 Read/validation endpoints:
@@ -351,23 +421,23 @@ Read/validation endpoints:
 - `GET /v1/bundles`
 - `POST /v1/concepts/validate`
 - `POST /v1/concepts/suggest-path`
+
+Proposal inspection and mutation endpoints require `Authorization: Bearer <OKF_WRITE_TOKEN>` because pending records can contain complete candidate Markdown and computation code:
+
 - `GET /v1/proposals`
 - `GET /v1/proposals/:id`
-
-Mutation endpoints require `Authorization: Bearer <OKF_WRITE_TOKEN>`:
-
 - `POST /v1/proposals`
 - `POST /v1/proposals/update`
 - `POST /v1/proposals/:id/accept`
 - `POST /v1/proposals/:id/reject`
 
-The default file-backed proposal store writes proposal JSON under `.okf-proposals` in the project root. Accepted proposals write Markdown concepts into the configured bundle root.
+The default file-backed proposal store writes proposal JSON under `.okf-proposals` in the selected root or project. Accepted proposals write Markdown concepts into the selected local root.
 
 `POST /v1/concepts/validate` and `POST /v1/concepts/suggest-path` do not persist anything. `POST /v1/proposals` persists only a proposal record. Only `POST /v1/proposals/:id/accept` writes a concept Markdown file.
 
 ## Remote Bundles
 
-Remote bundles let one project consume concepts published by another repository without cloning or vendoring them locally.
+Remote bundles let one workspace consume concepts published by another repository without vendoring them. For a host-agnostic setup, clone or mount an OKF repository from any Git host and pass its directory through `--root`; transport and synchronization remain outside the OKF specification.
 
 Supported source:
 
@@ -375,8 +445,9 @@ Supported source:
 
 Remote loading:
 
-- indexes only `.md` files
-- ignores non-Markdown files
+- inventories the tree, fetches selected `.md` documents first, then fetches only explicitly referenced bundle-local assets
+- records resolved revision metadata, SHA256 digests, document/asset byte counts, and unresolved references
+- inventories remote paths but never downloads the contents of unreferenced `.sql`, `.py`, or binary files
 - keeps each remote bundle under its configured bundle id
 - supports `include` and `exclude` filters
 - resolves Markdown links inside the remote bundle path
@@ -422,6 +493,12 @@ Use `list_remote_bundles` to inspect what was loaded.
 - `linkedFrom`
 - `relationType`
 - `orphanOnly`
+- `statuses`
+- `trustTiers`
+- `freshness` and deterministic `asOf`
+- `hasSources`
+- `runtime` and `attestationReady`
+- `generatedBy` and `verifiedBy`
 - `limit`
 - `offset`
 
@@ -444,9 +521,9 @@ Example:
 
 ## Graph Behavior
 
-Markdown links between OKF documents become `markdown_link` edges. Frontmatter `relations` become typed `relation` edges.
+As an okf-mcp graph projection, Markdown links become `markdown_link` edges, extension `relations` become typed `relation` edges, and standard v0.2 path-valued fields become `resource`, `source`, `computation`, `executor`, and `attester` edges. Internal concept references resolve to canonical nodes; explicitly referenced non-Markdown files resolve to okf-mcp `okf-asset://` nodes; URLs and scope descriptors remain unfetched external or opaque leaves.
 
-Links to a nested bundle directory resolve to that directory's reserved
+For navigation convenience, okf-mcp resolves links to a nested bundle directory to that directory's reserved
 `index.md` when there is no exact document target. This applies to local and
 remote bundles and to candidate validation during proposal authoring.
 
@@ -470,7 +547,7 @@ Graph tools return compact JSON:
 }
 ```
 
-Use `graph_summary` first for a compact overview, `get_neighbors` for local traversal, and `get_subgraph` for bounded expansion around seed concepts. `export_graph` supports `json`, `dot`, and `mermaid`. Pass `includeExternal: true` to graph tools when opaque external targets should appear as graph nodes.
+Use `graph_summary` first for counts by lifecycle, trust, freshness, runtime, readiness, and edge kind. Graph tools accept `edgeKinds`; pass `includeExternal: true` or `includeAssets: true` when those leaf nodes are needed.
 
 Default relation types:
 
@@ -500,7 +577,7 @@ Bundle `include` and `exclude` filters use simple path patterns:
 
 `validate`, `validate_bundle`, and `validate_project` return separate `conformant` and `validForProject` fields plus structured diagnostics. `valid` remains a compatibility alias for `validForProject`.
 
-OKF conformance covers:
+OKF conformance covers, when the corresponding files are present:
 
 - parseable YAML mapping frontmatter on non-reserved concept documents
 - a non-empty `type`
@@ -508,10 +585,12 @@ OKF conformance covers:
 
 Unknown frontmatter keys and unknown concept type values do not fail conformance. The YAML parser supports nested mappings, arrays, block scalars, and other structures accepted by its safe YAML core schema; duplicate keys and unsupported custom tags are rejected.
 
+Missing `index.md` files and broken cross-links do not fail OKF conformance. `strictLinks` affects only okf-mcp workspace validity (`validForProject`), not the normative `conformant` result.
+
 Project validity additionally reports:
 
 - duplicate OKF URIs
-- broken internal Markdown links
+- broken internal Markdown links as advisories by default; set project `strictLinks: true` or pass `--strict-links` to make them project-invalid
 - invalid relation types
 - missing relation targets
 - broken `okf://` relation targets
@@ -521,6 +600,41 @@ Project validity additionally reports:
 - missing bundle roots
 
 The server keeps serving valid concepts from partial bundles.
+
+Optional v0.2 families are normalized into `signals`. Malformed provenance, generation, verification, lifecycle, freshness, or computation metadata produces an advisory and never creates a fourth trust tier. Verification fails closed to `unverified`; absent status defaults to `stable`; freshness is evaluated at an explicit `asOf` date when supplied. Authoring is stricter than consumption and rejects malformed known v0.2 fields.
+
+## Attested Computation
+
+`inspect_attested_computation` reports the runtime, declared parameters, sanctioned inline or file computation digest, executor receipt fields, attester reference, indexed assets, readiness, and diagnostics. `prepare_attested_computation` checks declared parameter names and returns digests without returning values. `check_computation_receipt` checks field presence without returning values, persisting the receipt, or claiming attestation.
+
+okf-mcp has no execution or attestation adapter. It never runs the computation, executor resource, or attester resource, and it never fetches an external contract URI on demand.
+
+CLI parity is available through `computation inspect|prepare|check-receipt`, `provenance`, `edge-kinds`, and `asset`. Supply sensitive values with `--parameters-file <path|->` or `--receipt-file <path|->`; raw parameter and receipt JSON is intentionally rejected in process arguments. `-` reads one JSON object from stdin. Asset reads accept `--max-content-bytes` up to the indexed 1 MiB limit.
+
+## Migrating Existing Catalogs To v0.2
+
+The v0.2 specification keeps v0.1 bundles consumable through two fallbacks: legacy `timestamp` when `generated` is absent, and a legacy body `# Citations` list when `sources` is absent. okf-mcp applies those fallbacks during reads and offers an optional review-only conversion workflow.
+
+For one root, inspect migration readiness and preview the proposed native fields without writing anything:
+
+```bash
+okf --root /path/to/catalog migrate check
+okf --root /path/to/catalog migrate preview \
+  '{"metrics/revenue.md":{"by":"human:owner","confirmed":true}}'
+```
+
+In optional multi-root project mode, supply the root id before the actor-mapping JSON.
+
+Migration is deliberately conservative:
+
+- native `generated` and `sources` fields always win
+- a valid `timestamp` is copied into a new `generated: { by, at }` mapping only after a truthful `by` actor is explicitly confirmed
+- `# Citations` becomes `sources` only from one top-level H1 section containing at least one safely parseable list entry and no unparsed prose, nested sections, ambiguous entries, or escaping paths
+- legacy fields and citation prose are retained for compatibility
+- concepts marked by `--generated-path`, a document flag, or `generated_file`/`generatedFile` frontmatter must be changed through their generator; remote roots are report-only
+- identity collisions, invalid documents, unsafe references, and unresolved assets block the version declaration
+
+`okf_propose_v02_migration` requires local-root authoring. It creates a review manifest, one proposal per affected file, and a gated root `okf_version: "0.2"` proposal. Nothing is accepted automatically; the root proposal can be accepted only after every child is accepted and the complete catalog validates.
 
 ## Generator Plugins
 
@@ -539,3 +653,4 @@ Generated output is regular Markdown/YAML OKF and is validated by the same index
 - MCP initialization negotiates an explicit supported version and falls back to `2025-11-25` for well-formed unsupported versions.
 - There is no file watcher. Restart the server after external file changes. Concepts accepted through MCP authoring refresh the MCP server index immediately.
 - The HTTP API is a lightweight built-in server, not a full hosted multi-tenant service.
+- OKF v0.2 computation support is static inspection and preflight only; no computation or attester is executed.

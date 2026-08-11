@@ -8,23 +8,23 @@
     "source": "github"
   },
   "websiteUrl": "https://github.com/mfdaves/okf-mcp#readme",
-  "version": "0.3.3",
+  "version": "0.4.0",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "@mfdaves/okf-mcp",
-      "version": "0.3.3",
+      "version": "0.4.0",
       "transport": {
         "type": "stdio"
       },
       "packageArguments": [
         {
           "type": "named",
-          "name": "--project",
-          "description": "Absolute path to the OKF project configuration.",
+          "name": "--root",
+          "description": "Absolute path to one OKF bundle root.",
           "isRequired": true,
           "format": "filepath",
-          "placeholder": "/absolute/path/to/okf.project.yaml"
+          "placeholder": "/absolute/path/to/okf-root"
         },
         {
           "type": "positional",

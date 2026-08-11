@@ -23,15 +23,17 @@ relations:
 
 # OKF Indexer
 
-The indexer loads configured bundle directories, applies include and exclude filters, parses Markdown documents with the safe YAML core schema, and builds a bounded in-memory graph. It keeps separate collections for all documents, valid concepts, reserved resources, edges, warnings, and errors.
+The indexer normally loads one OKF root, validates UTF-8, parses YAML with the safe core schema, parses body structure with CommonMark, and builds an in-memory graph. Its optional workspace mode can load several roots with include and exclude filters. It keeps separate collections for documents, concepts, reserved resources, explicitly referenced assets, edges, warnings, and errors.
 
-Both canonical ids and path-derived URIs resolve through the URI map. Graph operations normalize path aliases to canonical ids before traversal.
+Portable identities are extensionless path-derived Concept IDs. `.md`, custom-id, and workspace-scoped `okf://` locators resolve through compatibility maps; ambiguous bare IDs require a scoped locator.
 
-Markdown links become `markdown_link` edges. Frontmatter relations become typed `relation` edges. Internal targets are validated, while non-OKF schemes are recorded as external references.
+Markdown links and extension relations remain `markdown_link` and `relation` edges. Standard v0.2 fields add `resource`, `source`, `computation`, `executor`, and `attester` edges. Safe bundle-local artifacts are registered only when explicitly referenced, with byte limits, symlink rejection, MIME classification, and SHA256; content is never executed.
 
 Markdown targets resolve to an exact document first. When no exact document exists, a directory link resolves to that directory's reserved `index.md`. This rule is shared by local indexing, remote indexing, and authoring candidate validation, so the resulting edge uses the nested index document's canonical URI.
 
-Validation is layered. OKF conformance checks parseable mapping frontmatter, a non-empty concept `type`, and the reserved structures of `index.md` and `log.md`. Unknown fields and unknown type values remain conformant. Project validity additionally covers missing roots, invalid paths, duplicate bundle ids, duplicate concept URIs, unsupported relation types, broken Markdown links, and broken internal targets.
+Validation is layered. OKF conformance checks UTF-8, parseable mapping frontmatter, a non-empty string `type`, and reserved structures. Optional v0.2 family problems are advisories. Project validity covers path and identity integrity, relation vocabulary, and internal targets; broken Markdown links invalidate only under `strictLinks`.
+
+Remote loading is two-pass: selected Markdown is parsed first, then only referenced local assets are fetched. Revision and blob metadata, digests, counts, and unresolved references remain attached to the read-only bundle.
 
 Results expose `conformant`, `validForProject`, and structured diagnostics. `valid` is a compatibility alias for `validForProject`. Valid concepts continue to be served even when other files produce diagnostics.
 

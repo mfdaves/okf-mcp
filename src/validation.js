@@ -6,9 +6,9 @@ const CONFORMANCE_WARNING_CODES = new Set([
 ]);
 
 const PROJECT_INVALID_WARNING_CODES = new Set([
-  "broken_link",
   "invalid_id",
   "link_outside_root",
+  "broken_semantic_reference",
 ]);
 
 function inBundle(entry, bundle) {
@@ -39,6 +39,7 @@ function normalizeDiagnostic(entry, defaults) {
 
 function validateIndex(index, bundle) {
   const source = index || {};
+  const strictLinks = Boolean(source.strictLinks || (source.project && source.project.strictLinks));
   const errors = (source.errors || []).filter((entry) => inBundle(entry, bundle));
   const warnings = (source.warnings || []).filter((entry) => inBundle(entry, bundle));
   const documents = (source.documents || []).filter((doc) => !bundle || doc.bundle === bundle);
@@ -87,7 +88,8 @@ function validateIndex(index, bundle) {
     add(entry, {
       severity: "warning",
       layer: "project",
-      invalidatesProject: PROJECT_INVALID_WARNING_CODES.has(entry.code),
+      invalidatesProject: PROJECT_INVALID_WARNING_CODES.has(entry.code)
+        || (entry.code === "broken_link" && strictLinks),
     });
   });
 
@@ -95,6 +97,8 @@ function validateIndex(index, bundle) {
     entry.layer === "conformance" && entry.severity === "error"
   ));
   const projectDiagnostics = diagnostics.filter((entry) => entry.layer === "project");
+  const advisories = diagnostics.filter((entry) => entry.layer === "v0.2");
+  const computations = documents.filter((doc) => doc.signals && doc.signals.computation);
   const conformant = conformanceErrors.length === 0;
   const validForProject = conformant
     && errors.length === 0
@@ -104,9 +108,16 @@ function validateIndex(index, bundle) {
     conformant,
     validForProject,
     valid: validForProject,
+    strictLinks,
     diagnostics,
     conformanceErrors,
     projectDiagnostics,
+    advisories,
+    readiness: {
+      attestedComputations: computations.length,
+      attestationReady: computations.filter((doc) => doc.signals.computation.attestationReady).length,
+      attestationNotReady: computations.filter((doc) => !doc.signals.computation.attestationReady).map((doc) => doc.uri),
+    },
     errors,
     warnings,
   };

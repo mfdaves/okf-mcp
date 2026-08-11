@@ -2,7 +2,8 @@
 
 const fs = require("fs");
 const path = require("path");
-const { isInsidePath } = require("./project");
+const { safeProjectPath } = require("./project");
+const { renderFrontmatter } = require("./authoring");
 
 function ensureDir(dirPath) {
   fs.mkdirSync(dirPath, { recursive: true });
@@ -16,41 +17,15 @@ function slug(value) {
   return String(value || "concept").replace(/[^A-Za-z0-9_.-]+/g, "-").replace(/^-+|-+$/g, "") || "concept";
 }
 
-function yamlScalar(value) {
-  if (value === null) {
-    return "null";
-  }
-  if (typeof value === "boolean" || typeof value === "number") {
-    return String(value);
-  }
-  return JSON.stringify(String(value || ""));
-}
-
-function yamlValue(lines, key, value) {
-  if (Array.isArray(value)) {
-    lines.push(`${key}:`);
-    value.forEach((entry) => {
-      if (entry && typeof entry === "object") {
-        const entries = Object.entries(entry);
-        const first = entries.shift();
-        lines.push(`  - ${first[0]}: ${yamlScalar(first[1])}`);
-        entries.forEach(([childKey, childValue]) => {
-          lines.push(`    ${childKey}: ${yamlScalar(childValue)}`);
-        });
-      } else {
-        lines.push(`  - ${yamlScalar(entry)}`);
-      }
-    });
-    return;
-  }
-  lines.push(`${key}: ${yamlScalar(value)}`);
-}
-
 function conceptMarkdown(frontmatter, bodyLines) {
-  const lines = ["---"];
-  Object.keys(frontmatter).forEach((key) => yamlValue(lines, key, frontmatter[key]));
-  lines.push("---", "");
+  const lines = ["---", renderFrontmatter(frontmatter), "---", ""];
   return lines.concat(bodyLines || []).join("\n") + "\n";
+}
+
+function generatedMetadata(plugin) {
+  return {
+    by: `process:okf-mcp/${plugin.name || plugin.type || "generator"}`,
+  };
 }
 
 function walkFiles(root, extensions) {
@@ -75,28 +50,22 @@ function outputRoot(project, plugin) {
   if (!plugin.output) {
     throw new Error(`Plugin ${plugin.name || plugin.type || "<unnamed>"} is missing output.`);
   }
-  if (path.isAbsolute(String(plugin.output))) {
-    throw new Error(`Plugin ${plugin.name || plugin.type || "<unnamed>"} output must be relative to the project root.`);
-  }
-  const resolved = path.resolve(project.root, plugin.output);
-  if (!isInsidePath(project.root, resolved)) {
-    throw new Error(`Plugin ${plugin.name || plugin.type || "<unnamed>"} output resolves outside the project root.`);
-  }
-  return resolved;
+  return safeProjectPath(
+    project.root,
+    plugin.output,
+    `Plugin ${plugin.name || plugin.type || "<unnamed>"} output`,
+  );
 }
 
 function sourceRoot(project, plugin) {
   if (!plugin.root) {
     throw new Error(`Plugin ${plugin.name || plugin.type || "<unnamed>"} is missing root.`);
   }
-  if (path.isAbsolute(String(plugin.root))) {
-    throw new Error(`Plugin ${plugin.name || plugin.type || "<unnamed>"} root must be relative to the project root.`);
-  }
-  const resolved = path.resolve(project.root, plugin.root);
-  if (!isInsidePath(project.root, resolved)) {
-    throw new Error(`Plugin ${plugin.name || plugin.type || "<unnamed>"} root resolves outside the project root.`);
-  }
-  return resolved;
+  return safeProjectPath(
+    project.root,
+    plugin.root,
+    `Plugin ${plugin.name || plugin.type || "<unnamed>"} root`,
+  );
 }
 
 function writeGeneratedFiles(root, files) {
@@ -124,6 +93,10 @@ function generateFilesystemConcepts(project, plugin) {
       type: plugin.conceptType || "Repository File",
       title,
       description: `Repository file ${relative}.`,
+      resource: `repo://${relative}`,
+      sources: [{ resource: `repo://${relative}`, title }],
+      generated: generatedMetadata(plugin),
+      // Compatibility extension retained through the 0.4.x migration window.
       source: `repo://${relative}`,
       tags: Array.isArray(plugin.tags) ? plugin.tags : ["generated", "file"],
     }, [
@@ -160,6 +133,10 @@ function generateJsonSpecConcepts(project, plugin) {
       type: plugin.conceptType || "JSON Spec",
       title: key,
       description: json.description || `Generated concept for JSON spec ${key}.`,
+      resource: `repo://${relative}`,
+      sources: [{ resource: `repo://${relative}`, title: key }],
+      generated: generatedMetadata(plugin),
+      // Compatibility extension retained through the 0.4.x migration window.
       source: `repo://${relative}`,
       tags: Array.isArray(plugin.tags) ? plugin.tags : ["generated", "spec"],
       relations,
@@ -179,6 +156,9 @@ function generateJsonSpecConcepts(project, plugin) {
 }
 
 function generateProject(project) {
+  if (Array.isArray(project && project.errors) && project.errors.length) {
+    throw new Error("Cannot run generator plugins while the project configuration is invalid.");
+  }
   const results = [];
   project.plugins.forEach((plugin) => {
     const type = plugin.type || plugin.name;

@@ -41,6 +41,6 @@ The package smoke gate verifies that package, lockfile, CLI, MCP server, and Reg
 
 The repository release skill defines the package identity, capability matrix, protocol, schema enforcement, self-validation, tarball, clean-install, prerelease, and registry synchronization gates. The trusted-publishing workflow repeats those checks against an exact Git release tag before publishing. Release-candidate metadata is not published to the MCP Registry; stable Registry publication follows successful npm and `npx` verification.
 
-Concept ids use the stable `okf://okf-mcp/...` namespace. Internal relations target those stable ids, while `repo://` references connect durable concepts to their current implementation sources without turning source files into concepts.
+Portable Concept IDs are extensionless paths inside this root. `okf://okf-mcp/...` remains a deterministic MCP/workspace locator, while `repo://` references connect durable concepts to implementation sources without turning source files into concepts.
 
 The bundle deliberately documents product contracts, runtime boundaries, workflows, and policies rather than mirroring every source file.

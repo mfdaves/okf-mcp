@@ -314,6 +314,16 @@ test("tool schema and business failures return ToolResult errors", async () => {
   assert.equal(missing.isError, true);
   assert.match(missing.content[0].text, /Unknown OKF concept URI/);
 
+  const invalidAsOf = await server.handle({
+    method: "tools/call",
+    params: {
+      name: "search_concepts",
+      arguments: { asOf: "not-a-date" },
+    },
+  });
+  assert.equal(invalidAsOf.isError, true);
+  assert.match(invalidAsOf.content[0].text, /asOf must be a valid Date/);
+
   const missingGraphConcept = await server.handle({
     method: "tools/call",
     params: {

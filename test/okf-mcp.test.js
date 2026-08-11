@@ -70,6 +70,9 @@ function makeGitHubFetchMock(files) {
   files.forEach((file) => byPath.set(file.path, file.text));
   return async function mockFetch(url) {
     const textUrl = String(url);
+    if (textUrl.startsWith("https://api.github.com/repos/acme/widgets/commits/")) {
+      return { ok: true, json: async () => ({ sha: "a".repeat(40) }) };
+    }
     if (textUrl.startsWith("https://api.github.com/repos/acme/widgets/contents/")) {
       const parsed = new URL(textUrl);
       const apiPath = decodeURIComponent(parsed.pathname.split("/contents/")[1] || "");
@@ -113,7 +116,7 @@ test("indexes valid concepts, reserved files, warnings, and links", () => {
   assert.equal(index.reserved.length, 2);
   assert.equal(index.warnings.some((warning) => warning.code === "missing_type" && warning.path === "specs/bad.md"), true);
   assert.equal(index.warnings.some((warning) => warning.code === "broken_link"), true);
-  assert.equal(index.edges.some((edge) => edge.source.endsWith("/specs/alpha.md") && edge.target.endsWith("/specs/beta.md") && !edge.broken), true);
+  assert.equal(index.edges.some((edge) => edge.source.endsWith("/specs/alpha") && edge.target.endsWith("/specs/beta") && !edge.broken), true);
 });
 
 test("structured search supports query, tags, type, path, frontmatter, and links", () => {
@@ -124,10 +127,10 @@ test("structured search supports query, tags, type, path, frontmatter, and links
   assert.equal(searchConcepts(index, { tagsAll: ["spec", "report"] }).total, 1);
   assert.equal(searchConcepts(index, { types: ["concept"], pathPrefix: "specs/" }).total, 2);
   assert.equal(searchConcepts(index, { frontmatter: { active: true } }).total, 1);
-  const beta = "okf://fixture/specs/beta.md";
-  const alpha = "okf://fixture/specs/alpha.md";
-  assert.equal(searchConcepts(index, { linkedTo: beta }).results[0].uri, alpha);
-  assert.equal(searchConcepts(index, { linkedFrom: alpha }).results[0].uri, beta);
+  const betaAlias = "okf://fixture/specs/beta.md";
+  const alphaAlias = "okf://fixture/specs/alpha.md";
+  assert.equal(searchConcepts(index, { linkedTo: betaAlias }).results[0].uri, "okf://fixture/specs/alpha");
+  assert.equal(searchConcepts(index, { linkedFrom: alphaAlias }).results[0].uri, "okf://fixture/specs/beta");
 });
 
 test("graph tools expose graph, neighbors, subgraph, paths, summary, and exports", () => {
@@ -136,11 +139,11 @@ test("graph tools expose graph, neighbors, subgraph, paths, summary, and exports
   const graph = getGraph(index, {});
   assert.equal(graph.nodes.length, 2);
   assert.equal(graph.edges.length, 1);
-  const alpha = "okf://fixture/specs/alpha.md";
-  const beta = "okf://fixture/specs/beta.md";
-  assert.equal(getNeighbors(index, alpha).outbound.length, 1);
-  assert.equal(getSubgraph(index, { uri: alpha, depth: 1 }).nodes.length, 2);
-  assert.deepEqual(findPaths(index, alpha, beta).paths, [[alpha, beta]]);
+  const alpha = "okf://fixture/specs/alpha";
+  const beta = "okf://fixture/specs/beta";
+  assert.equal(getNeighbors(index, `${alpha}.md`).outbound.length, 1);
+  assert.equal(getSubgraph(index, { uri: `${alpha}.md`, depth: 1 }).nodes.length, 2);
+  assert.deepEqual(findPaths(index, `${alpha}.md`, `${beta}.md`).paths, [[alpha, beta]]);
   assert.equal(graphSummary(index).concepts, 2);
   assert.match(exportGraph(index, { format: "dot" }), /digraph OKF/);
   assert.match(exportGraph(index, { format: "mermaid" }), /graph TD/);
@@ -150,8 +153,8 @@ test("duplicate bundle ids are reported instead of mutating stable URIs", () => 
   const a = makeFixture();
   const b = makeFixture();
   const index = buildIndex([`same=${a}`, `same=${b}`]);
-  assert.equal(index.bundles.length, 2);
-  assert.deepEqual(index.bundles.map((bundle) => bundle.id), ["same", "same"]);
+  assert.equal(index.bundles.length, 1);
+  assert.deepEqual(index.bundles.map((bundle) => bundle.id), ["same"]);
   assert.equal(index.errors.some((error) => error.code === "duplicate_bundle_id"), true);
 });
 
@@ -180,6 +183,24 @@ test("include and exclude filters control indexed Markdown files", () => {
   const index = buildIndex([{ id: "fixture", root, include: ["keep/**"], exclude: ["skip/**"] }]);
   assert.equal(index.concepts.length, 1);
   assert.equal(index.concepts[0].path, "keep/alpha.md");
+});
+
+test("recursive Markdown globs include bundle-root documents", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "okf-root-glob-"));
+  fs.mkdirSync(path.join(root, "nested"), { recursive: true });
+  fs.writeFileSync(path.join(root, "index.md"), "# Root\n", "utf8");
+  fs.writeFileSync(path.join(root, "nested", "concept.md"), [
+    "---",
+    "type: Concept",
+    "title: Nested",
+    "---",
+    "",
+    "# Nested",
+    "",
+  ].join("\n"), "utf8");
+  const index = buildIndex([{ id: "fixture", root, include: ["**/*.md"] }]);
+  assert.equal(index.documents.some((document) => document.path === "index.md"), true);
+  assert.equal(index.documents.some((document) => document.path === "nested/concept.md"), true);
 });
 
 test("frontmatter can close at EOF and invalid stable ids warn", () => {
@@ -268,6 +289,8 @@ test("project config loads multiple bundles and validates typed cross-bundle rel
   assert.equal(searchConcepts(index, { query: "alpha-service" }).total, 1);
   assert.deepEqual(findPaths(index, "okf://app/services/alpha", "okf://tables/tables/raw_alpha").paths, [["okf://app/services/alpha", "okf://tables/tables/raw_alpha"]]);
   assert.equal(getGraph(index, { includeExternal: true }).nodes.some((node) => node.id === "repo://specs/alpha.json"), true);
+  assert.equal(getNeighbors(index, "okf://app/services/alpha").outbound.some((entry) => entry.node.id === "repo://specs/alpha.json"), false);
+  assert.equal(getNeighbors(index, "okf://app/services/alpha", { includeExternal: true }).outbound.some((entry) => entry.node.id === "repo://specs/alpha.json"), true);
 });
 
 test("published okf-mcp reference bundle is complete, valid, and packaged", () => {
@@ -277,7 +300,7 @@ test("published okf-mcp reference bundle is complete, valid, and packaged", () =
 
   assert.equal(index.errors.length, 0);
   assert.equal(index.warnings.length, 0);
-  assert.equal(index.concepts.length, 11);
+  assert.equal(index.concepts.length, 14);
   assert.equal(index.reserved.length, 1);
   assert.equal(index.byUri.has("okf://okf-mcp/overview/okf-mcp"), true);
   assert.equal(index.byUri.has("okf://okf-mcp/policies/authoring-safety"), true);
@@ -410,8 +433,8 @@ test("GitHub remote bundles load Markdown concepts without local checkout", asyn
   const index = buildIndex([bundle]);
   assert.equal(index.errors.length, 0);
   assert.equal(index.concepts.length, 2);
-  assert.equal(searchConcepts(index, { tagsAny: ["remote"] }).results[0].uri, "okf://docs/concepts/alpha.md");
-  assert.equal(index.edges.some((edge) => edge.source === "okf://docs/concepts/alpha.md" && edge.target === "okf://docs/concepts/beta.md"), true);
+  assert.equal(searchConcepts(index, { tagsAny: ["remote"] }).results[0].uri, "okf://docs/concepts/alpha");
+  assert.equal(index.edges.some((edge) => edge.source === "okf://docs/concepts/alpha" && edge.target === "okf://docs/concepts/beta"), true);
 });
 
 test("project configs can include remote bundles", async () => {
@@ -572,6 +595,8 @@ function makeAuthoringProject() {
     "bundles:",
     "  - id: app",
     "    root: okf/bundle",
+    "    exclude:",
+    "      - private/**",
     "",
   ].join("\n"), "utf8");
   fs.writeFileSync(path.join(bundle, "existing.md"), [
@@ -586,6 +611,8 @@ function makeAuthoringProject() {
     "# Existing",
     "",
   ].join("\n"), "utf8");
+  fs.mkdirSync(path.join(bundle, "private"), { recursive: true });
+  fs.writeFileSync(path.join(bundle, "private", "data.json"), "{}\n", "utf8");
   const store = FileConceptStore.fromProject(path.join(root, "okf.project.yaml"), { proposalRoot: proposals });
   const service = new ConceptAuthoringService(store);
   return { root, bundle, proposals, store, service };
@@ -645,6 +672,50 @@ test("authoring rejects unsafe paths, duplicate ids, and invalid relations", () 
   assert.equal(badRelation.valid, false);
   assert.equal(badRelation.errors.some((error) => error.code === "invalid_relation_type"), true);
   assert.equal(badRelation.errors.some((error) => error.code === "broken_relation"), true);
+
+  const missingResource = service.validateConcept({
+    bundle: "app",
+    path: "missing-resource.md",
+    frontmatter: { type: "Concept", title: "Missing", resource: "missing.json" },
+    body: "# Missing",
+  });
+  assert.equal(missingResource.valid, false);
+  assert.equal(missingResource.errors.some((error) => error.code === "broken_semantic_reference"), true);
+
+  const excludedResource = service.validateConcept({
+    bundle: "app",
+    path: "excluded-resource.md",
+    frontmatter: { type: "Concept", title: "Excluded", resource: "private/data.json" },
+    body: "# Excluded",
+  });
+  assert.equal(excludedResource.valid, false);
+  assert.equal(excludedResource.errors.some((error) => (
+    error.code === "broken_semantic_reference" && /excluded/.test(error.message)
+  )), true);
+
+  for (const id of ["", null, false, "okf://", "okf://app", "okf://app/../unsafe"]) {
+    const invalidId = service.validateConcept({
+      bundle: "app",
+      path: `invalid-id-${String(id).replace(/[^a-z0-9]/gi, "-") || "empty"}.md`,
+      frontmatter: { id, type: "Concept", title: "Invalid ID" },
+      body: "# Invalid ID",
+    });
+    assert.equal(invalidId.valid, false);
+    assert.equal(invalidId.errors.some((error) => error.code === "invalid_id"), true);
+  }
+
+  const reservedRelation = service.validateConcept({
+    bundle: "app",
+    path: "reserved-relation.md",
+    frontmatter: {
+      type: "Concept",
+      title: "Reserved relation",
+      relations: [{ type: "related_to", target: "okf://app/index.md" }],
+    },
+    body: "# Reserved relation",
+  });
+  assert.equal(reservedRelation.valid, false);
+  assert.equal(reservedRelation.errors.some((error) => error.code === "broken_relation"), true);
 });
 
 test("authoring proposals are accepted into new subdirectories", async () => {
@@ -760,6 +831,38 @@ test("authoring rejects concept writes through symlinked directories", async (t)
     /symbolic link/,
   );
   assert.equal(fs.existsSync(path.join(outside, "escaped.md")), false);
+});
+
+test("proposal storage rejects symlink roots and serializes competing transitions", async (t) => {
+  if (process.platform === "win32") {
+    t.skip("Directory symlinks require elevated privileges on Windows.");
+    return;
+  }
+  const fixture = makeAuthoringProject();
+  const external = fs.mkdtempSync(path.join(os.tmpdir(), "okf-proposal-outside-"));
+  const linked = path.join(fixture.root, "linked-proposals");
+  fs.symlinkSync(external, linked, "dir");
+  assert.throws(
+    () => FileConceptStore.fromProject(path.join(fixture.root, "okf.project.yaml"), { proposalRoot: linked }),
+    /Proposal root|symbolic link|inside the project root/,
+  );
+
+  const proposed = await fixture.service.proposeConcept({
+    bundle: "app",
+    path: "transition.md",
+    frontmatter: { type: "Concept", title: "Transition" },
+    body: "# Transition",
+  });
+  const outcomes = await Promise.allSettled([
+    fixture.service.acceptProposal({ proposalId: proposed.proposal.id }),
+    fixture.service.rejectProposal({ proposalId: ` ${proposed.proposal.id} `, reason: "competing review" }),
+  ]);
+  assert.equal(outcomes.filter((outcome) => outcome.status === "fulfilled").length, 1);
+  const finalProposal = await fixture.service.getProposal({ proposalId: proposed.proposal.id });
+  assert.equal(
+    fs.existsSync(path.join(fixture.bundle, "transition.md")),
+    finalProposal.status === "accepted",
+  );
 });
 
 test("MCP authoring tools create and accept concept proposals in project mode", async () => {
@@ -886,6 +989,11 @@ test("HTTP authoring API protects proposal mutations with bearer auth", async ()
     },
   });
   assert.equal(proposed.status, 200);
+  const unauthorizedRead = await callHttp(handler, {
+    method: "GET",
+    url: `/v1/proposals/${proposed.json.proposal.id}`,
+  });
+  assert.equal(unauthorizedRead.status, 401);
   const accepted = await callHttp(handler, {
     method: "POST",
     url: `/v1/proposals/${proposed.json.proposal.id}/accept`,
@@ -1153,8 +1261,8 @@ test("bundle mode indexes a neutral multi-directory concept graph", () => {
   assert.equal(index.concepts.some((doc) => doc.path === "tables/raw_alpha.md"), true);
   assert.equal(
     index.edges.some((edge) => (
-      edge.source === "okf://neutral/services/alpha.md" &&
-      edge.target === "okf://neutral/tables/raw_alpha.md"
+      edge.source === "okf://neutral/services/alpha" &&
+      edge.target === "okf://neutral/tables/raw_alpha"
     )),
     true,
   );

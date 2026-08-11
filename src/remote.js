@@ -1,11 +1,20 @@
 "use strict";
 
+const crypto = require("crypto");
 const path = require("path");
+const {
+  collectAssetReferences,
+  classifyAssetContent,
+  mimeIsText,
+  mimeTypeForPath,
+} = require("./assets");
+const { parseMarkdownText } = require("./parser");
 
 const DEFAULT_REMOTE_LIMITS = {
   maxFiles: 500,
   maxFileBytes: 1024 * 1024,
   maxTotalBytes: 5 * 1024 * 1024,
+  maxInventoryFiles: 5000,
 };
 
 function normalizeSlashes(value) {
@@ -28,7 +37,12 @@ function parseGitHubBundleUrl(url) {
   } catch (error) {
     throw new Error(`Invalid GitHub bundle URL: ${url || "<missing>"}`);
   }
-  if (parsed.protocol !== "https:" || parsed.hostname !== "github.com") {
+  if (parsed.protocol !== "https:"
+    || parsed.hostname !== "github.com"
+    || parsed.username
+    || parsed.password
+    || parsed.search
+    || parsed.hash) {
     throw new Error("Remote OKF v1 supports only https://github.com URLs.");
   }
   const parts = parsed.pathname.split("/").filter(Boolean);
@@ -59,10 +73,10 @@ async function fetchJson(fetchImpl, url) {
   return response.json();
 }
 
-async function fetchText(fetchImpl, url) {
+async function fetchBytes(fetchImpl, url) {
   const response = await fetchImpl(url, {
     headers: {
-      Accept: "text/plain",
+      Accept: "application/octet-stream",
       "User-Agent": "okf-mcp",
     },
   });
@@ -70,7 +84,66 @@ async function fetchText(fetchImpl, url) {
     const status = response ? `${response.status} ${response.statusText || ""}`.trim() : "no response";
     throw new Error(`GitHub raw file request failed: ${status}`);
   }
-  return response.text();
+  if (typeof response.arrayBuffer === "function") {
+    return Buffer.from(await response.arrayBuffer());
+  }
+  return Buffer.from(await response.text(), "utf8");
+}
+
+function gitBlobSha(content) {
+  const header = Buffer.from(`blob ${content.length}\0`, "utf8");
+  return crypto.createHash("sha1").update(header).update(content).digest("hex");
+}
+
+function patternToRegex(pattern) {
+  const text = normalizeSlashes(pattern);
+  let source = "";
+  for (let index = 0; index < text.length; index += 1) {
+    const character = text[index];
+    if (character === "*") {
+      if (text[index + 1] === "*") {
+        source += ".*";
+        index += 1;
+      } else {
+        source += "[^/]*";
+      }
+    } else {
+      source += character.replace(/[|\\{}()[\]^$+?.]/g, "\\$&");
+    }
+  }
+  return new RegExp(`^${source}$`);
+}
+
+function matchesPattern(relativePath, pattern) {
+  const normalizedPath = normalizeSlashes(relativePath);
+  const normalizedPattern = normalizeSlashes(pattern);
+  return normalizedPath === normalizedPattern
+    || (normalizedPattern.endsWith("/") && normalizedPath.startsWith(normalizedPattern))
+    || (normalizedPattern.includes("*") && patternToRegex(normalizedPattern).test(normalizedPath))
+    || (!normalizedPattern.includes("*") && normalizedPath.startsWith(`${normalizedPattern}/`));
+}
+
+function allowsRemotePath(config, relativePath) {
+  const include = Array.isArray(config.include) ? config.include : [];
+  const exclude = Array.isArray(config.exclude) ? config.exclude : [];
+  return (!include.length || include.some((pattern) => matchesPattern(relativePath, pattern)))
+    && !exclude.some((pattern) => matchesPattern(relativePath, pattern));
+}
+
+function excludesRemotePath(config, relativePath) {
+  const exclude = Array.isArray(config.exclude) ? config.exclude : [];
+  return exclude.some((pattern) => matchesPattern(relativePath, pattern));
+}
+
+function remoteReferencePath(fromPath, reference) {
+  const raw = normalizeSlashes(String(reference || "").trim()).split("#")[0];
+  const relative = raw.startsWith("/")
+    ? path.posix.normalize(raw.slice(1))
+    : path.posix.normalize(path.posix.join(path.posix.dirname(fromPath), raw));
+  if (!relative || relative === "." || relative === ".." || relative.startsWith("../") || path.posix.isAbsolute(relative)) {
+    return null;
+  }
+  return relative;
 }
 
 function relativeRemotePath(rootPath, filePath) {
@@ -97,10 +170,26 @@ async function fetchGitHubBundle(config, options) {
   }
   const limits = Object.assign({}, DEFAULT_REMOTE_LIMITS, (options && options.limits) || {});
   const documents = [];
+  const assets = [];
+  const inventory = new Map();
+  const unresolvedReferences = [];
   let totalBytes = 0;
 
+  let commitSha = /^[0-9a-f]{40}$/i.test(source.ref) ? source.ref : null;
+  if (!commitSha) {
+    const commit = await fetchJson(
+      fetchImpl,
+      `https://api.github.com/repos/${source.owner}/${source.repo}/commits/${encodeURIComponent(source.ref)}`,
+    );
+    if (!commit || !/^[0-9a-f]{40}$/i.test(String(commit.sha || ""))) {
+      throw new Error(`GitHub ref did not resolve to an immutable commit SHA: ${source.ref}`);
+    }
+    commitSha = String(commit.sha);
+  }
+  const pinnedRef = commitSha;
+
   async function walk(apiPath) {
-    const apiUrl = `https://api.github.com/repos/${source.owner}/${source.repo}/contents/${encodePath(apiPath)}?ref=${encodeURIComponent(source.ref)}`;
+    const apiUrl = `https://api.github.com/repos/${source.owner}/${source.repo}/contents/${encodePath(apiPath)}?ref=${encodeURIComponent(pinnedRef)}`;
     const entries = await fetchJson(fetchImpl, apiUrl);
     const list = Array.isArray(entries) ? entries : [entries];
     for (const entry of list) {
@@ -108,20 +197,29 @@ async function fetchGitHubBundle(config, options) {
         await walk(entry.path);
         continue;
       }
-      if (entry.type !== "file" || !String(entry.name || "").toLowerCase().endsWith(".md")) {
+      if (entry.type !== "file") {
         continue;
       }
-      if (documents.length >= limits.maxFiles) {
-        throw new Error(`Remote bundle exceeds file limit of ${limits.maxFiles}.`);
+      if (inventory.size >= limits.maxInventoryFiles) {
+        throw new Error(`Remote bundle exceeds inventory limit of ${limits.maxInventoryFiles} files.`);
       }
+      const relativePath = relativeRemotePath(source.path, entry.path);
+      inventory.set(relativePath, entry);
+    }
+  }
+
+  async function fetchInventoryEntry(entry, relativePath, kind) {
+    if (documents.length + assets.length >= limits.maxFiles) {
+      throw new Error(`Remote bundle exceeds file limit of ${limits.maxFiles}.`);
+    }
       if (Number(entry.size || 0) > limits.maxFileBytes) {
         throw new Error(`Remote file exceeds byte limit: ${entry.path}`);
       }
       if (!entry.download_url) {
         throw new Error(`Remote file has no download URL: ${entry.path}`);
       }
-      const text = await fetchText(fetchImpl, entry.download_url);
-      const bytes = Buffer.byteLength(text, "utf8");
+      const content = await fetchBytes(fetchImpl, entry.download_url);
+      const bytes = content.length;
       if (bytes > limits.maxFileBytes) {
         throw new Error(`Remote file exceeds byte limit after download: ${entry.path}`);
       }
@@ -129,20 +227,132 @@ async function fetchGitHubBundle(config, options) {
       if (totalBytes > limits.maxTotalBytes) {
         throw new Error(`Remote bundle exceeds total byte limit of ${limits.maxTotalBytes}.`);
       }
-      documents.push({
-        path: relativeRemotePath(source.path, entry.path),
-        text,
-        source: `github://${source.owner}/${source.repo}/${source.ref}/${entry.path}`,
-      });
-    }
+      if (/^[0-9a-f]{40}$/i.test(String(entry.sha || ""))
+        && gitBlobSha(content).toLowerCase() !== String(entry.sha).toLowerCase()) {
+        throw new Error(`Remote file content does not match its Git blob SHA: ${entry.path}`);
+      }
+      if (kind === "document") {
+        let text;
+        try {
+          text = new TextDecoder("utf-8", { fatal: true }).decode(content);
+        } catch {
+          throw new Error(`Remote Markdown document is not valid UTF-8: ${entry.path}`);
+        }
+        const document = {
+          path: relativePath,
+          text,
+          source: `github://${source.owner}/${source.repo}/${pinnedRef}/${entry.path}`,
+          blobSha: entry.sha || null,
+        };
+        documents.push(document);
+        return document;
+      }
+      return { content, bytes };
   }
 
   await walk(source.path);
+  for (const [relativePath, entry] of inventory) {
+    if (!relativePath.toLowerCase().endsWith(".md") || !allowsRemotePath(config, relativePath)) {
+      continue;
+    }
+    await fetchInventoryEntry(entry, relativePath, "document");
+  }
+
+  const referenceGroups = new Map();
+  const bundleId = sanitizeRemoteId(config.id, path.posix.basename(source.path));
+  documents.forEach((document) => {
+    let parsed;
+    try {
+      parsed = parseMarkdownText(
+        { id: bundleId, root: "", remote: true },
+        document.path,
+        document.text,
+        document.source,
+      );
+    } catch {
+      return;
+    }
+    collectAssetReferences(parsed).forEach((reference) => {
+      const resolvedPath = remoteReferencePath(document.path, reference.value);
+      if (!resolvedPath) {
+        unresolvedReferences.push({
+          path: document.path,
+          field: reference.field,
+          target: reference.value,
+          code: "asset_outside_root",
+        });
+        return;
+      }
+      if (resolvedPath.toLowerCase().endsWith(".md") && inventory.has(resolvedPath)) {
+        return;
+      }
+      if (excludesRemotePath(config, resolvedPath)) {
+        unresolvedReferences.push({
+          path: document.path,
+          field: reference.field,
+          target: reference.value,
+          resolvedPath,
+          code: "asset_excluded",
+        });
+        return;
+      }
+      if (!referenceGroups.has(resolvedPath)) {
+        referenceGroups.set(resolvedPath, []);
+      }
+      referenceGroups.get(resolvedPath).push(reference);
+    });
+  });
+
+  for (const [relativePath, references] of referenceGroups) {
+    const entry = inventory.get(relativePath);
+    if (!entry) {
+      unresolvedReferences.push.apply(unresolvedReferences, references.map((reference) => ({
+        path: reference.fromPath,
+        field: reference.field,
+        target: reference.value,
+        resolvedPath: relativePath,
+        code: "asset_missing",
+      })));
+      continue;
+    }
+    const fetched = await fetchInventoryEntry(entry, relativePath, "asset");
+    const mimeType = mimeTypeForPath(relativePath);
+    const classification = classifyAssetContent(fetched.content, mimeType);
+    if (mimeIsText(mimeType) && !classification.validUtf8) {
+      unresolvedReferences.push({
+        path: references[0].fromPath,
+        field: references[0].field,
+        target: references[0].value,
+        resolvedPath: relativePath,
+        code: "asset_invalid_utf8",
+      });
+    }
+    assets.push({
+      path: relativePath,
+      size: fetched.bytes,
+      sha256: `sha256:${crypto.createHash("sha256").update(fetched.content).digest("hex")}`,
+      mimeType,
+      kind: classification.kind,
+      encoding: classification.encoding,
+      text: classification.text,
+      ...(classification.kind === "binary" ? { base64: fetched.content.toString("base64") } : {}),
+      roles: Array.from(new Set(references.map((reference) => reference.role))).sort(),
+      referencedBy: references.map((reference) => ({
+        uri: reference.referencedByUri,
+        bundle: bundleId,
+        path: reference.fromPath,
+        field: reference.field,
+        role: reference.role,
+      })),
+      blobSha: entry.sha || null,
+    });
+  }
   return {
-    id: sanitizeRemoteId(config.id, path.posix.basename(source.path)),
+    id: bundleId,
     remote: true,
     root: "",
     documents,
+    assets,
     include: Array.isArray(config.include) ? config.include : [],
     exclude: Array.isArray(config.exclude) ? config.exclude : [],
     remoteSource: {
@@ -153,7 +363,12 @@ async function fetchGitHubBundle(config, options) {
       ref: source.ref,
       path: source.path,
       fileCount: documents.length,
+      documentCount: documents.length,
+      assetCount: assets.length,
       totalBytes,
+      commitSha,
+      revision: pinnedRef,
+      unresolvedReferences,
     },
   };
 }

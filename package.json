@@ -1,6 +1,6 @@
 {
   "name": "@mfdaves/okf-mcp",
-  "version": "0.3.3",
+  "version": "0.4.0",
   "description": "Local-first Open Knowledge Format validator, graph index, CLI, and MCP stdio server.",
   "homepage": "https://github.com/mfdaves/okf-mcp#readme",
   "repository": {
@@ -20,7 +20,7 @@
   "scripts": {
     "test": "node --test",
     "check": "node --test",
-    "self:validate": "node bin/okf-mcp.js --project okf.project.yaml validate",
+    "self:validate": "node bin/okf-mcp.js --root okf/bundles/okf-mcp validate",
     "pack:check": "npm pack --dry-run",
     "package:smoke": "node scripts/package-smoke.js",
     "prepublishOnly": "npm run check && npm run self:validate",
@@ -39,6 +39,7 @@
   "files": [
     "bin",
     "src",
+    ".agents",
     "okf",
     "okf.project.yaml",
     "server.json",
@@ -52,6 +53,7 @@
     "access": "public"
   },
   "dependencies": {
-    "js-yaml": "^5.2.1"
+    "commonmark": "^0.31.2",
+    "js-yaml": "^5.2.3"
   }
 }

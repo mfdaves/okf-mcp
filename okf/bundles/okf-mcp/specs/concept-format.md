@@ -19,14 +19,16 @@ relations:
 
 # OKF Concept Format
 
-An OKF concept is a Markdown file with YAML frontmatter. A non-empty `type` is required. `title`, `description`, `tags`, `aliases`, and typed `relations` provide structured metadata, while the Markdown body carries the durable explanation.
+An OKF concept is a UTF-8 Markdown file with YAML frontmatter. A non-empty string `type` is required. Standard v0.2 metadata families include `resource`, `sources`, `usage_window`, `generated`, `verified`, `status`, `stale_after`, and the Attested Computation contract. The Markdown body carries the durable explanation.
 
-The optional `id` field defines a stable `okf://` URI. Without it, the URI is derived from the bundle id and relative file path. A stable id is preferred for public concepts because it survives file moves. The path-derived URI remains an alias in the index.
+The standard Concept ID is the bundle-relative path with `.md` removed. okf-mcp also creates the workspace-scoped locator `okf://<bundle>/<concept-id>` for MCP resources and federated lookup; it is not the portable OKF identity. The former `.md` URI remains a compatibility alias. The optional `id`, `aliases`, and typed `relations` fields are `okf-mcp` extensions; a valid custom `id` is an additional alias rather than a replacement for the standard identity.
 
 Frontmatter is parsed as a YAML mapping with the safe core schema. Nested mappings, arrays, block scalars, and unknown extension keys are preserved. Duplicate mapping keys and unsupported custom tags are rejected. Unknown concept type values do not fail OKF conformance.
 
 Files named `index.md` and `log.md` are reserved resources and are not concepts. Reserved indexes group local Markdown links under headings. A link to a bundle directory resolves to that directory's nested `index.md` when no exact document target exists. Reserved logs use an H1 title followed by newest-first ISO-dated H2 sections containing list entries.
 
-Internal `okf://` relation targets and Markdown links are checked as project rules rather than redefining minimum document conformance. Other schemes such as `repo://` are retained as opaque external references.
+Consumers normalize bare `verified` mappings into one event and derive exactly `unverified`, `machine-confirmed`, or `human-reviewed`. Missing status defaults to `stable`; freshness is evaluated deterministically against `stale_after`. Malformed optional families produce advisories and fail trust closed without invalidating minimum conformance.
+
+Internal paths, compatibility `okf://` targets, and Markdown links are checked as project rules rather than redefining minimum document conformance. Broken Markdown links are advisory unless `strictLinks` is enabled. CommonMark parsing excludes images and code fences from relationship extraction.
 
 The [indexer](../runtime/indexer.md) validates this contract. Accepted proposals are rendered back into this format by the [file concept store](../runtime/file-concept-store.md).

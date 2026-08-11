@@ -31,7 +31,7 @@ The transport validates the JSON-RPC envelope before dispatch. Parse errors, inv
 
 Each indexed Markdown document is exposed as a `text/markdown` resource. The [MCP tool catalog](../interfaces/mcp-tools.md) exposes discovery, search, graph navigation, validation, remote loading, and proposal-based authoring.
 
-Bundle mode is read oriented. Project mode loads `okf.project.yaml`, enables configured relation types, and supplies the store required by the [authoring workflow](../workflows/concept-authoring.md). Proposal mutation tools remain disabled unless the server starts with `--authoring`. Runtime remote loading remains disabled unless it starts with `--allow-remote-tool`.
+Root mode is the normal single-catalog interface and can supply the local store used by the [authoring workflow](../workflows/concept-authoring.md). Project mode remains an optional federation/configuration extension. Proposal mutation tools remain disabled unless the server starts with `--authoring`; runtime remote loading remains disabled unless it starts with `--allow-remote-tool`.
 
 Remote GitHub bundles are fetched as Markdown and added to the in-memory index. They remain read only and never execute remote code. After an accepted local proposal, one reconstruction path rebuilds the index from configured local bundles, configured remote bundles, and runtime-loaded remote bundles, preserving remote concepts and relationships.
 

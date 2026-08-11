@@ -2,7 +2,7 @@
 id: okf://okf-mcp/runtime/file-concept-store
 type: OKF Runtime Component
 title: File Concept Store
-description: Local proposal and concept persistence boundary used by project authoring.
+description: Local proposal and concept persistence boundary used by root and project authoring.
 tags: [storage, proposals, authoring, filesystem]
 relations:
   - type: consumes
@@ -19,12 +19,14 @@ relations:
 
 # File Concept Store
 
-The file concept store is the persistence boundary for project-mode authoring. Proposal records are JSON files under `.okf-proposals` by default. Concept files remain ordinary Markdown inside configured local bundles.
+The file concept store is the persistence boundary for root- and project-mode authoring. Proposal records are JSON files under `.okf-proposals` by default. Concept files remain ordinary Markdown inside the selected local root.
 
 Proposal states are `proposed`, `accepted`, and `rejected`. Creating or updating a proposal writes only the proposal record. Acceptance revalidates the candidate before changing a concept file.
 
-New concepts use exclusive creation. Updates retain a SHA256 revision of the source content and check it again immediately before atomic replacement. Detected concurrent changes return a conflict and preserve the current file.
+New concepts use exclusive creation. Updates retain a SHA256 revision and check it immediately before atomic replacement. Gated Attested Computation proposals stage the concept plus an optional external computation file and conflict-check every target before acceptance.
 
-Write paths are normalized relative Markdown paths. Reserved files are rejected, bundle boundaries are enforced, and symbolic-link traversal is blocked. Update proposals are also bound to the original bundle, path, and stable concept identity.
+The store rolls back published files when an ordinary acceptance call fails, but a multi-file acceptance is not crash-transactional across process or power loss. Operators must inspect and repair an interrupted acceptance before restarting authoring; the store does not claim database transaction semantics.
 
-This is a local file-backed store intended for a trusted project workspace. It is not a distributed transaction system or multi-writer database. Its invariants are defined by the [authoring safety policy](../policies/authoring-safety.md).
+Write paths remain bundle-relative, bundle boundaries are enforced, and symbolic-link traversal is blocked. Generic tools cannot alter computation contracts. Migration manifests live under `.okf-proposals/migrations`; their child proposals are never auto-accepted, and the reserved version proposal depends on accepted Stage-A children.
+
+This is a local file-backed store intended for a trusted root or project workspace. It is not a distributed transaction system or multi-writer database. Its invariants are defined by the [authoring safety policy](../policies/authoring-safety.md).
