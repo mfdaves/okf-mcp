@@ -448,6 +448,7 @@ function usage() {
     "  --max-content-bytes <n>     Bound asset reads to 1..1048576 bytes (default 65536).",
     "  Search filters: --status, --trust-tier, --freshness, --as-of, --has-sources,",
     "                  --runtime, --attestation-ready, --frontmatter key=value.",
+    "  Text search requires all terms and accepts at most 512 characters and 16 terms.",
     "  --version, -v               Print the package version.",
     "  --help, -h                  Print this help.",
     "  --debug                     Include stack traces in error output.",

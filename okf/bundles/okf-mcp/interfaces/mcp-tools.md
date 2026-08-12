@@ -23,7 +23,7 @@ relations:
 
 The MCP interface groups tools by intent.
 
-Discovery tools list bundles, concepts, types, tags, custom relation types, standard edge kinds, and loaded remote bundles. `get_concept` accepts a portable Concept ID or compatibility locator and returns raw frontmatter and body plus normalized v0.2 signals, referenced-asset metadata, and declared Git-source availability. Search filters lifecycle, trust, freshness at a deterministic date, source presence, generator or verifier actors, runtime, and static attestation readiness.
+Discovery tools list bundles, concepts, types, tags, custom relation types, standard edge kinds, and loaded remote bundles. `get_concept` accepts a portable Concept ID or compatibility locator and returns raw frontmatter and body plus normalized v0.2 signals, referenced-asset metadata, and declared Git-source availability. Search uses a process-local MiniSearch BM25+ index and filters lifecycle, trust, freshness at a deterministic date, source presence, generator or verifier actors, runtime, and static attestation readiness.
 
 Graph tools return bounded graphs, neighbors, subgraphs, paths, summaries, provenance traces, and rendered exports. They can filter semantic edge kinds and optionally include inert asset nodes or unfetched external leaves. Extensionless canonical, `.md`, and custom-id aliases are accepted for lookup.
 
@@ -39,4 +39,4 @@ Every tool supplies a purpose-specific description, descriptions for all input p
 
 The official MCP SDK validates tool arguments against the advertised schema without coercion. Unknown or disabled tools are rejected by SDK dispatch. Argument-schema failures and expected validation, storage, network, read-only, and proposal-conflict failures from enabled tools are returned as tool results with `isError: true`. A validation operation that successfully reports invalid OKF remains a successful tool result.
 
-`list_concepts` applies its optional text query together with its structured filters. Relation-type filtering selects concepts with an outgoing relation of the requested type.
+`search_concepts` and the optional text query on `list_concepts` require every case-insensitive query term, regardless of order. They rank title, type, tags, aliases, description, path, and body while keeping arbitrary frontmatter as an exact structured filter. Queries are bounded to 512 characters and 16 terms; fuzzy, prefix, stemming, and stop-word expansion are not applied. Scores are relative retrieval scores rather than a stable public scale. Relation-type filtering selects concepts with an outgoing relation of the requested type.

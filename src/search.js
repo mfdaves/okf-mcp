@@ -3,6 +3,7 @@
 const { conceptSummary } = require("./indexer");
 const { normalizeV02Signals } = require("./v02");
 const { resolveConcept } = require("./indexer");
+const { normalizeSearchQuery, prepareSearchIndex } = require("./search-index");
 
 function lower(value) {
   return String(value || "").toLowerCase();
@@ -34,22 +35,30 @@ function docText(doc) {
     doc.path,
     doc.tags.join(" "),
     doc.aliases.join(" "),
-    JSON.stringify(doc.frontmatter),
     doc.body,
   ].join("\n");
 }
 
-function snippetFor(doc, query) {
-  if (!query) {
+function snippetFor(doc, terms) {
+  if (!terms.length) {
     return "";
   }
   const text = docText(doc).replace(/\s+/g, " ");
-  const idx = lower(text).indexOf(lower(query));
+  const normalized = lower(text);
+  let idx = -1;
+  let matchedLength = 0;
+  terms.forEach((term) => {
+    const candidate = normalized.indexOf(lower(term));
+    if (candidate !== -1 && (idx === -1 || candidate < idx)) {
+      idx = candidate;
+      matchedLength = String(term).length;
+    }
+  });
   if (idx === -1) {
     return "";
   }
   const start = Math.max(0, idx - 50);
-  return text.slice(start, idx + query.length + 80).trim();
+  return text.slice(start, idx + matchedLength + 80).trim();
 }
 
 function linkedSets(index) {
@@ -166,50 +175,34 @@ function applyFilters(index, options) {
   });
 }
 
-function scoreDoc(doc, query) {
-  if (!query) {
-    return 0;
-  }
-  const q = lower(query);
-  let score = 0;
-  if (lower(doc.title).includes(q)) {
-    score += 8;
-  }
-  if (lower(doc.type).includes(q)) {
-    score += 5;
-  }
-  if (doc.tags.some((tag) => lower(tag).includes(q))) {
-    score += 4;
-  }
-  if (doc.aliases.some((alias) => lower(alias).includes(q))) {
-    score += 4;
-  }
-  if (lower(doc.description).includes(q)) {
-    score += 3;
-  }
-  if (lower(doc.path).includes(q)) {
-    score += 2;
-  }
-  if (lower(doc.body).includes(q)) {
-    score += 1;
-  }
-  return score;
+function compareDocs(left, right) {
+  return left.path.localeCompare(right.path) || left.uri.localeCompare(right.uri);
 }
 
 function searchConcepts(index, options) {
   const config = options || {};
-  const query = String(config.query || "").trim();
+  const { query, terms } = normalizeSearchQuery(config.query);
   const limit = Math.max(1, Math.min(Number(config.limit || 25), 250));
   const offset = Math.max(0, Number(config.offset || 0));
-  let results = applyFilters(index, config).map((doc) => ({
-    doc,
-    score: scoreDoc(doc, query),
-  }));
+  const filteredDocs = applyFilters(index, config);
+  let results;
   if (query) {
-    results = results.filter((entry) => entry.score > 0);
-    results.sort((a, b) => b.score - a.score || a.doc.path.localeCompare(b.doc.path));
+    if (!terms.length) {
+      results = [];
+    } else {
+      const docsByUri = new Map(filteredDocs.map((doc) => [doc.uri, doc]));
+      const allowedUris = new Set(docsByUri.keys());
+      results = prepareSearchIndex(index).search(query, {
+        filter: (result) => allowedUris.has(String(result.id)),
+      }).map((result) => ({
+        doc: docsByUri.get(String(result.id)),
+        score: result.score,
+      })).filter((entry) => Boolean(entry.doc));
+      results.sort((a, b) => b.score - a.score || compareDocs(a.doc, b.doc));
+    }
   } else {
-    results.sort((a, b) => a.doc.path.localeCompare(b.doc.path));
+    results = filteredDocs.map((doc) => ({ doc, score: 0 }));
+    results.sort((a, b) => compareDocs(a.doc, b.doc));
   }
   const page = results.slice(offset, offset + limit).map((entry) => {
     const summary = conceptSummary(entry.doc);
@@ -225,7 +218,7 @@ function searchConcepts(index, options) {
     }
     return Object.assign(summary, {
       score: entry.score,
-      snippet: snippetFor(entry.doc, query),
+      snippet: snippetFor(entry.doc, terms),
     });
   });
   return {

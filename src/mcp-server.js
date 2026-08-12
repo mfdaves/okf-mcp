@@ -18,6 +18,7 @@ const {
   validateIndex,
 } = require("./indexer");
 const { searchConcepts } = require("./search");
+const { MAX_QUERY_CHARACTERS, MAX_QUERY_TERMS } = require("./search-index");
 const { exportGraph, findPaths, getGraph, getNeighbors, getSubgraph, graphSummary } = require("./graph");
 const { fetchGitHubBundle, fetchRemoteBundles, sanitizeRemoteId } = require("./remote");
 const { ConceptAuthoringService } = require("./authoring");
@@ -138,7 +139,7 @@ const TOOL_DEFINITIONS = {
     "List compact OKF concept summaries with optional bundle, type, tag, and text filters.",
     READ_ONLY,
     {
-      query: stringParameter("Optional text matched against concept metadata and content."),
+      query: stringParameter(`Optional all-term text query matched against concept metadata and content; maximum ${MAX_QUERY_TERMS} terms.`, { maxLength: MAX_QUERY_CHARACTERS }),
       bundle: nonEmptyStringParameter("Limit results to this bundle id."),
       type: nonEmptyStringParameter("Limit results to this exact concept type."),
       tag: nonEmptyStringParameter("Limit results to concepts containing this tag."),
@@ -168,7 +169,7 @@ const TOOL_DEFINITIONS = {
     "Search OKF concepts and return ranked summaries using text and structured filters.",
     READ_ONLY,
     {
-      query: stringParameter("Text query matched against concept metadata and content."),
+      query: stringParameter(`All-term text query matched against concept metadata and content; maximum ${MAX_QUERY_TERMS} terms.`, { maxLength: MAX_QUERY_CHARACTERS }),
       bundle: nonEmptyStringParameter("Limit results to this bundle id."),
       types: stringArrayParameter("Limit results to any of these concept types.", { nonEmptyItems: true }),
       tagsAny: stringArrayParameter("Require at least one of these tags.", { nonEmptyItems: true }),

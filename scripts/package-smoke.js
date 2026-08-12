@@ -78,6 +78,12 @@ async function smokeMcp(okfMcp, installedRoot, mode) {
       arguments: { uri: "okf://okf-mcp/overview/okf-mcp" },
     });
     assert.match(concept.content[0].text, /"uri": "okf:\/\/okf-mcp\/overview\/okf-mcp"/);
+    const search = await client.callTool({
+      name: "search_concepts",
+      arguments: { query: "server stdio", limit: 1 },
+    });
+    const searchPayload = JSON.parse(search.content[0].text);
+    assert.equal(searchPayload.results[0].uri, "okf://okf-mcp/runtime/mcp-server");
   } finally {
     await client.close();
   }

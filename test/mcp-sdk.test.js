@@ -64,6 +64,10 @@ test("official SDK serves both modern and legacy MCP eras", async (t) => {
     );
     const search = await callJson(connection.client, "search_concepts", { tagsAny: [] });
     assert.equal(search.payload.total, 3);
+    const lexical = await callJson(connection.client, "search_concepts", { query: "only alpha" });
+    assert.deepEqual(lexical.payload.results.map((result) => result.path), ["alpha.md"]);
+    const listed = await callJson(connection.client, "list_concepts", { query: "only beta" });
+    assert.deepEqual(listed.payload.results.map((result) => result.path), ["beta.md"]);
     await connection.close();
   }
 });
@@ -78,6 +82,7 @@ test("SDK advertises existing schemas and validates arguments without coercion",
   assert.equal(searchSchema.properties.limit.type, "integer");
   assert.equal(searchSchema.properties.limit.default, 25);
   assert.equal(searchSchema.properties.offset.minimum, 0);
+  assert.equal(searchSchema.properties.query.maxLength, 512);
   assert.equal(byName.get("load_remote_bundle").inputSchema.properties.provider.default, "github");
   assert.equal(byName.get("export_graph").inputSchema.properties.format.default, "json");
 
@@ -104,6 +109,15 @@ test("business failures stay tool errors and unexpected failures are sanitized",
   });
   assert.equal(invalidDate.isError, true);
   assert.match(invalidDate.content[0].text, /asOf must be a valid Date/);
+
+  const tooManyTerms = await client.callTool({
+    name: "search_concepts",
+    arguments: {
+      query: Array.from({ length: 17 }, (_, index) => `term${index}`).join(" "),
+    },
+  });
+  assert.equal(tooManyTerms.isError, true);
+  assert.match(tooManyTerms.content[0].text, /must not exceed 16 terms/);
 
   const authoringService = {
     store: { project: null },

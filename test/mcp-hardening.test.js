@@ -190,10 +190,14 @@ test("accepted local proposals retain configured and runtime remote bundles and 
     allowAuthoring: true,
     allowRuntimeRemoteLoad: true,
   });
+  const beforeRuntime = await callJson(client, "search_concepts", { query: "runtime" });
+  assert.equal(beforeRuntime.payload.total, 0);
   await callJson(client, "load_remote_bundle", {
     id: "runtime",
     url: "https://github.com/acme/runtime/tree/main/okf",
   });
+  const afterRuntime = await callJson(client, "search_concepts", { query: "runtime" });
+  assert.equal(afterRuntime.payload.results.some((result) => result.uri === "okf://runtime/runtime"), true);
   for (const uri of ["okf://configured/configured.md", "okf://runtime/runtime.md"]) {
     const concept = await callJson(client, "get_concept", { uri });
     assert.equal(concept.result.isError, undefined);
@@ -204,8 +208,12 @@ test("accepted local proposals retain configured and runtime remote bundles and 
     path: "accepted.md",
     frontmatter: { type: "Concept", title: "Accepted" },
   });
+  const beforeAccepted = await callJson(client, "search_concepts", { query: "accepted" });
+  assert.equal(beforeAccepted.payload.total, 0);
   const proposalId = proposed.payload.proposal.id;
   await callJson(client, "okf_accept_proposal", { proposalId });
+  const afterAccepted = await callJson(client, "search_concepts", { query: "accepted" });
+  assert.equal(afterAccepted.payload.results.some((result) => result.uri === "okf://local/accepted"), true);
 
   for (const uri of [
     "okf://configured/configured.md",

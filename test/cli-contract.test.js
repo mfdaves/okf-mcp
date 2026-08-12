@@ -112,7 +112,7 @@ test("validate and search discover the nearest project config", async () => {
     assert.equal(process.exitCode, 0);
     assert.match(validation, /"valid": true/);
 
-    const search = await captureStdout(() => main(["search", "Alpha"], { cwd: fixture.nested }));
+    const search = await captureStdout(() => main(["search", "fixture", "contract"], { cwd: fixture.nested }));
     assert.match(search, /CLI contract fixture/);
   } finally {
     process.exitCode = previousExitCode;

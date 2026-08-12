@@ -4,7 +4,7 @@
 
 It consumes an OKF bundle directory of Markdown files with YAML frontmatter. An optional workspace mode can federate several bundles. Concepts are exposed through CLI commands and MCP resources and tools for validation, structured search, graph navigation, provenance inspection, and proposal-based authoring.
 
-The core intentionally has no database, embeddings, build step, or hosted-service dependency. It uses `js-yaml` for safe YAML, CommonMark for Markdown structure, and the official Model Context Protocol TypeScript SDK v2 for stdio MCP. Local root mode makes no network calls. Optional remote loading fetches public Markdown concepts and only their explicitly referenced inert assets from GitHub. Nothing in the v0.2 computation support executes code or attests a receipt.
+The core intentionally has no database, embeddings, build step, or hosted-service dependency. It uses `js-yaml` for safe YAML, CommonMark for Markdown structure, MiniSearch for in-memory BM25+ text retrieval, and the official Model Context Protocol TypeScript SDK v2 for stdio MCP. Local root mode makes no network calls. Optional remote loading fetches public Markdown concepts and only their explicitly referenced inert assets from GitHub. Nothing in the v0.2 computation support executes code or attests a receipt.
 
 ## OKF v0.2 Support And Extensions
 
@@ -35,23 +35,23 @@ Node 22 or newer is required.
 Install from the GitHub release:
 
 ```bash
-git clone --branch v0.5.0 https://github.com/mfdaves/okf-mcp.git
+git clone --branch v0.5.1 https://github.com/mfdaves/okf-mcp.git
 cd okf-mcp
 npm ci
 node bin/okf-mcp.js --root ./path/to/okf validate
 ```
 
-After version `0.5.0` is published on npm, pin it for reproducible use:
+Pin the published version for reproducible use:
 
 ```bash
-npx -y @mfdaves/okf-mcp@0.5.0 --version
-npx -y @mfdaves/okf-mcp@0.5.0 --root ./path/to/okf validate
+npx -y @mfdaves/okf-mcp@0.5.1 --version
+npx -y @mfdaves/okf-mcp@0.5.1 --root ./path/to/okf validate
 ```
 
 For a persistent installation:
 
 ```bash
-npm install --global @mfdaves/okf-mcp@0.5.0
+npm install --global @mfdaves/okf-mcp@0.5.1
 
 okf --version
 okf --root ./path/to/okf validate
@@ -95,7 +95,7 @@ okf --root okf/bundles/okf-mcp concept overview/okf-mcp
 Load the reference bundle directly from this release:
 
 ```bash
-okf --remote-bundle okf-mcp=https://github.com/mfdaves/okf-mcp/tree/v0.5.0/okf/bundles/okf-mcp --inspect
+okf --remote-bundle okf-mcp=https://github.com/mfdaves/okf-mcp/tree/v0.5.1/okf/bundles/okf-mcp --inspect
 ```
 
 The `@mfdaves/okf-mcp` npm package includes both `okf.project.yaml` and the
@@ -171,7 +171,7 @@ Commands:
 
 ## MCP Client Config
 
-The npm-based examples below apply after version `0.5.0` is published there. A source checkout can invoke its executable `bin/okf-mcp.js` with the same arguments.
+The npm-based examples below use the current published release. A source checkout can invoke its executable `bin/okf-mcp.js` with the same arguments.
 
 Example client configuration:
 
@@ -182,7 +182,7 @@ Example client configuration:
       "command": "npx",
       "args": [
         "-y",
-        "@mfdaves/okf-mcp@0.5.0",
+        "@mfdaves/okf-mcp@0.5.1",
         "--root",
         "/absolute/path/to/okf",
         "mcp"
@@ -201,7 +201,7 @@ Project config mode, with read-only project helpers but without proposal mutatio
       "command": "npx",
       "args": [
         "-y",
-        "@mfdaves/okf-mcp@0.5.0",
+        "@mfdaves/okf-mcp@0.5.1",
         "--project",
         "/absolute/path/to/repo/okf.project.yaml",
         "mcp"
@@ -502,7 +502,16 @@ Use `list_remote_bundles` to inspect what was loaded.
 - `offset`
 
 `list_concepts` also accepts a text `query` and applies it together with its
-listing filters. Tags and types are matched case-insensitively. Arbitrary
+listing filters. Text search tokenizes case-insensitively and requires every
+query term, regardless of order. BM25+ ranks title, type, tags, aliases,
+description, path, and body matches; frontmatter remains available through
+exact structured filters but is not copied into the text index. Scores are
+relative within a result set and are not a stable cross-version scale.
+
+Queries are bounded to 512 characters and 16 terms. Prefix expansion, fuzzy
+matching, stemming, and stop-word removal are intentionally disabled so code
+identifiers and domain terminology remain literal. Punctuation-only queries
+return no matches. Tags and types are matched case-insensitively. Arbitrary
 frontmatter filters support exact scalar matching and array-contains
 matching. `relationType` selects concepts with an outgoing relation of that
 type.
@@ -517,6 +526,21 @@ Example:
   "limit": 10
 }
 ```
+
+For local relevance and performance checks, run the non-packaged development
+benchmark with a bundle root and an optional JSON array of `{ "query": "...",
+"expected": "path/or/concept-id" }` judgments:
+
+```bash
+node --expose-gc scripts/search-benchmark.js \
+  --root /path/to/okf \
+  --qrels /path/to/qrels.json
+```
+
+It reports OKF and search-index build time, retained heap/RSS, p50/p95 query
+latency, Recall@10, MRR@10, and representative rankings. Search indexes are
+process-local and keyed to the parsed OKF index, so remote loads and accepted
+proposals receive a fresh index automatically.
 
 ## Graph Behavior
 
