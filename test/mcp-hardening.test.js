@@ -4,16 +4,9 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-const { PassThrough } = require("node:stream");
 const test = require("node:test");
 
-const packageMetadata = require("../package.json");
-const {
-  SUPPORTED_PROTOCOL_VERSIONS,
-  createServer,
-  createServerAsync,
-  runStdioServer,
-} = require("../src/mcp-server");
+const { callJson, connectMcp } = require("./mcp-client");
 
 function makeBundle() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "okf-mcp-hardening-"));
@@ -107,64 +100,58 @@ function installRemoteFetch(t) {
   };
 }
 
-test("tools/list and tools/call enforce configured MCP capabilities", async () => {
+test("tools/list and tools/call enforce configured MCP capabilities", async (t) => {
   const bundle = makeBundle();
-  const readOnlyServer = createServer([`local=${bundle}`]);
-  const readOnlyNames = toolNames(await readOnlyServer.handle({ method: "tools/list" }));
+  const readOnly = await connectMcp(t, [`local=${bundle}`]);
+  const readOnlyNames = toolNames(await readOnly.client.listTools());
   assert.equal(readOnlyNames.has("search_concepts"), true);
   assert.equal(readOnlyNames.has("okf_validate_concept"), false);
   assert.equal(readOnlyNames.has("okf_propose_concept"), false);
   assert.equal(readOnlyNames.has("load_remote_bundle"), false);
   await assert.rejects(
-    () => readOnlyServer.handle({
-      method: "tools/call",
-      params: {
-        name: "load_remote_bundle",
-        arguments: {
-          id: "blocked",
-          url: "https://github.com/acme/blocked/tree/main/okf",
-        },
+    () => readOnly.client.callTool({
+      name: "load_remote_bundle",
+      arguments: {
+        id: "blocked",
+        url: "https://github.com/acme/blocked/tree/main/okf",
       },
     }),
     (error) => {
       assert.equal(error.code, -32602);
-      assert.equal(error.data.detail, "Unknown or unavailable tool");
+      assert.match(error.message, /not found/);
       return true;
     },
   );
 
   const { projectPath } = makeProject();
-  const projectServer = await createServerAsync([], { projectPath });
-  const projectNames = toolNames(await projectServer.handle({ method: "tools/list" }));
+  const project = await connectMcp(t, [], { projectPath });
+  const projectNames = toolNames(await project.client.listTools());
   assert.equal(projectNames.has("okf_validate_concept"), true);
   assert.equal(projectNames.has("okf_get_proposal"), true);
   assert.equal(projectNames.has("okf_propose_concept"), false);
   assert.equal(projectNames.has("okf_accept_proposal"), false);
   await assert.rejects(
-    () => projectServer.handle({
-      method: "tools/call",
-      params: {
-        name: "okf_propose_concept",
-        arguments: {
-          bundle: "local",
-          path: "blocked.md",
-          frontmatter: { type: "Concept", title: "Blocked" },
-        },
+    () => project.client.callTool({
+      name: "okf_propose_concept",
+      arguments: {
+        bundle: "local",
+        path: "blocked.md",
+        frontmatter: { type: "Concept", title: "Blocked" },
       },
     }),
     (error) => {
       assert.equal(error.code, -32602);
-      assert.equal(error.data.detail, "Unknown or unavailable tool");
+      assert.match(error.message, /not found/);
       return true;
     },
   );
 
-  const enabledServer = await createServerAsync([], {
+  const enabled = await connectMcp(t, [], {
     projectPath,
     allowAuthoring: true,
     allowRuntimeRemoteLoad: true,
   });
-  const enabledNames = toolNames(await enabledServer.handle({ method: "tools/list" }));
+  const enabledNames = toolNames(await enabled.client.listTools());
   assert.equal(enabledNames.has("okf_propose_concept"), true);
   assert.equal(enabledNames.has("okf_accept_proposal"), true);
   assert.equal(enabledNames.has("load_remote_bundle"), true);
@@ -197,49 +184,39 @@ test("accepted local proposals retain configured and runtime remote bundles and 
     "",
   ].join("\n"), "utf8");
 
-  const server = await createServerAsync([], {
+  const { client } = await connectMcp(t, [], {
     projectPath,
     proposalRoot: path.join(root, "proposals"),
     allowAuthoring: true,
     allowRuntimeRemoteLoad: true,
   });
-  await server.handle({
-    method: "tools/call",
-    params: {
-      name: "load_remote_bundle",
-      arguments: {
-        id: "runtime",
-        url: "https://github.com/acme/runtime/tree/main/okf",
-      },
-    },
+  await callJson(client, "load_remote_bundle", {
+    id: "runtime",
+    url: "https://github.com/acme/runtime/tree/main/okf",
   });
-  assert.equal(server.index.byUri.has("okf://configured/configured.md"), true);
-  assert.equal(server.index.byUri.has("okf://runtime/runtime.md"), true);
+  for (const uri of ["okf://configured/configured.md", "okf://runtime/runtime.md"]) {
+    const concept = await callJson(client, "get_concept", { uri });
+    assert.equal(concept.result.isError, undefined);
+  }
 
-  const proposed = await server.handle({
-    method: "tools/call",
-    params: {
-      name: "okf_propose_concept",
-      arguments: {
-        bundle: "local",
-        path: "accepted.md",
-        frontmatter: { type: "Concept", title: "Accepted" },
-      },
-    },
+  const proposed = await callJson(client, "okf_propose_concept", {
+    bundle: "local",
+    path: "accepted.md",
+    frontmatter: { type: "Concept", title: "Accepted" },
   });
-  const proposalId = JSON.parse(proposed.content[0].text).proposal.id;
-  await server.handle({
-    method: "tools/call",
-    params: {
-      name: "okf_accept_proposal",
-      arguments: { proposalId },
-    },
-  });
+  const proposalId = proposed.payload.proposal.id;
+  await callJson(client, "okf_accept_proposal", { proposalId });
 
-  assert.equal(server.index.byUri.has("okf://configured/configured.md"), true);
-  assert.equal(server.index.byUri.has("okf://runtime/runtime.md"), true);
-  assert.equal(server.index.byUri.has("okf://local/accepted.md"), true);
-  assert.equal(server.index.edges.some((edge) => (
+  for (const uri of [
+    "okf://configured/configured.md",
+    "okf://runtime/runtime.md",
+    "okf://local/accepted.md",
+  ]) {
+    const concept = await callJson(client, "get_concept", { uri });
+    assert.equal(concept.result.isError, undefined);
+  }
+  const graph = await callJson(client, "get_graph", {});
+  assert.equal(graph.payload.edges.some((edge) => (
     edge.source === "okf://local/source"
     && edge.target === "okf://configured/configured"
     && edge.relationType === "related_to"
@@ -247,116 +224,23 @@ test("accepted local proposals retain configured and runtime remote bundles and 
   )), true);
 });
 
-test("synchronous project servers rebuild from their configured local registry", async (t) => {
+test("SDK project servers rebuild from their configured local registry", async (t) => {
   installRemoteFetch(t);
   const { projectPath } = makeProject();
-  const server = createServer([], {
+  const { client } = await connectMcp(t, [], {
     projectPath,
     allowRuntimeRemoteLoad: true,
   });
 
-  await server.handle({
-    method: "tools/call",
-    params: {
-      name: "load_remote_bundle",
-      arguments: {
-        id: "runtime",
-        url: "https://github.com/acme/runtime/tree/main/okf",
-      },
-    },
+  await callJson(client, "load_remote_bundle", {
+    id: "runtime",
+    url: "https://github.com/acme/runtime/tree/main/okf",
   });
 
-  assert.equal(server.index.project.name, "Hardening");
-  assert.equal(server.index.byUri.has("okf://local/concept.md"), true);
-  assert.equal(server.index.byUri.has("okf://runtime/runtime.md"), true);
-});
-
-test("initialize negotiates supported versions and falls back to the preferred version", async () => {
-  const server = createServer([`local=${makeBundle()}`]);
-  for (const protocolVersion of SUPPORTED_PROTOCOL_VERSIONS) {
-    const initialized = await server.handle({
-      method: "initialize",
-      params: {
-        protocolVersion,
-        capabilities: {},
-        clientInfo: { name: "hardening-test", version: "1" },
-      },
-    });
-    assert.equal(initialized.protocolVersion, protocolVersion);
-    assert.equal(initialized.serverInfo.version, packageMetadata.version);
+  const bundles = await callJson(client, "list_bundles", {});
+  assert.deepEqual(new Set(bundles.payload.map((bundle) => bundle.id)), new Set(["local", "runtime"]));
+  for (const uri of ["okf://local/concept.md", "okf://runtime/runtime.md"]) {
+    const concept = await callJson(client, "get_concept", { uri });
+    assert.equal(concept.result.isError, undefined);
   }
-  const fallback = await server.handle({
-    method: "initialize",
-    params: {
-      protocolVersion: "2099-01-01",
-      capabilities: {},
-      clientInfo: { name: "hardening-test", version: "1" },
-    },
-  });
-  assert.equal(fallback.protocolVersion, SUPPORTED_PROTOCOL_VERSIONS[0]);
-  await assert.rejects(
-    () => server.handle({ method: "initialize", params: {} }),
-    (error) => error.code === -32602,
-  );
-});
-
-test("stdio MCP runner emits newline-delimited JSON-RPC on its output stream only", async () => {
-  const bundle = makeBundle();
-  const inputStream = new PassThrough();
-  const outputStream = new PassThrough();
-  let output = "";
-  let resolveResponses;
-  const responsesReady = new Promise((resolve) => {
-    resolveResponses = resolve;
-  });
-  outputStream.on("data", (chunk) => {
-    output += String(chunk);
-    if (output.trim().split("\n").length >= 2) {
-      resolveResponses();
-    }
-  });
-  await runStdioServer([`local=${bundle}`], inputStream, outputStream);
-  const input = [
-    JSON.stringify({
-      jsonrpc: "2.0",
-      id: 1,
-      method: "initialize",
-      params: {
-        protocolVersion: "2025-06-18",
-        capabilities: {},
-        clientInfo: { name: "hardening-test", version: "1" },
-      },
-    }),
-    JSON.stringify({
-      jsonrpc: "2.0",
-      method: "notifications/initialized",
-      params: {},
-    }),
-    JSON.stringify({
-      jsonrpc: "2.0",
-      id: 2,
-      method: "tools/list",
-      params: {},
-    }),
-    "",
-  ].join("\n");
-  inputStream.end(input);
-  let timeout;
-  try {
-    await Promise.race([
-      responsesReady,
-      new Promise((resolve, reject) => {
-        timeout = setTimeout(() => reject(new Error("Timed out waiting for stdio MCP responses.")), 1000);
-      }),
-    ]);
-  } finally {
-    clearTimeout(timeout);
-  }
-  const responses = output.trim().split("\n").map((line) => JSON.parse(line));
-  assert.deepEqual(responses.map((response) => response.id), [1, 2]);
-  assert.equal(responses[0].result.serverInfo.version, packageMetadata.version);
-  const names = new Set(responses[1].result.tools.map((tool) => tool.name));
-  assert.equal(names.has("search_concepts"), true);
-  assert.equal(names.has("okf_propose_concept"), false);
-  assert.equal(names.has("load_remote_bundle"), false);
 });

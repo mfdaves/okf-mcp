@@ -19,7 +19,7 @@ relations:
 
 # okf-mcp
 
-`okf-mcp` turns one OKF v0.2 root and its explicitly referenced inert assets into a searchable in-memory knowledge graph. It provides a CLI, JSON-RPC stdio MCP server, pinned Git-source reads, optional workspace federation, generator plugins, remote GitHub bundles, and an HTTP authoring API.
+`okf-mcp` turns one OKF v0.2 root and its explicitly referenced inert assets into a searchable in-memory knowledge graph. It provides a CLI, SDK-backed stdio MCP server, pinned Git-source reads, optional workspace federation, generator plugins, remote GitHub bundles, and an HTTP authoring API.
 
 The runtime uses `js-yaml` and CommonMark and has no database, embedding service, computation executor, attester runtime, or build step. `--root` is the normal single-catalog interface and performs no network calls. The optional project manifest federates multiple roots and generator configuration; it is an okf-mcp extension rather than part of OKF v0.2.
 

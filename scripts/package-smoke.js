@@ -5,6 +5,8 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { spawnSync } = require("node:child_process");
+const { Client } = require("@modelcontextprotocol/client");
+const { StdioClientTransport } = require("@modelcontextprotocol/client/stdio");
 
 const repositoryRoot = path.resolve(__dirname, "..");
 const packageMetadata = require(path.join(repositoryRoot, "package.json"));
@@ -32,11 +34,57 @@ function run(command, args, options) {
   return result;
 }
 
-function parseRpcLines(stdout) {
-  return String(stdout || "").split(/\r?\n/).filter(Boolean).map((line) => JSON.parse(line));
+async function smokeMcp(okfMcp, installedRoot, mode) {
+  const transport = new StdioClientTransport({
+    command: okfMcp,
+    args: ["--root", installedRoot, "mcp"],
+    cwd: repositoryRoot,
+    stderr: "pipe",
+  });
+  let stderr = "";
+  transport.stderr.on("data", (chunk) => {
+    stderr += String(chunk);
+  });
+  const client = new Client(
+    { name: "okf-package-smoke", version: "1" },
+    { versionNegotiation: { mode } },
+  );
+  try {
+    await client.connect(transport);
+    const modern = typeof mode === "object";
+    assert.equal(client.getProtocolEra(), modern ? "modern" : "legacy");
+    assert.equal(
+      client.getNegotiatedProtocolVersion(),
+      modern ? "2026-07-28" : "2025-11-25",
+    );
+    assert.equal(client.getServerVersion().version, packageMetadata.version);
+
+    const tools = await client.listTools();
+    const toolNames = tools.tools.map((tool) => tool.name);
+    assert.equal(toolNames.includes("get_concept"), true);
+    assert.equal(toolNames.includes("okf_accept_proposal"), false);
+    assert.equal(toolNames.includes("load_remote_bundle"), false);
+
+    const resources = await client.listResources();
+    assert.equal(
+      resources.resources.some((resource) => resource.uri === "okf://okf-mcp/overview/okf-mcp"),
+      true,
+    );
+    const read = await client.readResource({ uri: "okf://okf-mcp/overview/okf-mcp" });
+    assert.equal(read.contents[0].uri, "okf://okf-mcp/overview/okf-mcp");
+    assert.match(read.contents[0].text, /# okf-mcp/);
+    const concept = await client.callTool({
+      name: "get_concept",
+      arguments: { uri: "okf://okf-mcp/overview/okf-mcp" },
+    });
+    assert.match(concept.content[0].text, /"uri": "okf:\/\/okf-mcp\/overview\/okf-mcp"/);
+  } finally {
+    await client.close();
+  }
+  assert.equal(stderr, "");
 }
 
-function main() {
+async function main() {
   assert.equal(lockMetadata.name, packageMetadata.name);
   assert.equal(lockMetadata.version, packageMetadata.version);
   assert.equal(lockMetadata.packages[""].name, packageMetadata.name);
@@ -137,66 +185,8 @@ function main() {
     assert.equal(validation.conformant, true);
     assert.equal(validation.validForProject, true);
 
-    const rpcInput = [
-      {
-        jsonrpc: "2.0",
-        id: 1,
-        method: "initialize",
-        params: { protocolVersion: "2025-11-25", capabilities: {}, clientInfo: { name: "package-smoke", version: "1" } },
-      },
-      { jsonrpc: "2.0", method: "notifications/initialized", params: {} },
-      { jsonrpc: "2.0", method: "notifications/package-smoke", params: {} },
-      { jsonrpc: "2.0", id: 2, method: "ping", params: {} },
-      { jsonrpc: "2.0", id: 3, method: "tools/list", params: {} },
-      { jsonrpc: "2.0", id: 4, method: "resources/list", params: {} },
-      {
-        jsonrpc: "2.0",
-        id: 5,
-        method: "resources/read",
-        params: { uri: "okf://okf-mcp/overview/okf-mcp" },
-      },
-      {
-        jsonrpc: "2.0",
-        id: 6,
-        method: "tools/call",
-        params: { name: "get_concept", arguments: { uri: "okf://okf-mcp/overview/okf-mcp" } },
-      },
-    ].map((message) => JSON.stringify(message)).join("\n") + "\n";
-    const protocol = run(okfMcp, ["--root", installedRoot, "mcp"], { input: rpcInput });
-    assert.equal(protocol.stderr, "");
-    const responses = parseRpcLines(protocol.stdout);
-    assert.deepEqual(responses.map((response) => response.id), [1, 2, 3, 4, 5, 6]);
-    assert.equal(responses[0].result.protocolVersion, "2025-11-25");
-    assert.equal(responses[0].result.serverInfo.version, packageMetadata.version);
-    assert.deepEqual(responses[1].result, {});
-    const toolNames = responses[2].result.tools.map((tool) => tool.name);
-    assert.equal(toolNames.includes("get_concept"), true);
-    assert.equal(toolNames.includes("okf_accept_proposal"), false);
-    assert.equal(toolNames.includes("load_remote_bundle"), false);
-    assert.equal(
-      responses[3].result.resources.some((resource) => resource.uri === "okf://okf-mcp/overview/okf-mcp"),
-      true,
-    );
-    assert.equal(responses[4].result.contents[0].uri, "okf://okf-mcp/overview/okf-mcp");
-    assert.match(responses[4].result.contents[0].text, /# okf-mcp/);
-    assert.match(responses[5].result.content[0].text, /"uri": "okf:\/\/okf-mcp\/overview\/okf-mcp"/);
-
-    const fallbackInput = JSON.stringify({
-      jsonrpc: "2.0",
-      id: "fallback",
-      method: "initialize",
-      params: {
-        protocolVersion: "2099-01-01",
-        capabilities: {},
-        clientInfo: { name: "package-smoke", version: "1" },
-      },
-    }) + "\n";
-    const fallbackProtocol = run(okfMcp, ["--root", installedRoot, "mcp"], { input: fallbackInput });
-    assert.equal(fallbackProtocol.stderr, "");
-    const fallbackResponses = parseRpcLines(fallbackProtocol.stdout);
-    assert.equal(fallbackResponses.length, 1);
-    assert.equal(fallbackResponses[0].id, "fallback");
-    assert.equal(fallbackResponses[0].result.protocolVersion, "2025-11-25");
+    await smokeMcp(okfMcp, installedRoot, "legacy");
+    await smokeMcp(okfMcp, installedRoot, { pin: "2026-07-28" });
 
     process.stdout.write(JSON.stringify({
       package: `${packageMetadata.name}@${packageMetadata.version}`,
@@ -210,4 +200,7 @@ function main() {
   }
 }
 
-main();
+main().catch((error) => {
+  process.stderr.write(`${error.stack || error.message}\n`);
+  process.exitCode = 1;
+});

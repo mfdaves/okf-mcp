@@ -612,29 +612,23 @@ async function main(argv, runtime) {
   if (command === "mcp") {
     const bundles = resolveLegacyBundles(args);
     if (args.project) {
-      const server = await ((runtime && runtime.runStdioServer) || runStdioServer)(
+      await ((runtime && runtime.runStdioServer) || runStdioServer)(
         [],
         process.stdin,
         process.stdout,
         stdioServerOptions(args),
       );
-      if (server && server.closed) {
-        await server.closed;
-      }
       return;
     }
     if (!bundles.length && !args.remoteBundles.length) {
       throw usageError("An OKF --root, --bundle, or --project source is required.");
     }
-    const server = await ((runtime && runtime.runStdioServer) || runStdioServer)(
+    await ((runtime && runtime.runStdioServer) || runStdioServer)(
       bundles,
       process.stdin,
       process.stdout,
       stdioServerOptions(args),
     );
-    if (server && server.closed) {
-      await server.closed;
-    }
     return;
   }
   if (command === "serve") {

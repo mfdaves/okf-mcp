@@ -37,7 +37,7 @@ Consumers that need reproducibility should replace `main` with a release tag. Re
 
 The public npm package is `@mfdaves/okf-mcp`. Its allowlist includes `okf.project.yaml`, `server.json`, and the `okf` directory so installed artifacts carry the same reference bundle and MCP Registry metadata. The package declares the Registry name `io.github.mfdaves/okf-mcp`.
 
-The package smoke gate verifies that package, lockfile, CLI, MCP server, and Registry versions and identities agree. It installs the generated tarball into a clean temporary project, executes both binaries, validates this bundle, negotiates MCP `2025-11-25`, checks fallback negotiation and notification silence, pings the server, discovers tools, and retrieves a concept over stdio.
+The package smoke gate verifies that package, lockfile, CLI, MCP server, and Registry versions and identities agree. It installs the generated tarball into a clean temporary project, executes both binaries, validates this bundle, and uses the official client SDK to exercise both modern `2026-07-28` and legacy `2025-11-25` stdio sessions through tool discovery, resource discovery, resource reads, and concept retrieval.
 
 The repository release skill defines the package identity, capability matrix, protocol, schema enforcement, self-validation, tarball, clean-install, prerelease, and registry synchronization gates. The trusted-publishing workflow repeats those checks against an exact Git release tag before publishing. Release-candidate metadata is not published to the MCP Registry; stable Registry publication follows successful npm and `npx` verification.
 

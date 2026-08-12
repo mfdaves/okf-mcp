@@ -13,21 +13,21 @@ relations:
     target: okf://okf-mcp/workflows/concept-authoring
   - type: configured_by
     target: repo://src/mcp-server.js
-  - type: configured_by
-    target: repo://src/mcp-protocol.js
   - type: checked_by
     target: repo://test/okf-mcp.test.js
   - type: checked_by
     target: repo://test/mcp-hardening.test.js
+  - type: checked_by
+    target: repo://test/mcp-sdk.test.js
 ---
 
 # MCP Stdio Server
 
-The MCP server reads newline-delimited JSON-RPC messages from stdin and writes responses to stdout. It implements initialization, ping, resource listing and reading, tool listing, and tool calls without an SDK dependency.
+The MCP server exposes OKF resources and tools over stdio through the official `@modelcontextprotocol/server` v2 SDK. The application adapter registers the existing schemas and handlers; the SDK owns framing, negotiation, validation, and dispatch.
 
-The server supports protocol versions `2025-11-25`, `2025-06-18`, `2025-03-26`, and `2024-11-05`. Initialization returns a requested supported version. A well-formed unsupported version negotiates to the preferred supported version, `2025-11-25`, so the client can decide whether to continue. Missing or malformed initialization parameters remain invalid.
+The SDK serves the modern `2026-07-28` revision and its compatibility path for 2025-era clients, including `2025-11-25`. Both paths expose the same OKF resources, enabled tools, schemas, and application behavior.
 
-The transport validates the JSON-RPC envelope before dispatch. Parse errors, invalid requests, unknown methods, invalid method parameters, missing resources, and internal failures use their corresponding protocol error classes. Valid notifications never receive responses, including notifications with unknown methods or failing handlers. Stdout is reserved for protocol messages.
+The SDK validates protocol messages and tool arguments before application dispatch. Expected application failures return tool results with `isError: true`; unexpected implementation failures are masked. Stdout remains reserved for protocol messages.
 
 Each indexed Markdown document is exposed as a `text/markdown` resource. The [MCP tool catalog](../interfaces/mcp-tools.md) exposes discovery, search, graph navigation, validation, remote loading, and proposal-based authoring.
 

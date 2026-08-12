@@ -96,7 +96,7 @@ function generateFilesystemConcepts(project, plugin) {
       resource: `repo://${relative}`,
       sources: [{ resource: `repo://${relative}`, title }],
       generated: generatedMetadata(plugin),
-      // Compatibility extension retained through the 0.4.x migration window.
+      // Compatibility extension retained for existing generated catalogs.
       source: `repo://${relative}`,
       tags: Array.isArray(plugin.tags) ? plugin.tags : ["generated", "file"],
     }, [
@@ -136,7 +136,7 @@ function generateJsonSpecConcepts(project, plugin) {
       resource: `repo://${relative}`,
       sources: [{ resource: `repo://${relative}`, title: key }],
       generated: generatedMetadata(plugin),
-      // Compatibility extension retained through the 0.4.x migration window.
+      // Compatibility extension retained for existing generated catalogs.
       source: `repo://${relative}`,
       tags: Array.isArray(plugin.tags) ? plugin.tags : ["generated", "spec"],
       relations,

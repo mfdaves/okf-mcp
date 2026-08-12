@@ -37,6 +37,6 @@ An explicit local root or project workspace exposes candidate validation, path s
 
 Every tool supplies a purpose-specific description, descriptions for all input parameters, and MCP annotations for read behavior, destructive behavior, idempotency, and external access. Tool discovery and direct invocation use the same capability checks, so a hidden tool also fails when called by name. Annotations remain hints to clients; server-side validation is authoritative.
 
-Tool arguments are validated against the advertised schema without coercion. Unknown or disabled tools and malformed call envelopes are protocol errors. Once a known enabled tool receives a structurally valid call, expected validation, storage, network, read-only, and proposal-conflict failures are returned as tool results with `isError: true`. A validation operation that successfully reports invalid OKF remains a successful tool result.
+The official MCP SDK validates tool arguments against the advertised schema without coercion. Unknown or disabled tools are rejected by SDK dispatch. Argument-schema failures and expected validation, storage, network, read-only, and proposal-conflict failures from enabled tools are returned as tool results with `isError: true`. A validation operation that successfully reports invalid OKF remains a successful tool result.
 
 `list_concepts` applies its optional text query together with its structured filters. Relation-type filtering selects concepts with an outgoing relation of the requested type.

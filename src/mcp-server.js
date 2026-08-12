@@ -1,7 +1,13 @@
 "use strict";
 
 const path = require("path");
-const readline = require("readline");
+const {
+  McpServer,
+  ResourceNotFoundError,
+  ResourceTemplate,
+  fromJsonSchema,
+} = require("@modelcontextprotocol/server");
+const { StdioServerTransport, serveStdio } = require("@modelcontextprotocol/server/stdio");
 const {
   attachProject,
   buildIndex,
@@ -26,25 +32,16 @@ const {
 } = require("./computation");
 const { checkV02Migration } = require("./migration");
 const { describeConceptGitSources, readConceptGitSource } = require("./git-source");
-const {
-  ERROR_CODES,
-  ProtocolError,
-  ToolExecutionError,
-  assertSupportedSchema,
-  isPlainObject,
-  isValidRequestId,
-  responseFor,
-  validateJsonRpcEnvelope,
-  validateToolArguments,
-} = require("./mcp-protocol");
 const packageMetadata = require("../package.json");
 
-const SUPPORTED_PROTOCOL_VERSIONS = [
-  "2025-11-25",
-  "2025-06-18",
-  "2025-03-26",
-  "2024-11-05",
-];
+const MAX_MCP_MESSAGE_BYTES = 1024 * 1024;
+
+class ToolExecutionError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "ToolExecutionError";
+  }
+}
 
 const READ_ONLY = {
   readOnlyHint: true,
@@ -499,9 +496,6 @@ const TOOL_DEFINITIONS = {
 };
 
 const TOOL_NAMES = Object.keys(TOOL_DEFINITIONS);
-TOOL_NAMES.forEach((name) => {
-  assertSupportedSchema(TOOL_DEFINITIONS[name].inputSchema, `#/tools/${name}/inputSchema`);
-});
 const PROJECT_HELPER_TOOL_NAMES = new Set([
   "okf_validate_concept",
   "okf_suggest_concept_path",
@@ -558,36 +552,23 @@ function toolEnabled(state, name) {
   return true;
 }
 
-function requireToolEnabled(state, name) {
-  if (!Object.prototype.hasOwnProperty.call(TOOL_DEFINITIONS, name)) {
-    throw new ProtocolError(ERROR_CODES.INVALID_PARAMS, "Invalid params", {
-      detail: "Unknown or unavailable tool",
-    });
-  }
-  if (!toolEnabled(state, name)) {
-    throw new ProtocolError(ERROR_CODES.INVALID_PARAMS, "Invalid params", {
-      detail: "Unknown or unavailable tool",
-    });
-  }
-}
-
-function listTools(state) {
-  return {
-    tools: TOOL_NAMES
-      .filter((name) => toolEnabled(state, name))
-      .map((name) => Object.assign({ name }, TOOL_DEFINITIONS[name])),
-  };
-}
-
 function listResources(index) {
   return {
     resources: index.documents.map((doc) => ({
-      uri: doc.uri,
+      uri: canonicalResourceUri(doc.uri),
       name: doc.title,
       description: doc.description || `${doc.kind} ${doc.path}`,
       mimeType: "text/markdown",
     })),
   };
+}
+
+function canonicalResourceUri(uri) {
+  try {
+    return new URL(uri).href;
+  } catch {
+    return uri;
+  }
 }
 
 function publicBundles(index) {
@@ -632,16 +613,15 @@ function publicBundles(index) {
 }
 
 function readResource(index, uri) {
-  const doc = index.byUri.get(uri);
+  const doc = index.byUri.get(uri)
+    || index.documents.find((candidate) => canonicalResourceUri(candidate.uri) === uri);
   if (!doc) {
-    throw new ProtocolError(ERROR_CODES.RESOURCE_NOT_FOUND, "Resource not found", {
-      uri,
-    });
+    throw new ResourceNotFoundError(uri);
   }
   return {
     contents: [
       {
-        uri: doc.uri,
+        uri: canonicalResourceUri(doc.uri),
         mimeType: "text/markdown",
         text: doc.text,
       },
@@ -751,25 +731,11 @@ function rebuildStateIndex(state) {
   return state.index;
 }
 
-function invalidParams(detail) {
-  throw new ProtocolError(ERROR_CODES.INVALID_PARAMS, "Invalid params", { detail });
-}
-
-function objectParams(request, method) {
-  if (!request || !Object.prototype.hasOwnProperty.call(request, "params")) {
-    return {};
-  }
-  if (!isPlainObject(request.params)) {
-    invalidParams(`${method} params must be an object.`);
-  }
-  return request.params;
-}
-
 async function expectedToolOperation(operation, options) {
   try {
     return await operation();
   } catch (error) {
-    if (error instanceof ProtocolError || error instanceof ToolExecutionError) {
+    if (error instanceof ToolExecutionError) {
       throw error;
     }
     const programmingError = error instanceof ReferenceError
@@ -792,34 +758,6 @@ function requireGraphConcept(index, uri) {
 }
 
 async function callTool(state, name, args) {
-  if (!state || !state.index) {
-    state = {
-      index: state,
-      localBundleArgs: [],
-      remoteBundles: [],
-      relationTypes: state && state.relationTypes,
-      project: null,
-      authoringService: null,
-      allowAuthoring: false,
-      allowRuntimeRemoteLoad: false,
-      allowComputationAuthoring: false,
-      strictLinks: false,
-    };
-  }
-  requireToolEnabled(state, name);
-  if (!isPlainObject(args)) {
-    throw new ProtocolError(ERROR_CODES.INVALID_PARAMS, "Invalid params", {
-      detail: "tools/call arguments must be an object.",
-    });
-  }
-  const issues = validateToolArguments(TOOL_DEFINITIONS[name].inputSchema, args);
-  if (issues.length) {
-    return jsonContent({
-      error: "Invalid tool arguments",
-      tool: name,
-      issues,
-    }, { isError: true });
-  }
   const index = state.index;
   try {
     switch (name) {
@@ -1006,9 +944,7 @@ async function callTool(state, name, args) {
           ],
         };
       default:
-        throw new ProtocolError(ERROR_CODES.INVALID_PARAMS, "Invalid params", {
-          detail: "Unknown or unavailable tool",
-        });
+        throw new Error(`Unknown registered MCP tool: ${name}`);
     }
   } catch (error) {
     if (!(error instanceof ToolExecutionError)) {
@@ -1022,7 +958,7 @@ async function callTool(state, name, args) {
   }
 }
 
-function createServer(bundleArgs, options) {
+function createState(bundleArgs, options) {
   const authoringService = options && options.authoringService;
   let project = null;
   if (authoringService && authoringService.store) {
@@ -1064,90 +1000,10 @@ function createServer(bundleArgs, options) {
     allowCustomRelationTypes,
     repositoryMappings: (options && options.repositoryMappings) || new Map(),
   };
-  async function handle(request) {
-    if (!isPlainObject(request) || typeof request.method !== "string" || !request.method.trim()) {
-      throw new ProtocolError(ERROR_CODES.INVALID_REQUEST, "Invalid Request", {
-        detail: "The request method must be a non-empty string.",
-      });
-    }
-    const method = request.method;
-    if (method === "initialize") {
-      const params = objectParams(request, method);
-      const requestedVersion = params.protocolVersion;
-      if (typeof requestedVersion !== "string" || !requestedVersion.trim()) {
-        invalidParams("initialize.protocolVersion must be a non-empty string.");
-      }
-      if (!isPlainObject(params.capabilities)) {
-        invalidParams("initialize.capabilities must be an object.");
-      }
-      if (!isPlainObject(params.clientInfo)) {
-        invalidParams("initialize.clientInfo must be an object.");
-      }
-      if (typeof params.clientInfo.name !== "string" || !params.clientInfo.name.trim()) {
-        invalidParams("initialize.clientInfo.name must be a non-empty string.");
-      }
-      if (typeof params.clientInfo.version !== "string" || !params.clientInfo.version.trim()) {
-        invalidParams("initialize.clientInfo.version must be a non-empty string.");
-      }
-      return {
-        protocolVersion: SUPPORTED_PROTOCOL_VERSIONS.includes(requestedVersion)
-          ? requestedVersion
-          : SUPPORTED_PROTOCOL_VERSIONS[0],
-        serverInfo: { name: "okf-mcp", version: packageMetadata.version },
-        capabilities: { resources: {}, tools: {} },
-      };
-    }
-    if (method === "notifications/initialized") {
-      objectParams(request, method);
-      return null;
-    }
-    if (method === "ping") {
-      objectParams(request, method);
-      return {};
-    }
-    if (method === "resources/list") {
-      const params = objectParams(request, method);
-      if (params.cursor !== undefined && typeof params.cursor !== "string") {
-        invalidParams("resources/list cursor must be a string when supplied.");
-      }
-      return listResources(state.index);
-    }
-    if (method === "resources/read") {
-      const params = objectParams(request, method);
-      if (typeof params.uri !== "string" || !params.uri) {
-        invalidParams("resources/read uri must be a non-empty string.");
-      }
-      return readResource(state.index, params.uri);
-    }
-    if (method === "tools/list") {
-      const params = objectParams(request, method);
-      if (params.cursor !== undefined && typeof params.cursor !== "string") {
-        invalidParams("tools/list cursor must be a string when supplied.");
-      }
-      return listTools(state);
-    }
-    if (method === "tools/call") {
-      const params = objectParams(request, method);
-      if (typeof params.name !== "string" || !params.name.trim()) {
-        invalidParams("tools/call name must be a non-empty string.");
-      }
-      let args = {};
-      if (Object.prototype.hasOwnProperty.call(params, "arguments")) {
-        if (!isPlainObject(params.arguments)) {
-          invalidParams("tools/call arguments must be an object.");
-        }
-        args = params.arguments;
-      }
-      return callTool(state, params.name, args);
-    }
-    throw new ProtocolError(ERROR_CODES.METHOD_NOT_FOUND, "Method not found", {
-      method,
-    });
-  }
-  return { get index() { return state.index; }, handle };
+  return state;
 }
 
-async function createServerAsync(bundleArgs, options) {
+async function createStateAsync(bundleArgs, options) {
   if (options && options.projectPath) {
     const loaded = await loadProjectBundles(options.projectPath);
     const extraRemoteBundles = await fetchRemoteBundles(options.remoteBundles || []);
@@ -1162,7 +1018,7 @@ async function createServerAsync(bundleArgs, options) {
       }),
       loaded.project,
     );
-    return createServer(localBundleArgs, {
+    return createState(localBundleArgs, {
       initialIndex,
       initialRemoteBundles,
       relationTypes: loaded.project.relationTypes,
@@ -1187,7 +1043,7 @@ async function createServerAsync(bundleArgs, options) {
       strictLinks: options.strictLinks,
       allowCustomRelationTypes: true,
     }), store.project);
-    return createServer(localBundleArgs, {
+    return createState(localBundleArgs, {
       initialIndex,
       initialRemoteBundles: remoteBundles,
       relationTypes: store.getRelationTypes(),
@@ -1202,12 +1058,13 @@ async function createServerAsync(bundleArgs, options) {
   }
   const remoteBundles = await fetchRemoteBundles((options && options.remoteBundles) || []);
   const localBundleArgs = (bundleArgs || []).slice();
-  return createServer(localBundleArgs, {
+  return createState(localBundleArgs, {
     initialIndex: buildIndex(localBundleArgs.concat(remoteBundles), {
       strictLinks: options && options.strictLinks,
       allowCustomRelationTypes: true,
     }),
     initialRemoteBundles: remoteBundles,
+    authoringService: options && options.authoringService,
     allowAuthoring: options && options.allowAuthoring,
     allowRuntimeRemoteLoad: options && options.allowRuntimeRemoteLoad,
     allowComputationAuthoring: options && options.allowComputationAuthoring,
@@ -1217,121 +1074,73 @@ async function createServerAsync(bundleArgs, options) {
   });
 }
 
-async function runStdioServer(bundleArgs, input, output, options) {
-  const rl = readline.createInterface({ input, crlfDelay: Infinity });
-  let serverPromise;
-  let pending = Promise.resolve();
-
-  function writeResponse(response) {
-    return new Promise((resolve, reject) => {
-      output.write(`${JSON.stringify(response)}\n`, (error) => {
-        if (error) {
-          reject(error);
-          return;
-        }
-        resolve();
-      });
-    });
-  }
-
-  async function handleLine(line) {
-    if (!line.trim()) {
-      return;
-    }
-    if (Buffer.byteLength(line, "utf8") > 1024 * 1024) {
-      await writeResponse(responseFor(null, null, new ProtocolError(
-        ERROR_CODES.INVALID_REQUEST,
-        "Invalid Request",
-        { detail: "MCP request line exceeds 1 MiB." },
-      )));
-      return;
-    }
-    let request;
-    try {
-      request = JSON.parse(line);
-    } catch (error) {
-      await writeResponse(responseFor(null, null, new ProtocolError(
-        ERROR_CODES.PARSE_ERROR,
-        "Parse error",
-      )));
-      return;
-    }
-    let envelope;
-    try {
-      envelope = validateJsonRpcEnvelope(request);
-    } catch (error) {
-      const errorId = isPlainObject(request)
-        && Object.prototype.hasOwnProperty.call(request, "id")
-        && isValidRequestId(request.id)
-        ? request.id
-        : null;
-      await writeResponse(responseFor(errorId, null, error));
-      return;
-    }
-    const server = await serverPromise;
-    if (envelope.notification) {
-      try {
-        await server.handle(request);
-      } catch {
-        // JSON-RPC notifications are one-way, including when their handling fails.
-      }
-      return;
-    }
-    try {
-      const result = await server.handle(request);
-      await writeResponse(responseFor(envelope.id, result, null));
-    } catch (error) {
-      await writeResponse(responseFor(envelope.id, null, error));
-    }
-  }
-
-  rl.on("line", (line) => {
-    pending = pending.then(() => handleLine(line));
+function registerMcpInterface(state) {
+  const server = new McpServer({
+    name: "okf-mcp",
+    version: packageMetadata.version,
+  }, {
+    capabilities: {
+      resources: { listChanged: false },
+      tools: { listChanged: false },
+    },
   });
-
-  const closed = new Promise((resolve, reject) => {
-    rl.once("close", () => {
-      // A pending Promise alone does not keep a CommonJS CLI alive after stdin reaches EOF.
-      const keepAlive = setInterval(() => {}, 1000);
-      pending.then(
-        () => {
-          clearInterval(keepAlive);
-          resolve();
-        },
-        (error) => {
-          clearInterval(keepAlive);
-          reject(error);
-        },
-      );
-    });
+  let pendingToolCall = Promise.resolve();
+  const resources = new ResourceTemplate("okf://{+locator}", {
+    list: async () => listResources(state.index),
   });
-
-  serverPromise = createServerAsync(bundleArgs, options);
-  let server;
-  try {
-    server = await serverPromise;
-  } catch (error) {
-    rl.close();
-    throw error;
-  }
-  Object.defineProperty(server, "closed", {
-    configurable: false,
-    enumerable: false,
-    value: closed,
-    writable: false,
+  server.registerResource(
+    "okf-documents",
+    resources,
+    {
+      description: "Markdown documents in the loaded Open Knowledge Format catalog.",
+      mimeType: "text/markdown",
+    },
+    async (uri) => readResource(state.index, uri.href),
+  );
+  TOOL_NAMES.filter((name) => toolEnabled(state, name)).forEach((name) => {
+    const definition = TOOL_DEFINITIONS[name];
+    server.registerTool(
+      name,
+      {
+        description: definition.description,
+        annotations: definition.annotations,
+        inputSchema: fromJsonSchema(definition.inputSchema),
+      },
+      async (args) => {
+        const current = pendingToolCall.then(async () => {
+          try {
+            return await callTool(state, name, args);
+          } catch {
+            return jsonContent({
+              error: "Internal tool error",
+              tool: name,
+            }, { isError: true });
+          }
+        });
+        pendingToolCall = current.catch(() => {});
+        return current;
+      },
+    );
   });
   return server;
 }
 
+async function createMcpServer(bundleArgs, options) {
+  return registerMcpInterface(await createStateAsync(bundleArgs, options));
+}
+
+async function runStdioServer(bundleArgs, input, output, options) {
+  const state = await createStateAsync(bundleArgs, options);
+  const transport = new StdioServerTransport(input, output, {
+    maxBufferSize: MAX_MCP_MESSAGE_BYTES,
+  });
+  return serveStdio(
+    () => registerMcpInterface(state),
+    { legacy: "serve", transport },
+  );
+}
+
 module.exports = {
-  SUPPORTED_PROTOCOL_VERSIONS,
-  TOOL_NAMES,
-  callTool,
-  createServer,
-  createServerAsync,
-  listResources,
-  listTools,
-  readResource,
-  rebuildStateIndex,
+  createMcpServer,
   runStdioServer,
 };

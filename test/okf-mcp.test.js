@@ -17,7 +17,7 @@ const { FileConceptStore } = require("../src/store");
 const { createHttpHandler } = require("../src/http-server");
 const { searchConcepts } = require("../src/search");
 const { exportGraph, findPaths, getGraph, getNeighbors, getSubgraph, graphSummary } = require("../src/graph");
-const { createServer, createServerAsync } = require("../src/mcp-server");
+const { callJson, connectMcp } = require("./mcp-client");
 
 function makeFixture() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "okf-mcp-"));
@@ -497,7 +497,7 @@ test("project configs can include remote bundles", async () => {
   assert.equal(index.byUri.has("okf://docs/ignored.md"), false);
 });
 
-test("MCP can load and list remote bundles at runtime", async () => {
+test("MCP can load and list remote bundles at runtime", async (t) => {
   const previousFetch = globalThis.fetch;
   globalThis.fetch = makeGitHubFetchMock([
     {
@@ -514,30 +514,24 @@ test("MCP can load and list remote bundles at runtime", async () => {
     },
   ]);
   try {
-    const server = createServer([], { allowRuntimeRemoteLoad: true });
-    const loaded = await server.handle({
-      method: "tools/call",
-      params: {
-        name: "load_remote_bundle",
-        arguments: {
-          id: "runtime",
-          url: "https://github.com/acme/widgets/tree/main/okf/bundles/docs",
-        },
-      },
+    const { client } = await connectMcp(t, [], { allowRuntimeRemoteLoad: true });
+    const loaded = await callJson(client, "load_remote_bundle", {
+      id: "runtime",
+      url: "https://github.com/acme/widgets/tree/main/okf/bundles/docs",
     });
-    assert.match(loaded.content[0].text, /"fileCount": 1/);
-    const bundles = await server.handle({ method: "tools/call", params: { name: "list_bundles", arguments: {} } });
-    assert.match(bundles.content[0].text, /"remote": true/);
-    const remotes = await server.handle({ method: "tools/call", params: { name: "list_remote_bundles", arguments: {} } });
-    assert.match(remotes.content[0].text, /github/);
-    const concept = await server.handle({ method: "tools/call", params: { name: "get_concept", arguments: { uri: "okf://runtime/remote.md" } } });
-    assert.match(concept.content[0].text, /Runtime Remote/);
+    assert.equal(loaded.payload.fileCount, 1);
+    const bundles = await callJson(client, "list_bundles", {});
+    assert.equal(bundles.payload.some((bundle) => bundle.remote === true), true);
+    const remotes = await callJson(client, "list_remote_bundles", {});
+    assert.equal(remotes.payload.some((bundle) => bundle.provider === "github"), true);
+    const concept = await callJson(client, "get_concept", { uri: "okf://runtime/remote.md" });
+    assert.match(concept.payload.title, /Runtime Remote/);
   } finally {
     globalThis.fetch = previousFetch;
   }
 });
 
-test("MCP project mode can preload configured remote bundles", async () => {
+test("MCP project mode can preload configured remote bundles", async (t) => {
   const previousFetch = globalThis.fetch;
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "okf-mcp-project-remote-"));
   const local = path.join(root, "okf", "local");
@@ -576,10 +570,11 @@ test("MCP project mode can preload configured remote bundles", async () => {
     },
   ]);
   try {
-    const server = await createServerAsync([], { projectPath: path.join(root, "okf.project.yaml") });
-    assert.equal(server.index.byUri.has("okf://docs/remote.md"), true);
-    const remoteBundles = await server.handle({ method: "tools/call", params: { name: "list_remote_bundles", arguments: {} } });
-    assert.match(remoteBundles.content[0].text, /Preloaded|github/);
+    const { client } = await connectMcp(t, [], { projectPath: path.join(root, "okf.project.yaml") });
+    const concept = await callJson(client, "get_concept", { uri: "okf://docs/remote.md" });
+    assert.equal(concept.payload.title, "Preloaded Remote");
+    const remoteBundles = await callJson(client, "list_remote_bundles", {});
+    assert.equal(remoteBundles.payload.some((bundle) => bundle.provider === "github"), true);
   } finally {
     globalThis.fetch = previousFetch;
   }
@@ -865,62 +860,38 @@ test("proposal storage rejects symlink roots and serializes competing transition
   );
 });
 
-test("MCP authoring tools create and accept concept proposals in project mode", async () => {
+test("MCP authoring tools create and accept concept proposals in project mode", async (t) => {
   const { root, bundle, proposals } = makeAuthoringProject();
-  const server = await createServerAsync([], {
+  const { client } = await connectMcp(t, [], {
     projectPath: path.join(root, "okf.project.yaml"),
     proposalRoot: proposals,
     allowAuthoring: true,
   });
-  const tools = await server.handle({ method: "tools/list" });
+  const tools = await client.listTools();
   assert.equal(tools.tools.some((tool) => tool.name === "okf_propose_concept"), true);
   assert.equal(tools.tools.some((tool) => tool.name === "okf_propose_update"), true);
-  const proposed = await server.handle({
-    method: "tools/call",
-    params: {
-      name: "okf_propose_concept",
-      arguments: {
-        bundle: "app",
-        path: "mcp/runtime-tool.md",
-        frontmatter: { type: "MCP Tool", title: "Runtime Tool" },
-        body: "# Runtime Tool",
-      },
-    },
+  const proposed = await callJson(client, "okf_propose_concept", {
+    bundle: "app",
+    path: "mcp/runtime-tool.md",
+    frontmatter: { type: "MCP Tool", title: "Runtime Tool" },
+    body: "# Runtime Tool",
   });
-  const proposal = JSON.parse(proposed.content[0].text).proposal;
-  const accepted = await server.handle({
-    method: "tools/call",
-    params: { name: "okf_accept_proposal", arguments: { proposalId: proposal.id } },
-  });
-  assert.equal(JSON.parse(accepted.content[0].text).accepted, true);
+  const proposal = proposed.payload.proposal;
+  const accepted = await callJson(client, "okf_accept_proposal", { proposalId: proposal.id });
+  assert.equal(accepted.payload.accepted, true);
   assert.equal(fs.existsSync(path.join(bundle, "mcp", "runtime-tool.md")), true);
-  const concept = await server.handle({
-    method: "tools/call",
-    params: { name: "get_concept", arguments: { uri: "okf://app/mcp/runtime-tool.md" } },
-  });
-  assert.match(concept.content[0].text, /Runtime Tool/);
+  const concept = await callJson(client, "get_concept", { uri: "okf://app/mcp/runtime-tool.md" });
+  assert.match(concept.payload.title, /Runtime Tool/);
 
-  const update = await server.handle({
-    method: "tools/call",
-    params: {
-      name: "okf_propose_update",
-      arguments: {
-        uri: "okf://app/existing",
-        frontmatter: { title: "Existing Through MCP" },
-      },
-    },
+  const update = await callJson(client, "okf_propose_update", {
+    uri: "okf://app/existing",
+    frontmatter: { title: "Existing Through MCP" },
   });
-  const updateProposal = JSON.parse(update.content[0].text).proposal;
-  const updateAccepted = await server.handle({
-    method: "tools/call",
-    params: { name: "okf_accept_proposal", arguments: { proposalId: updateProposal.id } },
-  });
-  assert.equal(JSON.parse(updateAccepted.content[0].text).updated, true);
-  const updatedConcept = await server.handle({
-    method: "tools/call",
-    params: { name: "get_concept", arguments: { uri: "okf://app/existing" } },
-  });
-  assert.match(updatedConcept.content[0].text, /Existing Through MCP/);
+  const updateProposal = update.payload.proposal;
+  const updateAccepted = await callJson(client, "okf_accept_proposal", { proposalId: updateProposal.id });
+  assert.equal(updateAccepted.payload.updated, true);
+  const updatedConcept = await callJson(client, "get_concept", { uri: "okf://app/existing" });
+  assert.match(updatedConcept.payload.title, /Existing Through MCP/);
 });
 
 async function callHttp(handler, options) {
@@ -1120,26 +1091,18 @@ test("CLI rejects dangling option flags", () => {
   assert.equal(parseArgs(["--project", "okf.project.yaml", "serve", "--host", "0.0.0.0", "--port", "9000"]).port, 9000);
 });
 
-test("MCP resources and tools operate over the in-memory index", async () => {
+test("MCP resources and tools operate over the in-memory index", async (t) => {
   const root = makeFixture();
-  const server = createServer([`fixture=${root}`]);
-  const initialized = await server.handle({
-    method: "initialize",
-    params: {
-      protocolVersion: "2025-06-18",
-      capabilities: {},
-      clientInfo: { name: "okf-mcp-test", version: "1" },
-    },
-  });
-  assert.equal(initialized.serverInfo.name, "okf-mcp");
-  const resources = await server.handle({ method: "resources/list" });
+  const { client } = await connectMcp(t, [`fixture=${root}`]);
+  assert.equal(client.getServerVersion().name, "okf-mcp");
+  const resources = await client.listResources();
   assert.equal(resources.resources.length, 5);
-  const read = await server.handle({ method: "resources/read", params: { uri: "okf://fixture/specs/alpha.md" } });
+  const read = await client.readResource({ uri: "okf://fixture/specs/alpha.md" });
   assert.match(read.contents[0].text, /# Alpha/);
-  const tools = await server.handle({ method: "tools/list" });
+  const tools = await client.listTools();
   assert.equal(tools.tools.some((tool) => tool.name === "search_concepts"), true);
-  const search = await server.handle({ method: "tools/call", params: { name: "search_concepts", arguments: { tagsAny: ["endpoint"] } } });
-  assert.match(search.content[0].text, /Alpha/);
+  const search = await callJson(client, "search_concepts", { tagsAny: ["endpoint"] });
+  assert.equal(search.payload.results.some((result) => result.title === "Alpha"), true);
 });
 
 test("graph tools normalize path URI aliases to canonical concept ids", () => {
@@ -1177,15 +1140,15 @@ test("graph tools normalize path URI aliases to canonical concept ids", () => {
   assert.deepEqual(paths.paths, [["okf://fixture/source", "okf://fixture/target"]]);
 });
 
-test("MCP tools describe their purpose, parameters, and side effects", async () => {
+test("MCP tools describe their purpose, parameters, and side effects", async (t) => {
   const { root, proposals } = makeAuthoringProject();
-  const server = await createServerAsync([], {
+  const { client } = await connectMcp(t, [], {
     projectPath: path.join(root, "okf.project.yaml"),
     proposalRoot: proposals,
     allowAuthoring: true,
     allowRuntimeRemoteLoad: true,
   });
-  const listed = await server.handle({ method: "tools/list" });
+  const listed = await client.listTools();
   listed.tools.forEach((tool) => {
     assert.equal(typeof tool.description, "string", `${tool.name} description`);
     assert.equal(tool.description.length > 24, true, `${tool.name} has a useful description`);
@@ -1206,24 +1169,16 @@ test("MCP tools describe their purpose, parameters, and side effects", async () 
   assert.equal(byName.get("okf_accept_proposal").annotations.destructiveHint, true);
 });
 
-test("MCP validation and required argument errors are surfaced", async () => {
+test("MCP validation and required argument errors are surfaced", async (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "okf-mcp-invalid-"));
   fs.writeFileSync(path.join(root, "bad.md"), "# Bad\n", "utf8");
-  const server = createServer([`fixture=${root}`]);
-  const validation = await server.handle({ method: "tools/call", params: { name: "validate_bundle", arguments: { bundle: "fixture" } } });
-  assert.match(validation.content[0].text, /missing_frontmatter/);
-  assert.match(validation.content[0].text, /"valid": false/);
-  const invalidArguments = await server.handle({
-    method: "tools/call",
-    params: { name: "find_paths", arguments: {} },
-  });
+  const { client } = await connectMcp(t, [`fixture=${root}`]);
+  const validation = await callJson(client, "validate_bundle", { bundle: "fixture" });
+  assert.equal(validation.payload.diagnostics.some((entry) => entry.code === "missing_frontmatter"), true);
+  assert.equal(validation.payload.valid, false);
+  const invalidArguments = await client.callTool({ name: "find_paths", arguments: {} });
   assert.equal(invalidArguments.isError, true);
-  const invalidPayload = JSON.parse(invalidArguments.content[0].text);
-  assert.equal(invalidPayload.error, "Invalid tool arguments");
-  assert.deepEqual(
-    invalidPayload.issues.map((issue) => issue.path),
-    ["/source", "/target"],
-  );
+  assert.match(invalidArguments.content[0].text, /Invalid arguments/);
 });
 
 test("bundle mode indexes a neutral multi-directory concept graph", () => {

@@ -4,7 +4,7 @@
 
 It consumes an OKF bundle directory of Markdown files with YAML frontmatter. An optional workspace mode can federate several bundles. Concepts are exposed through CLI commands and MCP resources and tools for validation, structured search, graph navigation, provenance inspection, and proposal-based authoring.
 
-The core intentionally has no database, embeddings, build step, or hosted-service dependency. It uses `js-yaml` for safe YAML and CommonMark for Markdown structure. Local root mode makes no network calls. Optional remote loading fetches public Markdown concepts and only their explicitly referenced inert assets from GitHub. Nothing in the v0.2 computation support executes code or attests a receipt.
+The core intentionally has no database, embeddings, build step, or hosted-service dependency. It uses `js-yaml` for safe YAML, CommonMark for Markdown structure, and the official Model Context Protocol TypeScript SDK v2 for stdio MCP. Local root mode makes no network calls. Optional remote loading fetches public Markdown concepts and only their explicitly referenced inert assets from GitHub. Nothing in the v0.2 computation support executes code or attests a receipt.
 
 ## OKF v0.2 Support And Extensions
 
@@ -35,23 +35,23 @@ Node 22 or newer is required.
 Install from the GitHub release:
 
 ```bash
-git clone --branch v0.4.0 https://github.com/mfdaves/okf-mcp.git
+git clone --branch v0.5.0 https://github.com/mfdaves/okf-mcp.git
 cd okf-mcp
 npm ci
 node bin/okf-mcp.js --root ./path/to/okf validate
 ```
 
-After version `0.4.0` is published on npm, pin it for reproducible use:
+After version `0.5.0` is published on npm, pin it for reproducible use:
 
 ```bash
-npx -y @mfdaves/okf-mcp@0.4.0 --version
-npx -y @mfdaves/okf-mcp@0.4.0 --root ./path/to/okf validate
+npx -y @mfdaves/okf-mcp@0.5.0 --version
+npx -y @mfdaves/okf-mcp@0.5.0 --root ./path/to/okf validate
 ```
 
 For a persistent installation:
 
 ```bash
-npm install --global @mfdaves/okf-mcp@0.4.0
+npm install --global @mfdaves/okf-mcp@0.5.0
 
 okf --version
 okf --root ./path/to/okf validate
@@ -95,7 +95,7 @@ okf --root okf/bundles/okf-mcp concept overview/okf-mcp
 Load the reference bundle directly from this release:
 
 ```bash
-okf --remote-bundle okf-mcp=https://github.com/mfdaves/okf-mcp/tree/v0.4.0/okf/bundles/okf-mcp --inspect
+okf --remote-bundle okf-mcp=https://github.com/mfdaves/okf-mcp/tree/v0.5.0/okf/bundles/okf-mcp --inspect
 ```
 
 The `@mfdaves/okf-mcp` npm package includes both `okf.project.yaml` and the
@@ -171,7 +171,7 @@ Commands:
 
 ## MCP Client Config
 
-The npm-based examples below apply after version `0.4.0` is published there. A source checkout can invoke its executable `bin/okf-mcp.js` with the same arguments.
+The npm-based examples below apply after version `0.5.0` is published there. A source checkout can invoke its executable `bin/okf-mcp.js` with the same arguments.
 
 Example client configuration:
 
@@ -182,7 +182,7 @@ Example client configuration:
       "command": "npx",
       "args": [
         "-y",
-        "@mfdaves/okf-mcp@0.4.0",
+        "@mfdaves/okf-mcp@0.5.0",
         "--root",
         "/absolute/path/to/okf",
         "mcp"
@@ -201,7 +201,7 @@ Project config mode, with read-only project helpers but without proposal mutatio
       "command": "npx",
       "args": [
         "-y",
-        "@mfdaves/okf-mcp@0.4.0",
+        "@mfdaves/okf-mcp@0.5.0",
         "--project",
         "/absolute/path/to/repo/okf.project.yaml",
         "mcp"
@@ -213,17 +213,16 @@ Project config mode, with read-only project helpers but without proposal mutatio
 
 Add `--authoring` to enable proposal creation, acceptance, and rejection. Add `--allow-remote-tool` to let MCP clients load arbitrary supported public remote bundles at runtime. Configured remote bundles remain readable without that runtime-loading flag.
 
-The stdio server supports MCP protocol versions `2025-11-25`, `2025-06-18`,
-`2025-03-26`, and `2024-11-05`. It returns a requested supported version.
-For a well-formed unsupported version, it returns its preferred supported
-version, `2025-11-25`, so the client can continue or disconnect.
+The stdio server uses `@modelcontextprotocol/server` v2. It serves the modern
+`2026-07-28` MCP revision and the SDK's compatibility path for 2025-era
+clients, including `2025-11-25`. The SDK owns protocol negotiation, framing,
+resource dispatch, tool dispatch, and advertised-schema validation.
 
-The transport uses standard JSON-RPC error codes for malformed messages,
-invalid requests, unknown methods, invalid method parameters, missing
-resources, and internal failures. Notifications never receive responses.
 Expected failures from a known tool, such as a missing concept, a read-only
-bundle, a failed remote fetch, or a proposal conflict, are returned as MCP
-tool results with `isError: true`.
+bundle, a failed remote fetch, invalid arguments, or a proposal conflict, are
+returned as MCP tool results with `isError: true`. Calls to tools that are not
+enabled are rejected by SDK dispatch. Unexpected implementation errors are
+masked instead of exposing internal details.
 
 ## MCP Registry Metadata
 
@@ -649,8 +648,8 @@ Generated output is regular Markdown/YAML OKF and is validated by the same index
 
 ## Limitations
 
-- The MCP server implements the stdio JSON-RPC methods needed for resources and tools directly instead of using an SDK, so advanced SDK conveniences are out of scope.
-- MCP initialization negotiates an explicit supported version and falls back to `2025-11-25` for well-formed unsupported versions.
+- MCP transport is stdio only. The separate HTTP authoring API is not MCP over HTTP.
+- MCP protocol compatibility follows the pinned official SDK v2 dependency.
 - There is no file watcher. Restart the server after external file changes. Concepts accepted through MCP authoring refresh the MCP server index immediately.
 - The HTTP API is a lightweight built-in server, not a full hosted multi-tenant service.
 - OKF v0.2 computation support is static inspection and preflight only; no computation or attester is executed.

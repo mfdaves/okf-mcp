@@ -16,10 +16,10 @@ const {
   readBundleAsset,
 } = require("../src/computation");
 const { buildIndex } = require("../src/indexer");
-const { createServer } = require("../src/mcp-server");
 const { fetchGitHubBundle } = require("../src/remote");
 const { searchConcepts } = require("../src/search");
 const { FileConceptStore } = require("../src/store");
+const { connectMcp } = require("./mcp-client");
 
 function tempRoot(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "okf-v02-integration-"));
@@ -263,8 +263,8 @@ test("invalid UTF-8 in a text computation asset prevents static readiness", (t) 
 
 test("MCP exposes v0.2 read tools by default and gates coordinated computation authoring separately", async (t) => {
   const root = computationFixture(t);
-  const readOnly = createServer([{ id: "finance", root }]);
-  const readNames = (await readOnly.handle({ method: "tools/list" })).tools.map((tool) => tool.name);
+  const readOnly = await connectMcp(t, [{ id: "finance", root }]);
+  const readNames = (await readOnly.client.listTools()).tools.map((tool) => tool.name);
   assert.equal(readNames.includes("inspect_attested_computation"), true);
   assert.equal(readNames.includes("get_provenance"), true);
   assert.equal(readNames.includes("read_bundle_asset"), true);
@@ -272,12 +272,12 @@ test("MCP exposes v0.2 read tools by default and gates coordinated computation a
 
   const store = new FileConceptStore({ bundles: [{ id: "finance", root }], relationTypes: [] });
   const service = new ConceptAuthoringService(store);
-  const enabled = createServer([], {
+  const enabled = await connectMcp(t, [], {
     authoringService: service,
     allowAuthoring: true,
     allowComputationAuthoring: true,
   });
-  const enabledNames = (await enabled.handle({ method: "tools/list" })).tools.map((tool) => tool.name);
+  const enabledNames = (await enabled.client.listTools()).tools.map((tool) => tool.name);
   assert.equal(enabledNames.includes("okf_propose_attested_computation"), true);
 });
 
