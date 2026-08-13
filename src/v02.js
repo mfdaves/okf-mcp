@@ -542,4 +542,5 @@ function normalizeV02Signals(documentOrFrontmatter, options) {
 
 module.exports = {
   normalizeV02Signals,
+  validActor,
 };

@@ -22,6 +22,7 @@ const { MAX_QUERY_CHARACTERS, MAX_QUERY_TERMS } = require("./search-index");
 const { exportGraph, findPaths, getGraph, getNeighbors, getSubgraph, graphSummary } = require("./graph");
 const { fetchGitHubBundle, fetchRemoteBundles, sanitizeRemoteId } = require("./remote");
 const { ConceptAuthoringService } = require("./authoring");
+const { LiveAuthoringService, MAX_CHANGES } = require("./live-authoring");
 const { FileConceptStore } = require("./store");
 const { loadProjectConfig } = require("./project");
 const {
@@ -115,6 +116,107 @@ function objectParameter(description, extra) {
     additionalProperties: true,
   }, extra || {});
 }
+
+function relationParameter(description) {
+  return {
+    type: "object",
+    description,
+    additionalProperties: false,
+    properties: {
+      type: nonEmptyStringParameter("Typed relation name."),
+      target: nonEmptyStringParameter("Relation target URI or bundle-local path."),
+      label: stringParameter("Optional human-readable relation label."),
+      description: stringParameter("Optional relation explanation."),
+    },
+    required: ["type", "target"],
+  };
+}
+
+function sourceParameter(description) {
+  return {
+    description,
+    anyOf: [
+      nonEmptyStringParameter("Source resource URI or bundle-local path."),
+      objectParameter("Structured OKF source entry."),
+    ],
+  };
+}
+
+function collectionPatchParameter(description, item) {
+  return {
+    type: "object",
+    description,
+    additionalProperties: false,
+    properties: {
+      add: { type: "array", items: item },
+      remove: { type: "array", items: item },
+    },
+    anyOf: [{ required: ["add"] }, { required: ["remove"] }],
+  };
+}
+
+const LIVE_CREATE_CHANGE = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    op: { type: "string", const: "create", description: "Create a new concept." },
+    path: nonEmptyStringParameter("Optional safe bundle-relative Markdown path; derived from type and title when omitted."),
+    type: nonEmptyStringParameter("Concept type."),
+    title: nonEmptyStringParameter("Concept title."),
+    description: stringParameter("Optional concept description."),
+    body: stringParameter("Optional Markdown body; defaults to an H1 using the title."),
+    tags: stringArrayParameter("Initial tags.", { nonEmptyItems: true }),
+    sources: {
+      type: "array",
+      description: "Initial source resources or structured source entries.",
+      items: sourceParameter("Source entry."),
+    },
+    relations: {
+      type: "array",
+      description: "Initial typed relationships.",
+      items: relationParameter("Typed relation."),
+    },
+    metadata: objectParameter("Optional extension frontmatter; managed concept fields are rejected."),
+  },
+  required: ["op", "type", "title"],
+};
+
+const LIVE_UPDATE_CHANGE = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    op: { type: "string", const: "update", description: "Update an existing concept in place." },
+    uri: nonEmptyStringParameter("Canonical or compatible URI of the existing concept."),
+    title: nonEmptyStringParameter("Replacement title."),
+    description: stringParameter("Replacement description."),
+    body: stringParameter("Replacement Markdown body."),
+    tags: collectionPatchParameter(
+      "Tags to add and/or remove; additions win when a tag appears in both lists.",
+      nonEmptyStringParameter("Tag."),
+    ),
+    sources: collectionPatchParameter(
+      "Sources to add/replace and/or remove by id or resource.",
+      sourceParameter("Source entry or selector."),
+    ),
+    relations: collectionPatchParameter(
+      "Relations to add/replace and/or remove by exact type plus target.",
+      relationParameter("Typed relation."),
+    ),
+    metadata: objectParameter("Extension frontmatter fields to add or replace; managed fields are rejected."),
+    removeMetadataKeys: stringArrayParameter("Extension frontmatter keys to remove; managed fields are rejected.", { nonEmptyItems: true }),
+  },
+  required: ["op", "uri"],
+  anyOf: [
+    { required: ["title"] },
+    { required: ["description"] },
+    { required: ["body"] },
+    { required: ["tags"] },
+    { required: ["sources"] },
+    { required: ["relations"] },
+    { required: ["metadata"] },
+    { required: ["removeMetadataKeys"] },
+  ],
+};
 
 function defineTool(description, annotations, properties, required, schemaExtras) {
   return {
@@ -412,6 +514,22 @@ const TOOL_DEFINITIONS = {
     },
     ["proposalId"],
   ),
+  okf_apply_changes: defineTool(
+    "Validate and atomically apply one or more structured concept creates or updates to one local bundle.",
+    DESTRUCTIVE_WRITE,
+    {
+      bundle: nonEmptyStringParameter("Writable bundle id; optional when exactly one local root is configured."),
+      message: stringParameter("Optional Git commit summary when automatic commits are enabled."),
+      changes: {
+        type: "array",
+        description: "One through 100 concept create or update operations applied as one batch.",
+        minItems: 1,
+        maxItems: MAX_CHANGES,
+        items: { oneOf: [LIVE_CREATE_CHANGE, LIVE_UPDATE_CHANGE] },
+      },
+    },
+    ["changes"],
+  ),
   get_graph: defineTool(
     "Return a bounded set of OKF graph nodes and edges with optional concept filters.",
     READ_ONLY,
@@ -513,6 +631,9 @@ const AUTHORING_MUTATION_TOOL_NAMES = new Set([
 const COMPUTATION_AUTHORING_TOOL_NAMES = new Set([
   "okf_propose_attested_computation",
 ]);
+const LIVE_WRITE_TOOL_NAMES = new Set([
+  "okf_apply_changes",
+]);
 const RUNTIME_REMOTE_TOOL_NAMES = new Set([
   "load_remote_bundle",
 ]);
@@ -546,6 +667,9 @@ function toolEnabled(state, name) {
       && state.allowAuthoring
       && state.allowComputationAuthoring,
     );
+  }
+  if (LIVE_WRITE_TOOL_NAMES.has(name)) {
+    return Boolean(state && state.allowWrite && state.liveAuthoringService);
   }
   if (RUNTIME_REMOTE_TOOL_NAMES.has(name)) {
     return Boolean(state && state.allowRuntimeRemoteLoad);
@@ -717,6 +841,13 @@ function requireAuthoring(state) {
     throw new Error("OKF authoring is not configured. Start the server with --root or --project to enable writable concept proposals.");
   }
   return state.authoringService;
+}
+
+function requireLiveAuthoring(state) {
+  if (!state.allowWrite || !state.liveAuthoringService) {
+    throw new Error("Live OKF authoring is not configured. Start the server with --write and --actor.");
+  }
+  return state.liveAuthoringService;
 }
 
 function rebuildStateIndex(state) {
@@ -912,6 +1043,18 @@ async function callTool(state, name, args) {
         return jsonContent(await expectedToolOperation(
           () => requireAuthoring(state).rejectProposal(args),
         ));
+      case "okf_apply_changes": {
+        const result = await expectedToolOperation(
+          () => requireLiveAuthoring(state).applyChanges(args, {
+            additionalBundles: state.remoteBundles,
+          }),
+          { translateTypeError: true },
+        );
+        if (result.applied) {
+          rebuildStateIndex(state);
+        }
+        return jsonContent(result, { isError: result.applied === false });
+      }
       case "get_graph":
         return jsonContent(getGraph(index, args));
       case "get_neighbors":
@@ -994,6 +1137,8 @@ function createState(bundleArgs, options) {
     relationTypes,
     project,
     authoringService,
+    liveAuthoringService: options && options.liveAuthoringService,
+    allowWrite: Boolean(options && options.allowWrite),
     allowAuthoring: Boolean(options && options.allowAuthoring),
     allowRuntimeRemoteLoad: Boolean(options && options.allowRuntimeRemoteLoad),
     allowComputationAuthoring: Boolean(options && options.allowComputationAuthoring),
@@ -1012,6 +1157,9 @@ async function createStateAsync(bundleArgs, options) {
     const localBundleArgs = (loaded.bundles || []).filter((bundle) => !bundle.remote);
     const store = options.authoringStore || FileConceptStore.fromProject(options.projectPath, { proposalRoot: options.proposalRoot });
     const authoringService = options.authoringService || new ConceptAuthoringService(store);
+    const liveAuthoringService = options.liveAuthoringService || (options.allowWrite
+      ? new LiveAuthoringService(store, { actor: options.actor, gitCommit: options.gitCommit })
+      : null);
     const initialIndex = attachProject(
       buildIndex(localBundleArgs.concat(initialRemoteBundles), {
         relationTypes: loaded.project.relationTypes,
@@ -1024,6 +1172,8 @@ async function createStateAsync(bundleArgs, options) {
       initialRemoteBundles,
       relationTypes: loaded.project.relationTypes,
       authoringService,
+      liveAuthoringService,
+      allowWrite: options.allowWrite,
       allowAuthoring: options.allowAuthoring,
       allowRuntimeRemoteLoad: options.allowRuntimeRemoteLoad,
       allowComputationAuthoring: options.allowComputationAuthoring,
@@ -1037,6 +1187,9 @@ async function createStateAsync(bundleArgs, options) {
       strictLinks: options.strictLinks,
     });
     const authoringService = options.authoringService || new ConceptAuthoringService(store);
+    const liveAuthoringService = options.liveAuthoringService || (options.allowWrite
+      ? new LiveAuthoringService(store, { actor: options.actor, gitCommit: options.gitCommit })
+      : null);
     const localBundleArgs = store.getBundles();
     const remoteBundles = await fetchRemoteBundles(options.remoteBundles || []);
     const initialIndex = attachProject(buildIndex(localBundleArgs.concat(remoteBundles), {
@@ -1049,6 +1202,8 @@ async function createStateAsync(bundleArgs, options) {
       initialRemoteBundles: remoteBundles,
       relationTypes: store.getRelationTypes(),
       authoringService,
+      liveAuthoringService,
+      allowWrite: options.allowWrite,
       allowAuthoring: options.allowAuthoring,
       allowRuntimeRemoteLoad: options.allowRuntimeRemoteLoad,
       allowComputationAuthoring: options.allowComputationAuthoring,
@@ -1059,6 +1214,17 @@ async function createStateAsync(bundleArgs, options) {
   }
   const remoteBundles = await fetchRemoteBundles((options && options.remoteBundles) || []);
   const localBundleArgs = (bundleArgs || []).slice();
+  const liveAuthoringService = options && options.liveAuthoringService
+    ? options.liveAuthoringService
+    : options && options.allowWrite && options.authoringService && options.authoringService.store
+      ? new LiveAuthoringService(options.authoringService.store, {
+        actor: options.actor,
+        gitCommit: options.gitCommit,
+      })
+      : null;
+  if (options && options.allowWrite && !liveAuthoringService) {
+    throw new Error("Live OKF authoring requires --root or --project and a configured actor.");
+  }
   return createState(localBundleArgs, {
     initialIndex: buildIndex(localBundleArgs.concat(remoteBundles), {
       strictLinks: options && options.strictLinks,
@@ -1066,6 +1232,8 @@ async function createStateAsync(bundleArgs, options) {
     }),
     initialRemoteBundles: remoteBundles,
     authoringService: options && options.authoringService,
+    liveAuthoringService,
+    allowWrite: options && options.allowWrite,
     allowAuthoring: options && options.allowAuthoring,
     allowRuntimeRemoteLoad: options && options.allowRuntimeRemoteLoad,
     allowComputationAuthoring: options && options.allowComputationAuthoring,

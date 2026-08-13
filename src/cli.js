@@ -27,6 +27,7 @@ const {
 } = require("./computation");
 const { buildV02MigrationPlan, checkV02Migration } = require("./migration");
 const { describeConceptGitSources, readConceptGitSource } = require("./git-source");
+const { validActor } = require("./v02");
 const packageMetadata = require("../package.json");
 
 const COMMANDS = new Set([
@@ -90,6 +91,9 @@ function parseArgs(argv) {
   let proposalRoot = "";
   let version = false;
   let authoring = false;
+  let write = false;
+  let actor = "";
+  let gitCommit = false;
   let allowRemoteTool = false;
   let strictLinks = false;
   let allowComputationAuthoring = false;
@@ -199,6 +203,35 @@ function parseArgs(argv) {
     }
     if (arg === "--authoring") {
       authoring = true;
+      continue;
+    }
+    if (arg === "--write") {
+      write = true;
+      continue;
+    }
+    if (arg === "--actor") {
+      if (actor) {
+        throw usageError("--actor may be supplied only once.");
+      }
+      if (!argv[index + 1] || String(argv[index + 1]).startsWith("-")) {
+        throw usageError("--actor requires a value.");
+      }
+      actor = argv[index + 1];
+      index += 1;
+      continue;
+    }
+    if (arg.startsWith("--actor=")) {
+      if (actor) {
+        throw usageError("--actor may be supplied only once.");
+      }
+      actor = arg.slice("--actor=".length);
+      if (!actor) {
+        throw usageError("--actor requires a value.");
+      }
+      continue;
+    }
+    if (arg === "--git-commit") {
+      gitCommit = true;
       continue;
     }
     if (arg === "--allow-remote-tool") {
@@ -371,6 +404,18 @@ function parseArgs(argv) {
       positional.push(arg);
     }
   }
+  if (write && !actor) {
+    throw usageError("--write requires --actor <human:id|process:id|provider/model>.");
+  }
+  if (write && !validActor(actor)) {
+    throw usageError("--actor must use human:<id>, process:<id>, or provider/model syntax.");
+  }
+  if (actor && !write) {
+    throw usageError("--actor requires --write.");
+  }
+  if (gitCommit && !write) {
+    throw usageError("--git-commit requires --write.");
+  }
   return {
     bundles,
     remoteBundles,
@@ -382,6 +427,9 @@ function parseArgs(argv) {
     help,
     version,
     authoring,
+    write,
+    actor,
+    gitCommit,
     allowRemoteTool,
     allowComputationAuthoring,
     strictLinks,
@@ -409,7 +457,7 @@ function usage() {
     "  okf-mcp --bundle <path-or-id=path> [--bundle <path>] [--inspect]",
     "  okf-mcp --remote-bundle <id=github-tree-url> [--inspect]",
     "  okf-mcp --project <okf.project.yaml> <command>",
-    "  okf-mcp [--project <okf.project.yaml>] [--authoring] [--allow-computation-authoring] [--allow-remote-tool] mcp",
+    "  okf-mcp [--project <okf.project.yaml>] [--authoring] [--write --actor <actor>] [--git-commit] mcp",
     "  okf-mcp --project <okf.project.yaml> serve [--host 127.0.0.1] [--port 8765]",
     "  okf-mcp <command> --bundle <path-or-id=path>",
     "",
@@ -437,6 +485,9 @@ function usage() {
     "  --root, -r <directory>      Load one official OKF bundle root.",
     "  --repo <concept-id=path>    Map a Git Repository concept to a checkout or bare repo; repeatable.",
     "  --authoring                 Enable MCP proposal authoring tools.",
+    "  --write                     Enable direct atomic MCP concept writes (requires --actor).",
+    "  --actor <actor>             Stamp live writes with human:id, process:id, or provider/model.",
+    "  --git-commit                Commit each live write batch when the catalog is in a clean Git repo.",
     "  --allow-remote-tool         Enable runtime remote-bundle loading over MCP.",
     "  --allow-computation-authoring Enable coordinated computation proposals (also requires --authoring).",
     "  --strict-links              Treat broken internal Markdown links as project-invalid.",
@@ -534,6 +585,13 @@ function stdioServerOptions(args) {
   if (args.authoring && args.allowComputationAuthoring) {
     options.allowComputationAuthoring = true;
   }
+  if (args.write) {
+    options.allowWrite = true;
+    options.actor = args.actor;
+    if (args.gitCommit) {
+      options.gitCommit = true;
+    }
+  }
   if (args.strictLinks) {
     options.strictLinks = true;
   }
@@ -609,6 +667,9 @@ async function main(argv, runtime) {
   const command = args.positional[0] || "mcp";
   if (!COMMANDS.has(command)) {
     throw usageError(`Unknown OKF command: ${command}`);
+  }
+  if (command !== "mcp" && (args.write || args.actor || args.gitCommit)) {
+    throw usageError("--write, --actor, and --git-commit are available only with the mcp command.");
   }
   if (command === "mcp") {
     const bundles = resolveLegacyBundles(args);

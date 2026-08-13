@@ -63,6 +63,7 @@ async function smokeMcp(okfMcp, installedRoot, mode) {
     const toolNames = tools.tools.map((tool) => tool.name);
     assert.equal(toolNames.includes("get_concept"), true);
     assert.equal(toolNames.includes("okf_accept_proposal"), false);
+    assert.equal(toolNames.includes("okf_apply_changes"), false);
     assert.equal(toolNames.includes("load_remote_bundle"), false);
 
     const resources = await client.listResources();

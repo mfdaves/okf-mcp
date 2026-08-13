@@ -17,6 +17,8 @@ relations:
     target: repo://test/okf-mcp.test.js
   - type: checked_by
     target: repo://test/mcp-hardening.test.js
+  - type: checked_by
+    target: repo://test/live-authoring.test.js
 ---
 
 # MCP Tool Catalog
@@ -33,7 +35,9 @@ Static computation tools inspect contracts, read indexed assets, prepare paramet
 
 `read_git_source` reads one pinned `sources[].git` entry from a checkout or bare repository explicitly mapped by the MCP host. It reads the Git object database rather than the working tree and never fetches.
 
-An explicit local root or project workspace exposes candidate validation, path suggestion, and proposal inspection. Normal proposal mutations require `--authoring`; the coordinated computation proposal additionally requires `--allow-computation-authoring`. Runtime calls to `load_remote_bundle` require `--allow-remote-tool`.
+An explicit local root or project workspace exposes candidate validation, path suggestion, and proposal inspection. Normal proposal mutations require `--authoring`; the coordinated computation proposal additionally requires `--allow-computation-authoring`. `--write --actor <actor>` exposes only `okf_apply_changes`, which accepts structured create/update batches without requiring agents to compose YAML. Runtime calls to `load_remote_bundle` require `--allow-remote-tool`.
+
+`okf_apply_changes` validates 1–100 operations as one future graph, stamps one server-owned `generated.at` with the configured `generated.by`, then publishes the complete local batch and refreshes the index. Optional `--git-commit` policy creates one scoped commit from a clean worktree. Commit failure leaves valid files applied and reports `applied_uncommitted`; the tool never pushes.
 
 Every tool supplies a purpose-specific description, descriptions for all input parameters, and MCP annotations for read behavior, destructive behavior, idempotency, and external access. Tool discovery and direct invocation use the same capability checks, so a hidden tool also fails when called by name. Annotations remain hints to clients; server-side validation is authoritative.
 

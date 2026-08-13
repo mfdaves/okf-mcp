@@ -14,6 +14,7 @@ module.exports = {
   ...require("./git-source"),
   ...require("./migration"),
   ...require("./authoring"),
+  ...require("./live-authoring"),
   ...require("./store"),
   ...require("./http-server"),
   ...require("./mcp-server"),

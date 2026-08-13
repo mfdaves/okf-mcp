@@ -169,6 +169,7 @@ class FileConceptStore {
       throw new Error("Proposal root cannot be a symbolic link.");
     }
     this.proposalLocks = new Map();
+    this.writeQueue = Promise.resolve();
   }
 
   static fromProject(projectPath, options) {
@@ -357,6 +358,12 @@ class FileConceptStore {
     }
   }
 
+  async withWriteLock(operation) {
+    const current = this.writeQueue.then(operation, operation);
+    this.writeQueue = current.catch(() => {});
+    return current;
+  }
+
   listProposalFiles() {
     const root = this.proposalDirectory("", false);
     if (!fs.existsSync(root)) {
@@ -454,7 +461,9 @@ class FileConceptStore {
   }
 
   async acceptProposal(id, authoringService, options) {
-    return this.withProposalLock(id, (canonicalId) => this.acceptProposalUnlocked(canonicalId, authoringService, options));
+    return this.withWriteLock(() => (
+      this.withProposalLock(id, (canonicalId) => this.acceptProposalUnlocked(canonicalId, authoringService, options))
+    ));
   }
 
   async acceptProposalUnlocked(id, authoringService, options) {

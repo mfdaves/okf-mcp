@@ -107,6 +107,7 @@ test("tools/list and tools/call enforce configured MCP capabilities", async (t) 
   assert.equal(readOnlyNames.has("search_concepts"), true);
   assert.equal(readOnlyNames.has("okf_validate_concept"), false);
   assert.equal(readOnlyNames.has("okf_propose_concept"), false);
+  assert.equal(readOnlyNames.has("okf_apply_changes"), false);
   assert.equal(readOnlyNames.has("load_remote_bundle"), false);
   await assert.rejects(
     () => readOnly.client.callTool({
@@ -130,6 +131,7 @@ test("tools/list and tools/call enforce configured MCP capabilities", async (t) 
   assert.equal(projectNames.has("okf_get_proposal"), true);
   assert.equal(projectNames.has("okf_propose_concept"), false);
   assert.equal(projectNames.has("okf_accept_proposal"), false);
+  assert.equal(projectNames.has("okf_apply_changes"), false);
   await assert.rejects(
     () => project.client.callTool({
       name: "okf_propose_concept",
@@ -137,6 +139,20 @@ test("tools/list and tools/call enforce configured MCP capabilities", async (t) 
         bundle: "local",
         path: "blocked.md",
         frontmatter: { type: "Concept", title: "Blocked" },
+      },
+    }),
+    (error) => {
+      assert.equal(error.code, -32602);
+      assert.match(error.message, /not found/);
+      return true;
+    },
+  );
+  await assert.rejects(
+    () => project.client.callTool({
+      name: "okf_apply_changes",
+      arguments: {
+        bundle: "local",
+        changes: [{ op: "create", type: "Concept", title: "Blocked live" }],
       },
     }),
     (error) => {
@@ -155,6 +171,16 @@ test("tools/list and tools/call enforce configured MCP capabilities", async (t) 
   assert.equal(enabledNames.has("okf_propose_concept"), true);
   assert.equal(enabledNames.has("okf_accept_proposal"), true);
   assert.equal(enabledNames.has("load_remote_bundle"), true);
+  assert.equal(enabledNames.has("okf_apply_changes"), false);
+
+  const live = await connectMcp(t, [], {
+    projectPath,
+    allowWrite: true,
+    actor: "openai/gpt-5.6",
+  });
+  const liveNames = toolNames(await live.client.listTools());
+  assert.equal(liveNames.has("okf_apply_changes"), true);
+  assert.equal(liveNames.has("okf_propose_concept"), false);
 });
 
 test("accepted local proposals retain configured and runtime remote bundles and edges", async (t) => {
@@ -188,6 +214,8 @@ test("accepted local proposals retain configured and runtime remote bundles and 
     projectPath,
     proposalRoot: path.join(root, "proposals"),
     allowAuthoring: true,
+    allowWrite: true,
+    actor: "openai/gpt-5.6",
     allowRuntimeRemoteLoad: true,
   });
   const beforeRuntime = await callJson(client, "search_concepts", { query: "runtime" });
@@ -214,11 +242,23 @@ test("accepted local proposals retain configured and runtime remote bundles and 
   await callJson(client, "okf_accept_proposal", { proposalId });
   const afterAccepted = await callJson(client, "search_concepts", { query: "accepted" });
   assert.equal(afterAccepted.payload.results.some((result) => result.uri === "okf://local/accepted"), true);
+  const live = await callJson(client, "okf_apply_changes", {
+    bundle: "local",
+    changes: [{
+      op: "create",
+      path: "live.md",
+      type: "Concept",
+      title: "Live",
+      relations: [{ type: "related_to", target: "okf://runtime/runtime.md" }],
+    }],
+  });
+  assert.equal(live.payload.applied, true);
 
   for (const uri of [
     "okf://configured/configured.md",
     "okf://runtime/runtime.md",
     "okf://local/accepted.md",
+    "okf://local/live.md",
   ]) {
     const concept = await callJson(client, "get_concept", { uri });
     assert.equal(concept.result.isError, undefined);
@@ -227,6 +267,12 @@ test("accepted local proposals retain configured and runtime remote bundles and 
   assert.equal(graph.payload.edges.some((edge) => (
     edge.source === "okf://local/source"
     && edge.target === "okf://configured/configured"
+    && edge.relationType === "related_to"
+    && !edge.broken
+  )), true);
+  assert.equal(graph.payload.edges.some((edge) => (
+    edge.source === "okf://local/live"
+    && edge.target === "okf://runtime/runtime"
     && edge.relationType === "related_to"
     && !edge.broken
   )), true);

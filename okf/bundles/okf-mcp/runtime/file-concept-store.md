@@ -2,8 +2,8 @@
 id: okf://okf-mcp/runtime/file-concept-store
 type: OKF Runtime Component
 title: File Concept Store
-description: Local proposal and concept persistence boundary used by root and project authoring.
-tags: [storage, proposals, authoring, filesystem]
+description: Local proposal, direct-batch, and concept persistence boundary used by root and project authoring.
+tags: [storage, proposals, authoring, filesystem, batch]
 relations:
   - type: consumes
     target: okf://okf-mcp/specs/concept-format
@@ -26,6 +26,8 @@ Proposal states are `proposed`, `accepted`, and `rejected`. Creating or updating
 New concepts use exclusive creation. Updates retain a SHA256 revision and check it immediately before atomic replacement. Gated Attested Computation proposals stage the concept plus an optional external computation file and conflict-check every target before acceptance.
 
 The store rolls back published files when an ordinary acceptance call fails, but a multi-file acceptance is not crash-transactional across process or power loss. Operators must inspect and repair an interrupted acceptance before restarting authoring; the store does not claim database transaction semantics.
+
+Proposal acceptance and direct live batches share one process-local writer queue. A direct batch stages every candidate, checks revisions immediately before publication, validates the persisted graph, and restores its own changed files when publication or validation fails. This provides all-or-nothing behavior for ordinary process errors, not crash durability or distributed coordination.
 
 Write paths remain bundle-relative, bundle boundaries are enforced, and symbolic-link traversal is blocked. Generic tools cannot alter computation contracts. Migration manifests live under `.okf-proposals/migrations`; their child proposals are never auto-accepted, and the reserved version proposal depends on accepted Stage-A children.
 

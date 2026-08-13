@@ -74,6 +74,10 @@ test("CLI parses contract flags and rejects unknown options as usage errors", ()
   assert.equal(args.receiptFile, "receipt.json");
   assert.equal(args.maxContentBytes, 65536);
   assert.equal(parseArgs(["--max-content-bytes", "1048576"]).maxContentBytes, 1048576);
+  const live = parseArgs(["--write", "--actor", "openai/gpt-5.6", "--git-commit"]);
+  assert.equal(live.write, true);
+  assert.equal(live.actor, "openai/gpt-5.6");
+  assert.equal(live.gitCommit, true);
 
   assert.throws(
     () => parseArgs(["--unknown"]),
@@ -83,6 +87,10 @@ test("CLI parses contract flags and rejects unknown options as usage errors", ()
       && /Unknown option/.test(error.message),
   );
   assert.throws(() => parseArgs(["--max-content-bytes", "1048577"]), /1 through 1048576/);
+  assert.throws(() => parseArgs(["--write"]), /requires --actor/);
+  assert.throws(() => parseArgs(["--actor", "openai\/gpt-5.6"]), /requires --write/);
+  assert.throws(() => parseArgs(["--write", "--actor", "invalid"]), /human:<id>/);
+  assert.throws(() => parseArgs(["--git-commit"]), /requires --write/);
   assert.equal(exitCodeForError(new Error("operational")), 1);
 });
 
@@ -97,6 +105,9 @@ test("usage documents version and MCP capability flags", () => {
   const text = usage();
   assert.match(text, /--version, -v/);
   assert.match(text, /--authoring/);
+  assert.match(text, /--write/);
+  assert.match(text, /--actor <actor>/);
+  assert.match(text, /--git-commit/);
   assert.match(text, /--allow-remote-tool/);
   assert.match(text, /--parameters-file <path\|->/);
   assert.match(text, /--receipt-file <path\|->/);
@@ -138,6 +149,26 @@ test("default MCP discovery forwards explicit capability options", async () => {
     allowRuntimeRemoteLoad: true,
     projectPath: fixture.projectPath,
   });
+});
+
+test("CLI forwards live authoring policy only when explicitly enabled", async () => {
+  const fixture = makeProject();
+  let call;
+  await main(["--write", "--actor", "openai/gpt-5.6", "--git-commit"], {
+    cwd: fixture.nested,
+    runStdioServer: async (bundles, input, output, options) => {
+      call = { bundles, input, output, options };
+    },
+  });
+  assert.equal(call.options.allowWrite, true);
+  assert.equal(call.options.actor, "openai/gpt-5.6");
+  assert.equal(call.options.gitCommit, true);
+  assert.equal(call.options.allowAuthoring, false);
+
+  await assert.rejects(
+    main(["--write", "--actor", "openai/gpt-5.6", "validate"], { cwd: fixture.nested }),
+    /available only with the mcp command/,
+  );
 });
 
 test("CLI separates usage, validation, and operational failures", async () => {

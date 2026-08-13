@@ -47,6 +47,10 @@ function parseBundleArg(arg, index) {
   };
 }
 
+function documentOverrideKey(bundleId, relativePath) {
+  return `${bundleId}\u0000${normalizeSlashes(relativePath)}`;
+}
+
 function uniqueBundleIds(bundles) {
   return bundles.map((bundle) => {
     const base = sanitizeBundleId(bundle.id);
@@ -319,6 +323,9 @@ function semanticReferences(doc) {
 
 function buildIndex(bundleArgs, options) {
   const config = options || {};
+  const documentOverrides = config.documentOverrides instanceof Map
+    ? config.documentOverrides
+    : new Map();
   const strictLinks = Boolean(config.strictLinks);
   const requestedBundles = uniqueBundleIds((bundleArgs || []).map(parseBundleArg));
   const allowedRelationTypes = new Set((config.relationTypes || DEFAULT_RELATION_TYPES).map(String));
@@ -378,13 +385,13 @@ function buildIndex(bundleArgs, options) {
       errors.push({ code: "missing_bundle_root", bundle: bundle.id, path: bundle.root, message: "Bundle root does not exist." });
       return;
     }
-    walkMarkdown(bundle.root).forEach((filePath) => {
-      const relativePath = safeRelativePath(bundle.root, filePath) || normalizeSlashes(filePath);
-      if (!bundleAllowsPath(bundle, relativePath)) {
-        return;
-      }
+    const indexedPaths = new Set();
+    const indexLocalDocument = (relativePath, text, source) => {
+      indexedPaths.add(relativePath);
       try {
-        const doc = parseMarkdownFile(bundle, filePath, { asOf: config.asOf });
+        const doc = text === undefined
+          ? parseMarkdownFile(bundle, source, { asOf: config.asOf })
+          : parseMarkdownText(bundle, relativePath, text, source, { asOf: config.asOf });
         documents.push(doc);
         if (doc.reserved) {
           reserved.push(doc);
@@ -400,6 +407,33 @@ function buildIndex(bundleArgs, options) {
           message: error.message,
         });
       }
+    };
+    walkMarkdown(bundle.root).forEach((filePath) => {
+      const relativePath = safeRelativePath(bundle.root, filePath) || normalizeSlashes(filePath);
+      if (!bundleAllowsPath(bundle, relativePath)) {
+        return;
+      }
+      const key = documentOverrideKey(bundle.id, relativePath);
+      indexLocalDocument(
+        relativePath,
+        documentOverrides.has(key) ? String(documentOverrides.get(key)) : undefined,
+        filePath,
+      );
+    });
+    const prefix = `${bundle.id}\u0000`;
+    documentOverrides.forEach((text, key) => {
+      if (!String(key).startsWith(prefix)) {
+        return;
+      }
+      const relativePath = normalizeSlashes(String(key).slice(prefix.length));
+      if (indexedPaths.has(relativePath) || !bundleAllowsPath(bundle, relativePath)) {
+        return;
+      }
+      indexLocalDocument(
+        relativePath,
+        String(text),
+        path.join(bundle.root, ...relativePath.split("/")),
+      );
     });
   });
 
