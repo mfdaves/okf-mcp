@@ -66,6 +66,10 @@ async function smokeMcp(okfMcp, installedRoot, mode) {
     assert.equal(toolNames.includes("okf_validate_changes"), false);
     assert.equal(toolNames.includes("okf_apply_changes"), false);
     assert.equal(toolNames.includes("load_remote_bundle"), false);
+    assert.deepEqual(
+      tools.tools.find((tool) => tool.name === "search_concepts").inputSchema.properties.detail.enum,
+      ["compact", "full"],
+    );
 
     const resources = await client.listResources();
     assert.equal(
@@ -86,6 +90,10 @@ async function smokeMcp(okfMcp, installedRoot, mode) {
     });
     const searchPayload = JSON.parse(search.content[0].text);
     assert.equal(searchPayload.results[0].uri, "okf://okf-mcp/runtime/mcp-server");
+    assert.deepEqual(
+      Object.keys(searchPayload.results[0]).sort(),
+      ["description", "title", "type", "uri"],
+    );
   } finally {
     await client.close();
   }
@@ -116,6 +124,7 @@ async function smokeLiveValidation(okfMcp, installedRoot, mode) {
     const byName = new Map(tools.tools.map((tool) => [tool.name, tool]));
     assert.equal(byName.get("okf_validate_changes").annotations.readOnlyHint, true);
     assert.equal(byName.get("okf_apply_changes").annotations.destructiveHint, true);
+    assert.equal(byName.get("okf_validate_changes").inputSchema.properties.detail.default, "compact");
     const result = await client.callTool({
       name: "okf_validate_changes",
       arguments: {

@@ -180,9 +180,9 @@ function findPaths(index, source, target, maxPaths, options) {
   const adjacency = new Map();
   index.edges.filter((edge) => !edge.broken && edgeAllowed(edge, options)).forEach((edge) => {
     if (!adjacency.has(edge.source)) {
-      adjacency.set(edge.source, []);
+      adjacency.set(edge.source, new Set());
     }
-    adjacency.get(edge.source).push(edge.target);
+    adjacency.get(edge.source).add(edge.target);
   });
   const queue = [[canonicalSource]];
   const paths = [];

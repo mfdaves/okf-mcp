@@ -5,8 +5,24 @@ const { normalizeV02Signals } = require("./v02");
 const { resolveConcept } = require("./indexer");
 const { normalizeSearchQuery, prepareSearchIndex } = require("./search-index");
 
+const MAX_COMPACT_TEXT = 500;
+
 function lower(value) {
   return String(value || "").toLowerCase();
+}
+
+function compactText(value) {
+  const text = String(value || "");
+  return text.length > MAX_COMPACT_TEXT ? `${text.slice(0, MAX_COMPACT_TEXT - 1)}…` : text;
+}
+
+function compactConceptSummary(doc) {
+  return {
+    uri: doc.uri,
+    title: compactText(doc.title),
+    type: compactText(doc.type),
+    description: compactText(doc.description),
+  };
 }
 
 function asArray(value) {
@@ -205,6 +221,9 @@ function searchConcepts(index, options) {
     results.sort((a, b) => compareDocs(a.doc, b.doc));
   }
   const page = results.slice(offset, offset + limit).map((entry) => {
+    if (config.detail === "compact") {
+      return compactConceptSummary(entry.doc);
+    }
     const summary = conceptSummary(entry.doc);
     if (config.asOf) {
       const signals = signalsForDoc(entry.doc, config.asOf);

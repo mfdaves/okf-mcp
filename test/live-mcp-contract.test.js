@@ -68,6 +68,10 @@ test("live validation and apply advertise projection-friendly matching contracts
         valid: false,
         status: "rejected",
         filesChanged: false,
+        snapshot: { checkedAt: "2026-08-13T00:00:00.000Z" },
+        preconditions: { git: { enabled: true, ready: false } },
+        target: { bundleRoot: root, absolutePaths: [path.join(root, "preview.md")] },
+        durability: { state: "not_persisted", filesChanged: false },
         changes: [],
         validation: { valid: false, diagnostics: [{ code: "stub_invalid" }] },
       };
@@ -122,6 +126,8 @@ test("live validation and apply advertise projection-friendly matching contracts
   assert.equal(validateTool.annotations.destructiveHint, false);
   assert.equal(applyTool.annotations.destructiveHint, true);
   assert.deepEqual(validateTool.inputSchema, applyTool.inputSchema);
+  assert.deepEqual(validateTool.inputSchema.properties.detail.enum, ["compact", "full"]);
+  assert.equal(validateTool.inputSchema.properties.detail.default, "compact");
 
   const changesSchema = applyTool.inputSchema.properties.changes;
   assert.match(changesSchema.description, /Create grammar:/);
@@ -172,6 +178,10 @@ test("live validation and apply advertise projection-friendly matching contracts
   const preview = await callJson(enabled.client, "okf_validate_changes", previewInput);
   assert.equal(preview.result.isError, undefined);
   assert.equal(preview.payload.valid, false);
+  assert.equal(preview.payload.snapshot, undefined);
+  assert.equal(preview.payload.preconditions, undefined);
+  assert.equal(preview.payload.target.absolutePaths, undefined);
+  assert.equal(preview.payload.git.ready, false);
   assert.deepEqual(preview.result.structuredContent, preview.payload);
   assert.equal(fs.existsSync(path.join(root, "preview.md")), false);
   assert.deepEqual(calls[0], {
@@ -192,6 +202,15 @@ test("live validation and apply advertise projection-friendly matching contracts
     assert.match(invalid.content[0].text, /Invalid arguments/i);
   }
   assert.equal(calls.length, 1);
+
+  const full = await callJson(enabled.client, "okf_validate_changes", {
+    detail: "full",
+    ...previewInput,
+  });
+  assert.ok(full.payload.snapshot);
+  assert.ok(full.payload.preconditions);
+  assert.equal(full.payload.target.absolutePaths.length, 1);
+  assert.deepEqual(calls[1].args, previewInput);
 
   const operationalError = await callJson(enabled.client, "okf_validate_changes", {
     message: "structured-error",

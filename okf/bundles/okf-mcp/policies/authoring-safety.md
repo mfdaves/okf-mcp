@@ -35,7 +35,7 @@ Authoring is allowed for an explicit local `--root` or local roots declared by `
 
 Concept paths must be safe relative `.md` paths inside the selected bundle. Absolute paths, parent traversal, hidden/control-plane segments such as `.git`, case-insensitive reserved `index.md` and `log.md` targets, Markdown-file ancestor segments, symbolic-link traversal, and non-directory parents are rejected.
 
-New concepts cannot reuse a canonical Concept ID or compatibility alias. Updates are bound to the existing bundle and path and cannot change the custom-id alias.
+New concepts cannot reuse a canonical Concept ID or compatibility alias, and a batch cannot increase same-type/title ambiguity. Updates are bound to the existing bundle and path and cannot change the custom-id alias. Move/rename remains unsupported because it changes portable identity and requires a future graph tombstone plus lossless inbound-reference rewriting.
 
 Candidates must satisfy the concept format, configured relation vocabulary, and internal target integrity. External schemes such as `repo://` are allowed as opaque references.
 

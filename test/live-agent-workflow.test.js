@@ -116,6 +116,7 @@ function makeGitRoot(t) {
 function primaryPayload(bundleId) {
   return {
     bundle: bundleId,
+    detail: "full",
     message: "docs(okf): add incident handoff",
     changes: [
       {
@@ -183,8 +184,9 @@ function assertEffects(receipt) {
   assert.deepEqual(values(create.effects.sources.added), ["id:orientation"]);
   assert.deepEqual(
     values(create.effects.relations.added),
-    ["related_to\u0000/alpha.md"],
+    [{ type: "related_to", target: "/alpha.md" }],
   );
+  assert.equal(create.effects.changedFields.includes("generated"), false);
   assert.equal(create.effects.beforeRevision, null);
   assert.match(create.effects.afterRevision, /^sha256:[0-9a-f]{64}$/);
   assert.equal(create.effects.bytesBefore, 0);
@@ -200,16 +202,22 @@ function assertEffects(receipt) {
   assert.deepEqual(values(update.effects.sources.updated), ["id:primary"]);
   assert.deepEqual(
     values(update.effects.relations.added),
-    ["depends_on\u0000/agent-guide/incident-handoff.md"],
+    [{ type: "depends_on", target: "/agent-guide/incident-handoff.md" }],
   );
   assert.deepEqual(
     values(update.effects.relations.removed),
-    ["depends_on\u0000/references/legacy.md"],
+    [{ type: "depends_on", target: "/references/legacy.md" }],
   );
   assert.deepEqual(
     values(update.effects.relations.updated),
-    ["related_to\u0000/references/source.md"],
+    [{
+      type: "related_to",
+      target: "/references/source.md",
+      label: "replacement label",
+    }],
   );
+  assert.equal(update.effects.changedFields.includes("generated"), false);
+  assert.equal(JSON.stringify(receipt).includes("\\u0000"), false);
   assert.deepEqual(values(update.effects.metadata.set), ["description", "review_state"]);
   assert.deepEqual(values(update.effects.metadata.removed), ["x-retained"]);
   assert.match(update.effects.beforeRevision, /^sha256:[0-9a-f]{64}$/);
@@ -424,6 +432,7 @@ test("a fresh agent previews and applies one exact Git-backed concept batch", as
   write(root, "dirty.txt", "pre-existing user change\n");
   const dirty = await callJson(client, "okf_validate_changes", {
     bundle: bundleId,
+    detail: "full",
     changes: [{
       op: "create",
       path: "dirty-check.md",

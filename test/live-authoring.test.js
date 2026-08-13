@@ -7,6 +7,7 @@ const path = require("node:path");
 const { spawnSync } = require("node:child_process");
 const test = require("node:test");
 
+const { ConceptAuthoringService } = require("../src/authoring");
 const { LiveAuthoringService } = require("../src/live-authoring");
 const { createMcpServer } = require("../src/mcp-server");
 const { FileConceptStore } = require("../src/store");
@@ -228,6 +229,69 @@ test("a mixed create/update batch shares one server timestamp", async (t) => {
   }
 });
 
+test("live validation prevents semantic duplicates and recovers stale update locators", async (t) => {
+  const root = makeRoot();
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  write(root, "beta.md", concept("Beta"));
+  const service = fixedService(root);
+  const bundle = path.basename(root);
+
+  const duplicate = await service.validateChanges({
+    changes: [{ op: "create", path: "alternate.md", type: "Reference", title: " alpha " }],
+  });
+  assert.equal(duplicate.code, "concept_already_exists");
+  assert.equal(duplicate.details.retryWith.uri, `okf://${bundle}/alpha`);
+  assert.equal(fs.existsSync(path.join(root, "alternate.md")), false);
+
+  const differentType = await service.validateChanges({
+    changes: [{ op: "create", path: "guide-alpha.md", type: "Guide", title: "Alpha" }],
+  });
+  assert.equal(differentType.valid, true);
+
+  const peerDuplicate = await service.validateChanges({
+    changes: ["one", "two"].map((name) => ({
+      op: "create", path: `${name}.md`, type: "Guide", title: "Same Batch",
+    })),
+  });
+  assert.equal(peerDuplicate.code, "concept_already_exists");
+  assert.equal(peerDuplicate.details.reason, "same_batch_type_title");
+
+  const converged = await service.validateChanges({
+    changes: [
+      { op: "update", uri: `okf://${bundle}/alpha`, title: "Converged" },
+      { op: "create", path: "converged.md", type: "Reference", title: "Converged" },
+    ],
+  });
+  assert.equal(converged.code, "concept_already_exists");
+  assert.equal(converged.details.reason, "same_batch_type_title");
+
+  const updatesConverged = await service.validateChanges({
+    changes: [
+      { op: "update", uri: `okf://${bundle}/alpha`, title: "Shared" },
+      { op: "update", uri: `okf://${bundle}/beta`, title: "Shared" },
+    ],
+  });
+  assert.equal(updatesConverged.code, "concept_already_exists");
+
+  const reused = await service.validateChanges({
+    changes: [
+      { op: "update", uri: `okf://${bundle}/alpha`, title: "Renamed Alpha" },
+      { op: "create", path: "replacement-alpha.md", type: "Reference", title: "Alpha" },
+    ],
+  });
+  assert.equal(reused.valid, true);
+
+  const stale = await service.validateChanges({
+    changes: [{
+      op: "update",
+      uri: `okf://${bundle}/former/location/alpha`,
+      tags: { add: ["recovered"] },
+    }],
+  });
+  assert.equal(stale.code, "concept_not_found");
+  assert.equal(stale.details.recovery.retryWith.uri, `okf://${bundle}/alpha`);
+});
+
 test("an invalid batch writes nothing and process-generated targets stay protected", async (t) => {
   const root = makeRoot();
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
@@ -239,6 +303,10 @@ test("an invalid batch writes nothing and process-generated targets stay protect
     "generated_file: true",
   ]));
   const service = fixedService(root);
+  const suggestion = new ConceptAuthoringService(service.store).suggestConceptPath({
+    type: "Reference", title: "Generated Flag",
+  });
+  assert.equal(suggestion.recommendedOperation, "change_generator");
   const rejected = await service.applyChanges({
     changes: [
       { op: "create", path: "batch/good.md", type: "Reference", title: "Good" },
@@ -285,6 +353,7 @@ test("configured generator outputs and computation contracts cannot be authored 
   fs.mkdirSync(path.join(projectRoot, "source"), { recursive: true });
   fs.mkdirSync(bundle, { recursive: true });
   write(bundle, "index.md", "---\nokf_version: \"0.2\"\n---\n\n# Project\n");
+  write(bundle, "generated/owned.md", concept("Generated Output"));
   write(projectRoot, "okf.project.yaml", [
     "project: LiveProject",
     "bundles:",
@@ -304,6 +373,12 @@ test("configured generator outputs and computation contracts cannot be authored 
     FileConceptStore.fromProject(path.join(projectRoot, "okf.project.yaml")),
     { actor: "openai/gpt-5.6" },
   );
+  const stale = await service.validateChanges({
+    bundle: "live",
+    changes: [{ op: "update", uri: "okf://live/archive/owned", tags: { add: ["reviewed"] } }],
+  });
+  assert.equal(stale.details.recovery.recommendedOperation, "change_generator");
+  assert.equal(stale.details.recovery.retryWith, undefined);
   await assert.rejects(
     service.applyChanges({
       bundle: "live",

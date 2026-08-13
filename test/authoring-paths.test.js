@@ -31,44 +31,52 @@ test("concept paths reject raw empty, dot, and parent segments", () => {
 });
 
 test("path suggestions use a dominant same-type directory only with strong evidence", () => {
-  const bundle = { id: "xingu-okf" };
+  const bundle = { id: "handbook" };
   const documents = Array.from({ length: 13 }, (_, index) => ({
     bundle: bundle.id,
     valid: true,
     reserved: false,
-    type: "Downloader Runbook",
-    path: `downloader/operations/runbook-${index}.md`,
+    type: "Service Runbook",
+    path: `operations/runbook-${index}.md`,
   })).concat({
     bundle: bundle.id,
     valid: true,
     reserved: false,
-    type: "Downloader Runbook",
-    path: "downloader/operations/downloader-runbook/legacy.md",
+    type: "Service Runbook",
+    path: "archive/service-runbook/legacy.md",
   });
 
   assert.deepEqual(
     deriveConceptPathSuggestion({ documents }, bundle, {
-      type: "Downloader Runbook",
-      title: "SP API Usage Health Verification",
+      type: "Service Runbook",
+      title: "Queue Health Verification",
     }),
     {
-      path: "downloader/operations/sp-api-usage-health-verification.md",
+      path: "operations/queue-health-verification.md",
       strategy: "dominant_same_type_directory",
       evidence: {
         matchingConcepts: 14,
         dominantDirectoryCount: 13,
         dominantDirectoryRatio: 0.929,
-        dominantDirectory: "downloader/operations",
+        dominantDirectory: "operations",
       },
     },
   );
 
   assert.equal(
+    deriveConceptPathSuggestion({ documents }, bundle, {
+      prefix: "operations",
+      type: "Service Runbook",
+      title: "Scoped Runbook",
+    }).path,
+    "operations/scoped-runbook.md",
+  );
+  assert.equal(
     deriveConceptPathSuggestion({ documents: documents.slice(0, 1) }, bundle, {
-      type: "Downloader Runbook",
+      type: "Service Runbook",
       title: "Sparse Example",
     }).path,
-    "downloader-runbook/sparse-example.md",
+    "service-runbook/sparse-example.md",
   );
 
   for (const unsafePrefix of ["/absolute", "C:/absolute", "nested/../escape", "nested//empty"]) {

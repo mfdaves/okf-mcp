@@ -35,7 +35,7 @@ Node 22 or newer is required.
 Install from the GitHub release:
 
 ```bash
-git clone --branch v0.7.0 https://github.com/mfdaves/okf-mcp.git
+git clone --branch v0.8.0 https://github.com/mfdaves/okf-mcp.git
 cd okf-mcp
 npm ci
 node bin/okf-mcp.js --root ./path/to/okf validate
@@ -44,14 +44,14 @@ node bin/okf-mcp.js --root ./path/to/okf validate
 Pin the published version for reproducible use:
 
 ```bash
-npx -y @mfdaves/okf-mcp@0.7.0 --version
-npx -y @mfdaves/okf-mcp@0.7.0 --root ./path/to/okf validate
+npx -y @mfdaves/okf-mcp@0.8.0 --version
+npx -y @mfdaves/okf-mcp@0.8.0 --root ./path/to/okf validate
 ```
 
 For a persistent installation:
 
 ```bash
-npm install --global @mfdaves/okf-mcp@0.7.0
+npm install --global @mfdaves/okf-mcp@0.8.0
 
 okf --version
 okf --root ./path/to/okf validate
@@ -95,7 +95,7 @@ okf --root okf/bundles/okf-mcp concept overview/okf-mcp
 Load the reference bundle directly from this release:
 
 ```bash
-okf --remote-bundle okf-mcp=https://github.com/mfdaves/okf-mcp/tree/v0.7.0/okf/bundles/okf-mcp --inspect
+okf --remote-bundle okf-mcp=https://github.com/mfdaves/okf-mcp/tree/v0.8.0/okf/bundles/okf-mcp --inspect
 ```
 
 The `@mfdaves/okf-mcp` npm package includes both `okf.project.yaml` and the
@@ -182,7 +182,7 @@ Example client configuration:
       "command": "npx",
       "args": [
         "-y",
-        "@mfdaves/okf-mcp@0.7.0",
+        "@mfdaves/okf-mcp@0.8.0",
         "--root",
         "/absolute/path/to/okf",
         "mcp"
@@ -201,7 +201,7 @@ Project config mode, with read-only project helpers but without proposal mutatio
       "command": "npx",
       "args": [
         "-y",
-        "@mfdaves/okf-mcp@0.7.0",
+        "@mfdaves/okf-mcp@0.8.0",
         "--project",
         "/absolute/path/to/repo/okf.project.yaml",
         "mcp"
@@ -239,7 +239,7 @@ Concept IDs are their bundle-relative Markdown paths with `.md` removed. This ex
 okf://<bundle-id>/<extensionless-concept-id>
 ```
 
-The former `.md` URI and a valid custom `id` remain compatibility lookup aliases. A bare Concept ID resolves only when unique across loaded bundles; `okf://` remains deterministic for federated workspaces. Reserved `index.md` and `log.md` resources retain their filenames because they are not concepts.
+The former `.md` URI and a valid custom `id` remain compatibility lookup aliases. A bare Concept ID resolves only when unique across loaded bundles. For standalone aggregate catalogs, a URI-shaped portable path such as `okf://services/queue.md` also resolves when `services/queue` is globally unique and `services` is not a loaded bundle id. Exact canonical URIs always win; a known-bundle miss or ambiguous portable path stays unresolved. Reserved `index.md` and `log.md` resources retain their filenames because they are not concepts.
 
 The `id`, `aliases`, and typed `relations` fields below are `okf-mcp` extensions. The standard v0.2 identity remains path-derived:
 
@@ -327,7 +327,7 @@ okf --root /path/to/catalog \
 - `validate_project`
 - `export_graph`
 
-Most MCP tools are read-only over the current index. `load_remote_bundle` mutates only the server's in-memory index by fetching a public GitHub tree; it does not write files.
+Most MCP tools are read-only over the current index. `load_remote_bundle` mutates only the server's in-memory index by fetching a public GitHub tree; it does not write files. Concept listing and search default to compact summaries; pass `detail: "full"` when navigation metadata, signals, ranking, or snippets are required. Relationship paths are deduplicated by node sequence even when parallel edge kinds connect the same concepts.
 
 Every MCP tool includes a purpose-specific description, descriptions for its input parameters, and standard annotations covering read-only behavior, destructive behavior, idempotency, and external access.
 
@@ -382,9 +382,9 @@ The agent sees one read-only batch validator and one destructive apply tool. It 
 }
 ```
 
-Create paths are optional. The server first uses a strong dominant directory convention from existing concepts of the same type, then falls back to deterministic type/title slugs. `okf_suggest_concept_path` reports the strategy, evidence, availability, canonical URI, and absolute filename. Updates identify an existing `uri`; scalar fields replace existing values, while `tags`, `sources`, and `relations` use explicit `add`/`remove` patches. `metadata` carries extension frontmatter but cannot override identity, generation, collection, or computation fields. Paths and URIs are immutable during update: moving a concept changes its portable identity and remains a separate, intentionally unsupported operation.
+Create paths are optional. The server first uses a strong dominant directory convention from existing same-type concepts within the requested prefix, then falls back to deterministic type/title slugs. `okf_suggest_concept_path` reports the strategy, evidence, path availability, and same-type/title matches so an available filename is not mistaken for a safe duplicate. Updates identify an existing `uri`; stale locators return bounded likely replacements, while scalar fields replace existing values and `tags`, `sources`, and `relations` use explicit `add`/`remove` patches. `metadata` carries extension frontmatter but cannot override identity, generation, collection, or computation fields. Paths and URIs are immutable during update: moving a concept changes its portable identity and remains a separate, intentionally unsupported operation.
 
-Every 1–100 item batch is validated as one future graph, so concepts created together can reference one another. Call `okf_validate_changes` with the complete intended batch to receive a time-of-check preview without writing files. Validation and apply share the same planner; apply repeats every check under the writer queue because revisions and Git state can change after a preview. Results include compact semantic effects, canonical and absolute targets, source revisions, graph diagnostics, Git preconditions, and an explicit durability state without echoing full bodies.
+Every 1–100 item batch is validated as one future graph, so concepts created together can reference one another and same-type/title conflicts are detected across creates and updates. Call `okf_validate_changes` with the complete intended batch to receive a time-of-check preview without writing files. Validation and apply share the same planner; apply repeats every check under the writer queue because revisions and Git state can change after a preview. Compact receipts are the v0.8 default; pass `detail: "full"` for the v0.7 planning layout. Effects expose structured relations and keep server-managed generation provenance separate from substantive `changedFields`.
 
 The server writes nothing unless every candidate is valid, revision checks still match, and every target stays inside one writable bundle. Process-generated documents, generator output directories, hidden/control-plane paths such as `.git/**`, reserved files, and Attested Computation contracts are not live-write targets. Rollback checks revisions immediately before each restore and reports detected replacements as a partial `rollback_conflict`. That protection is best effort under the documented single-external-writer requirement; it is not a cross-process compare-and-swap guarantee.
 
@@ -543,6 +543,7 @@ Use `list_remote_bundles` to inspect what was loaded.
 - `hasSources`
 - `runtime` and `attestationReady`
 - `generatedBy` and `verifiedBy`
+- `detail` (`compact` by default, or `full`)
 - `limit`
 - `offset`
 
@@ -551,7 +552,7 @@ listing filters. Text search tokenizes case-insensitively and requires every
 query term, regardless of order. BM25+ ranks title, type, tags, aliases,
 description, path, and body matches; frontmatter remains available through
 exact structured filters but is not copied into the text index. Scores are
-relative within a result set and are not a stable cross-version scale.
+relative within a result set and are not a stable cross-version scale. Compact results contain only `uri`, `title`, `type`, and `description`; title, type, and description are bounded, while full results remain lossless.
 
 Queries are bounded to 512 characters and 16 terms. Prefix expansion, fuzzy
 matching, stemming, and stop-word removal are intentionally disabled so code
@@ -560,6 +561,8 @@ return no matches. Tags and types are matched case-insensitively. Arbitrary
 frontmatter filters support exact scalar matching and array-contains
 matching. `relationType` selects concepts with an outgoing relation of that
 type.
+
+The SDK regression suite also budgets a neutral four-step research path from actual serialized MCP text. It uses UTF-8 bytes divided by four as a deterministic estimate, not an exact model tokenizer or billing count, and guards both an absolute compact budget and a compact/full ratio.
 
 Example:
 
@@ -595,7 +598,7 @@ For navigation convenience, okf-mcp resolves links to a nested bundle directory 
 `index.md` when there is no exact document target. This applies to local and
 remote bundles and to candidate validation during proposal authoring.
 
-Graph tools return compact JSON:
+Graph tools return bounded JSON:
 
 ```json
 {

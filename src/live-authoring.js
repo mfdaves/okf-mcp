@@ -8,6 +8,7 @@ const { isDeepStrictEqual } = require("node:util");
 
 const {
   deriveConceptPathSuggestion,
+  isConfiguredGeneratorOutput,
   normalizeConceptPath,
   renderConceptMarkdown,
 } = require("./authoring");
@@ -15,6 +16,10 @@ const {
   attachProject,
   buildIndex,
   bundleAllowsPath,
+  conceptIsGeneratedFile,
+  conceptMatchSummary,
+  normalizeConceptTitle,
+  recoverConceptLocator,
   resolveConcept,
   validateIndex,
 } = require("./indexer");
@@ -43,9 +48,11 @@ const MANAGED_METADATA_KEYS = new Set([
 ]);
 
 class AuthoringPolicyError extends Error {
-  constructor(message) {
+  constructor(message, code, details) {
     super(message);
     this.name = "AuthoringPolicyError";
+    if (code) this.code = code;
+    if (details !== undefined) this.details = details;
   }
 }
 
@@ -339,11 +346,6 @@ function actorValue(value) {
   return actor;
 }
 
-function isInside(root, candidate) {
-  const relative = path.relative(path.resolve(root), path.resolve(candidate));
-  return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
-}
-
 function generatedOwners(document) {
   const owners = [];
   const generated = document && document.frontmatter && document.frontmatter.generated;
@@ -383,18 +385,37 @@ function sortedUnique(values) {
   return Array.from(new Set(values)).sort();
 }
 
-function boundedEffectList(values) {
-  const normalized = sortedUnique(values).map((value) => {
-    const text = String(value);
-    return text.length > MAX_EFFECT_TEXT ? `${text.slice(0, MAX_EFFECT_TEXT - 1)}…` : text;
-  });
+function boundedEffectList(values, project) {
+  const normalized = project
+    ? values.map(project)
+    : sortedUnique(values).map(boundedEffectText);
   return {
     values: normalized.slice(0, MAX_EFFECT_ITEMS),
     omitted: Math.max(0, normalized.length - MAX_EFFECT_ITEMS),
   };
 }
 
-function collectionEffects(before, after, identity) {
+function boundedEffectText(value) {
+  const text = String(value || "");
+  return text.length > MAX_EFFECT_TEXT ? `${text.slice(0, MAX_EFFECT_TEXT - 1)}…` : text;
+}
+
+function relationEffectValue(value) {
+  const parts = relationParts(value);
+  const result = {
+    type: boundedEffectText(parts.type),
+    target: boundedEffectText(parts.target),
+  };
+  if (isPlainObject(value) && hasOwn(value, "label")) {
+    result.label = boundedEffectText(value.label);
+  }
+  if (isPlainObject(value) && hasOwn(value, "description")) {
+    result.description = boundedEffectText(value.description);
+  }
+  return result;
+}
+
+function collectionEffects(before, after, identity, project) {
   const previous = new Map((before || []).map((value) => [identity(value), value]));
   const next = new Map((after || []).map((value) => [identity(value), value]));
   const added = Array.from(next.keys()).filter((key) => !previous.has(key)).sort();
@@ -402,10 +423,14 @@ function collectionEffects(before, after, identity) {
   const updated = Array.from(next.keys()).filter((key) => (
       previous.has(key) && !isDeepStrictEqual(previous.get(key), next.get(key))
   )).sort();
+  const effectList = (keys, values) => boundedEffectList(
+    project ? keys.map((key) => values.get(key)) : keys,
+    project,
+  );
   return {
-    added: boundedEffectList(added),
-    removed: boundedEffectList(removed),
-    updated: boundedEffectList(updated),
+    added: effectList(added, next),
+    removed: effectList(removed, previous),
+    updated: effectList(updated, next),
   };
 }
 
@@ -424,7 +449,7 @@ function effectsForCandidate(candidate) {
   const after = candidate.frontmatter;
   const tags = collectionEffects(before.tags, after.tags, (value) => String(value));
   const sources = collectionEffects(before.sources, after.sources, sourceIdentity);
-  const relations = collectionEffects(before.relations, after.relations, relationKey);
+  const relations = collectionEffects(before.relations, after.relations, relationKey, relationEffectValue);
   const metadata = metadataEffects(before, after);
   const bodyChanged = candidate.op === "create"
     ? true
@@ -436,7 +461,6 @@ function effectsForCandidate(candidate) {
   if (hasEffect(sources.added) || hasEffect(sources.removed) || hasEffect(sources.updated)) changedFields.push("sources");
   if (hasEffect(relations.added) || hasEffect(relations.removed) || hasEffect(relations.updated)) changedFields.push("relations");
   if (hasEffect(metadata.set) || hasEffect(metadata.removed)) changedFields.push("metadata");
-  if (!isDeepStrictEqual(before.generated, after.generated)) changedFields.push("generated");
   return {
     changedFields,
     bodyChanged,
@@ -449,6 +473,47 @@ function effectsForCandidate(candidate) {
     bytesBefore: candidate.originalText === undefined ? 0 : byteLength(candidate.originalText),
     bytesAfter: byteLength(candidate.markdown),
   };
+}
+
+function semanticConceptKey(type, title) {
+  return `${String(type || "")}\u0000${normalizeConceptTitle(title)}`;
+}
+
+function conceptIsManaged(doc, project) {
+  return conceptIsGeneratedFile(doc)
+    || generatedOwners(doc).some((owner) => owner.startsWith("process:"))
+    || isConfiguredGeneratorOutput(project, doc && doc.absolutePath);
+}
+
+function conceptConflictDetails(matches, project) {
+  const candidates = matches.slice(0, 5).map((doc) => conceptMatchSummary(doc));
+  const only = candidates.length === 1 ? candidates[0] : null;
+  const generated = matches.length === 1 && conceptIsManaged(matches[0], project);
+  const updateable = only && !generated && only.type !== "Attested Computation";
+  return {
+    reason: "same_type_title",
+    candidates,
+    omitted: Math.max(0, matches.length - candidates.length),
+    recommendedOperation: updateable ? "update" : generated ? "change_generator" : "review",
+    ...(updateable ? { retryWith: { op: "update", uri: only.uri } } : {}),
+  };
+}
+
+function staleUpdateDetails(index, uri, bundle, project) {
+  const recovery = recoverConceptLocator(index, uri, { bundle, limit: 5 });
+  const only = recovery.candidates.length === 1 ? recovery.candidates[0] : null;
+  const matched = only && resolveConcept(index, only.uri);
+  if (only && (conceptIsManaged(matched, project)
+    || only.type === "Attested Computation")) {
+    delete recovery.retryWith;
+    recovery.recommendedOperation = only.type === "Attested Computation"
+      ? "review_computation_owner"
+      : "change_generator";
+  } else if (recovery.retryWith) {
+    recovery.retryWith.op = "update";
+    recovery.recommendedOperation = "update";
+  }
+  return { recovery };
 }
 
 function policyCode(message) {
@@ -473,19 +538,23 @@ function policyCode(message) {
   return "authoring_policy_rejected";
 }
 
-function policyValidation(message) {
-  const code = policyCode(message);
+function policyValidation(error) {
+  const message = error && error.message ? error.message : String(error);
+  const code = error && error.code || policyCode(message);
+  const details = error && error.details;
+  const diagnostic = {
+    code,
+    severity: "error",
+    layer: "authoring",
+    message,
+    ...(details !== undefined ? { details } : {}),
+  };
   return {
     valid: false,
     conformant: false,
     validForProject: false,
-    diagnostics: [{
-      code,
-      severity: "error",
-      layer: "authoring",
-      message,
-    }],
-    errors: [{ code, message }],
+    diagnostics: [diagnostic],
+    errors: [{ code, message, ...(details !== undefined ? { details } : {}) }],
     warnings: [],
   };
 }
@@ -547,32 +616,13 @@ class LiveAuthoringService {
     return this.store.project ? attachProject(index, this.store.project) : index;
   }
 
-  generatedOutputDirectories() {
-    const project = this.store.project;
-    if (!project || !project.root) {
-      return [];
-    }
-    return (project.plugins || [])
-      .filter((plugin) => plugin && plugin.output)
-      .map((plugin) => path.resolve(project.root, String(plugin.output)));
-  }
-
   assertWritableTarget(bundle, conceptPath, existing) {
     const target = this.store.resolveConceptFile(bundle.id, conceptPath);
-    if (this.generatedOutputDirectories().some((output) => isInside(output, target.absolutePath))) {
+    if (isConfiguredGeneratorOutput(this.store.project, target.absolutePath)) {
       throw new Error(`Concept is inside a configured generator output and must be changed through its generator: ${conceptPath}`);
     }
-    if (existing) {
-      const frontmatter = existing.frontmatter || {};
-      if (existing.generatedFile === true
-        || existing.isGenerated === true
-        || frontmatter.generated_file === true
-        || frontmatter.generatedFile === true) {
-        throw new Error(`Generated concept must be changed through its generator: ${existing.uri}`);
-      }
-      if (generatedOwners(existing).some((owner) => owner.startsWith("process:"))) {
-        throw new Error(`Process-generated concept must be changed through its generator: ${existing.uri}`);
-      }
+    if (existing && conceptIsManaged(existing, this.store.project)) {
+      throw new Error(`Generated concept must be changed through its generator: ${existing.uri}`);
     }
     return target;
   }
@@ -636,7 +686,12 @@ class LiveAuthoringService {
     const uri = nonEmptyString(change.uri, "changes[].uri");
     const existing = resolveConcept(currentIndex, uri);
     if (!existing || !existing.valid || existing.reserved) {
-      throw new Error(`Unknown valid OKF concept: ${uri}`);
+      const details = staleUpdateDetails(currentIndex, uri, bundle.id, this.store.project);
+      throw new AuthoringPolicyError(
+        `Unknown valid OKF concept: ${uri}`,
+        details.recovery.status === "ambiguous" ? "concept_locator_ambiguous" : "concept_not_found",
+        details,
+      );
     }
     if (existing.bundle !== bundle.id) {
       throw new Error(`All changes must target writable bundle ${bundle.id}: ${uri}`);
@@ -1940,6 +1995,31 @@ class LiveAuthoringService {
         }
       }
     }
+    const currentConcepts = currentIndex.concepts.filter((doc) => doc.bundle === bundle.id);
+    const replacedPaths = new Set(candidates.filter((entry) => entry.op === "update").map((entry) => entry.path));
+    const finalConcepts = currentConcepts.filter((doc) => !replacedPaths.has(doc.path)).concat(candidates);
+    for (const candidate of candidates) {
+      const key = semanticConceptKey(candidate.frontmatter.type, candidate.title);
+      const before = currentConcepts.filter((doc) => semanticConceptKey(doc.type, doc.title) === key);
+      const after = finalConcepts.filter((doc) => (
+        semanticConceptKey(doc.type || doc.frontmatter.type, doc.title) === key
+      ));
+      if (after.length <= Math.max(1, before.length)) continue;
+      const existing = after.filter((doc) => !candidates.includes(doc));
+      const details = candidate.op === "create" && existing.length === 1 && after.length === 2
+        ? conceptConflictDetails(existing, this.store.project)
+        : {
+          reason: before.length ? "same_type_title" : "same_batch_type_title",
+          candidates: after.slice(0, 5).map((doc) => conceptMatchSummary(doc)),
+          omitted: Math.max(0, after.length - 5),
+          recommendedOperation: "merge_batch_changes",
+        };
+      throw new AuthoringPolicyError(
+        `The batch would leave more than one ${candidate.frontmatter.type} titled "${candidate.title}".`,
+        "concept_already_exists",
+        details,
+      );
+    }
     const message = this.commitMessage(input, candidates);
     const overrides = new Map(candidates.map((candidate) => [
       `${candidate.bundle}\u0000${candidate.path}`,
@@ -1998,7 +2078,7 @@ class LiveAuthoringService {
   }
 
   invalidValidationReceipt(error) {
-    const validation = policyValidation(error && error.message ? error.message : String(error));
+    const validation = policyValidation(error);
     const generated = this.generatedStamp();
     return {
       valid: false,
@@ -2027,6 +2107,8 @@ class LiveAuthoringService {
       durability: this.durabilityReceipt(null, false),
       changes: [],
       validation,
+      ...(error && error.code ? { code: error.code } : {}),
+      ...(error && error.details !== undefined ? { details: error.details } : {}),
       git: {
         enabled: this.gitCommit,
         repository: false,

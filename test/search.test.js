@@ -100,6 +100,19 @@ test("search bounds queries and ignores punctuation-only and arbitrary frontmatt
   );
 });
 
+test("compact search bounds returned text while full detail remains lossless", (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "okf-search-compact-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const description = "x".repeat(50000);
+  writeConcept(root, "large.md", { type: "Reference", title: "Large", description }, "# Large");
+  const index = buildIndex([{ id: "compact", root }]);
+  const compact = searchConcepts(index, { detail: "compact" }).results[0];
+  const full = searchConcepts(index, { detail: "full" }).results[0];
+  assert.equal(compact.description.length, 500);
+  assert.equal(compact.description.endsWith("…"), true);
+  assert.equal(full.description, description);
+});
+
 test("a rebuilt OKF index receives a fresh lexical index", (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "okf-search-rebuild-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));

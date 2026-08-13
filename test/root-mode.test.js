@@ -9,7 +9,7 @@ const test = require("node:test");
 
 const { ConceptAuthoringService } = require("../src/authoring");
 const { parseArgs, discoverProject } = require("../src/cli");
-const { buildIndex, resolveConcept } = require("../src/indexer");
+const { buildIndex, recoverConceptLocator, resolveConcept } = require("../src/indexer");
 const { FileConceptStore } = require("../src/store");
 const { callJson, connectMcp } = require("./mcp-client");
 
@@ -73,6 +73,7 @@ test("standalone roots use portable Concept IDs and path-valued extension relati
   assert.equal(alpha.conceptId, "alpha");
   assert.equal(beta.conceptId, "nested/beta");
   assert.equal(resolveConcept(index, beta.uri), beta);
+  assert.equal(resolveConcept(index, "okf://nested/beta.md"), beta);
   assert.equal(index.edges.some((edge) => (
     edge.kind === "relation"
     && edge.relationType === "supervises"
@@ -80,6 +81,56 @@ test("standalone roots use portable Concept IDs and path-valued extension relati
     && edge.target === beta.uri
     && !edge.broken
   )), true);
+});
+
+test("URI-shaped portable locators remain unique and never override canonical identity", (t) => {
+  const domain = fs.mkdtempSync(path.join(os.tmpdir(), "okf-domain-"));
+  const aggregate = fs.mkdtempSync(path.join(os.tmpdir(), "okf-aggregate-"));
+  const duplicate = fs.mkdtempSync(path.join(os.tmpdir(), "okf-duplicate-"));
+  t.after(() => [domain, aggregate, duplicate].forEach((root) => {
+    fs.rmSync(root, { recursive: true, force: true });
+  }));
+  write(domain, "other.md", concept("Other"));
+  write(aggregate, "domain/guide.md", concept("Aggregate guide"));
+  write(duplicate, "domain/guide.md", concept("Duplicate guide"));
+
+  const unique = buildIndex([{ id: "domain", root: domain }, { id: "aggregate", root: aggregate }]);
+  assert.equal(resolveConcept(unique, "okf://domain/guide.md"), null);
+  assert.equal(resolveConcept(buildIndex([{ id: "aggregate", root: aggregate }]), "okf://domain/guide.md").uri,
+    "okf://aggregate/domain/guide");
+  write(domain, "guide.md", concept("Canonical guide"));
+  const collision = buildIndex([{ id: "domain", root: domain }, { id: "aggregate", root: aggregate }]);
+  assert.equal(resolveConcept(collision, "okf://domain/guide#section").uri, "okf://domain/guide");
+  assert.equal(resolveConcept(collision, "OKF://domain/guide"), null);
+  assert.equal(resolveConcept(collision, "okf:///domain/guide"), null);
+  assert.equal(recoverConceptLocator(collision, "okf://domain/former/guide", { bundle: "aggregate" })
+    .retryWith.uri, "okf://domain/guide");
+  const ambiguous = buildIndex([{ id: "aggregate", root: aggregate }, { id: "duplicate", root: duplicate }]);
+  assert.equal(resolveConcept(ambiguous, "okf://domain/guide.md"), null);
+  const recovery = recoverConceptLocator(ambiguous, "okf://domain/guide.md");
+  assert.equal(recovery.status, "ambiguous");
+  assert.equal(recovery.retryWith, undefined);
+  assert.equal(recoverConceptLocator(collision, "OKF://domain/guide").status, "not_found");
+
+  write(aggregate, "domain/bar.md", concept("Valid bar"));
+  write(duplicate, "domain/bar.md", "---\ntitle: Invalid bar\n---\n\n# Invalid bar\n");
+  const invalidPortable = buildIndex([{ id: "aggregate", root: aggregate }, { id: "owner", root: duplicate }]);
+  assert.equal(recoverConceptLocator(invalidPortable, "okf://domain/bar.md").status, "ambiguous");
+
+  write(domain, "invalid-a.md", "---\nid: okf://domain/alias\ntitle: Invalid A\n---\n");
+  write(duplicate, "invalid-b.md", "---\nid: okf://domain/alias\ntitle: Invalid B\n---\n");
+  write(aggregate, "domain/alias.md", concept("Valid alias"));
+  const invalidAlias = buildIndex([
+    { id: "aggregate", root: aggregate }, { id: "owner-a", root: domain }, { id: "owner-b", root: duplicate },
+  ]);
+  assert.equal(recoverConceptLocator(invalidAlias, "okf://domain/alias").status, "ambiguous");
+  assert.equal(recoverConceptLocator(invalidAlias, "okf://domain/alias").retryWith, undefined);
+
+  write(aggregate, "domain/invalid-only.md", "---\ntitle: Invalid only\n---\n");
+  const invalidOnly = buildIndex([{ id: "aggregate", root: aggregate }]);
+  assert.equal(recoverConceptLocator(invalidOnly, "okf://domain/invalid-only.md").status, "not_found");
+  assert.equal(recoverConceptLocator(invalidOnly, "okf://domain/invalid-only.md").retryWith, undefined);
+  assert.equal(recoverConceptLocator(invalidOnly, "okf://index.md").retryWith, undefined);
 });
 
 test("root discovery wins before legacy project discovery", () => {
@@ -119,6 +170,15 @@ test("root mode configures review-only authoring without a project manifest", as
   assert.equal(migration.payload.bundle, path.basename(root));
   const read = await callJson(client, "get_concept", { id: "nested/beta" });
   assert.equal(read.payload.conceptId, "nested/beta");
+  const compatible = await callJson(client, "get_concept", { uri: "okf://nested/beta.md" });
+  assert.equal(compatible.payload.uri, read.payload.uri);
+  fs.mkdirSync(path.join(root, "relocated"), { recursive: true });
+  fs.renameSync(path.join(root, "nested/beta.md"), path.join(root, "relocated/beta.md"));
+  const stale = await callJson(client, "get_concept", { uri: read.payload.uri });
+  assert.equal(stale.result.isError, true);
+  assert.equal(stale.payload.code, "concept_not_found");
+  assert.equal(stale.payload.details.recovery.retryWith.uri,
+    `okf://${path.basename(root)}/relocated/beta`);
 });
 
 test("MCP reads only a declared pinned Git source through an explicit mapping", async (t) => {

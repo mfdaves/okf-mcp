@@ -143,6 +143,7 @@ test("graph tools expose graph, neighbors, subgraph, paths, summary, and exports
   const beta = "okf://fixture/specs/beta";
   assert.equal(getNeighbors(index, `${alpha}.md`).outbound.length, 1);
   assert.equal(getSubgraph(index, { uri: `${alpha}.md`, depth: 1 }).nodes.length, 2);
+  index.edges.push(Object.assign({}, index.edges[0], { kind: "relation", relationType: "related_to" }));
   assert.deepEqual(findPaths(index, `${alpha}.md`, `${beta}.md`).paths, [[alpha, beta]]);
   assert.equal(graphSummary(index).concepts, 2);
   assert.match(exportGraph(index, { format: "dot" }), /digraph OKF/);

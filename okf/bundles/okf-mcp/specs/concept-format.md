@@ -21,7 +21,7 @@ relations:
 
 An OKF concept is a UTF-8 Markdown file with YAML frontmatter. A non-empty string `type` is required. Standard v0.2 metadata families include `resource`, `sources`, `usage_window`, `generated`, `verified`, `status`, `stale_after`, and the Attested Computation contract. The Markdown body carries the durable explanation.
 
-The standard Concept ID is the bundle-relative path with `.md` removed. okf-mcp also creates the workspace-scoped locator `okf://<bundle>/<concept-id>` for MCP resources and federated lookup; it is not the portable OKF identity. The former `.md` URI remains a compatibility alias. The optional `id`, `aliases`, and typed `relations` fields are `okf-mcp` extensions; a valid custom `id` is an additional alias rather than a replacement for the standard identity.
+The standard Concept ID is the bundle-relative path with `.md` removed. okf-mcp also creates the workspace-scoped locator `okf://<bundle>/<concept-id>` for MCP resources and federated lookup; it is not the portable OKF identity. The former `.md` URI remains a compatibility alias. A URI-shaped portable path is accepted only when its apparent authority is not a loaded bundle and the complete portable ID is globally unique; canonical identity always takes precedence. The optional `id`, `aliases`, and typed `relations` fields are `okf-mcp` extensions; a valid custom `id` is an additional alias rather than a replacement for the standard identity.
 
 Frontmatter is parsed as a YAML mapping with the safe core schema. Nested mappings, arrays, block scalars, and unknown extension keys are preserved. Duplicate mapping keys and unsupported custom tags are rejected. Unknown concept type values do not fail OKF conformance.
 

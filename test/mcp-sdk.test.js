@@ -32,6 +32,13 @@ function makeBundle() {
   return root;
 }
 
+function estimatePayload(results) {
+  const bytes = results.flatMap((result) => result.result.content)
+    .filter((block) => block.type === "text")
+    .reduce((total, block) => total + Buffer.byteLength(block.text, "utf8"), 0);
+  return { bytes, estimatedTokens: Math.ceil(bytes / 4) };
+}
+
 test("official SDK serves both modern and legacy MCP eras", async (t) => {
   for (const mode of ["legacy", { pin: "2026-07-28" }]) {
     const connection = await connectMcp(t, [`local=${makeBundle()}`], {}, mode);
@@ -64,12 +71,37 @@ test("official SDK serves both modern and legacy MCP eras", async (t) => {
     );
     const search = await callJson(connection.client, "search_concepts", { tagsAny: [] });
     assert.equal(search.payload.total, 3);
-    const lexical = await callJson(connection.client, "search_concepts", { query: "only alpha" });
+    const lexical = await callJson(connection.client, "search_concepts", { query: "only alpha", detail: "full" });
     assert.deepEqual(lexical.payload.results.map((result) => result.path), ["alpha.md"]);
-    const listed = await callJson(connection.client, "list_concepts", { query: "only beta" });
+    const listed = await callJson(connection.client, "list_concepts", { query: "only beta", detail: "full" });
     assert.deepEqual(listed.payload.results.map((result) => result.path), ["beta.md"]);
+    const compact = await callJson(connection.client, "list_concepts", { limit: 3 });
+    assert.deepEqual(Object.keys(compact.payload.results[0]).sort(), ["description", "title", "type", "uri"]);
+    const fullList = await callJson(connection.client, "list_concepts", { detail: "full", limit: 3 });
+    assert.ok(JSON.stringify(compact.payload).length < JSON.stringify(fullList.payload).length / 2);
     await connection.close();
   }
+});
+
+test("compact discovery keeps a realistic research path within a token budget", async (t) => {
+  const bundle = path.resolve(__dirname, "../okf/bundles/okf-mcp");
+  const { client } = await connectMcp(t, [`okf-mcp=${bundle}`]);
+  const uri = "okf://okf-mcp/runtime/mcp-server";
+  const compactList = await callJson(client, "list_concepts", { limit: 10 });
+  const fullList = await callJson(client, "list_concepts", { limit: 10, detail: "full" });
+  const compactSearch = await callJson(client, "search_concepts", { query: "runtime", limit: 5 });
+  const fullSearch = await callJson(client, "search_concepts", { query: "runtime", limit: 5, detail: "full" });
+  const concept = await callJson(client, "get_concept", { uri });
+  const neighbors = await callJson(client, "get_neighbors", { uri });
+  assert.deepEqual(compactList.payload.results.map((entry) => entry.uri),
+    fullList.payload.results.map((entry) => entry.uri));
+  assert.deepEqual(compactSearch.payload.results.map((entry) => entry.uri),
+    fullSearch.payload.results.map((entry) => entry.uri));
+  assert.equal(compactSearch.payload.results.some((entry) => entry.uri === uri), true);
+  const compact = estimatePayload([compactList, compactSearch, concept, neighbors]);
+  const full = estimatePayload([fullList, fullSearch, concept, neighbors]);
+  assert.ok(compact.estimatedTokens <= 6500, { compact, full });
+  assert.ok(compact.estimatedTokens * 10 <= full.estimatedTokens * 7, { compact, full });
 });
 
 test("SDK advertises existing schemas and validates arguments without coercion", async (t) => {
@@ -83,6 +115,7 @@ test("SDK advertises existing schemas and validates arguments without coercion",
   assert.equal(searchSchema.properties.limit.default, 25);
   assert.equal(searchSchema.properties.offset.minimum, 0);
   assert.equal(searchSchema.properties.query.maxLength, 512);
+  assert.deepEqual(searchSchema.properties.detail.enum, ["compact", "full"]);
   assert.equal(byName.get("load_remote_bundle").inputSchema.properties.provider.default, "github");
   assert.equal(byName.get("export_graph").inputSchema.properties.format.default, "json");
 
@@ -102,6 +135,11 @@ test("business failures stay tool errors and unexpected failures are sanitized",
   });
   assert.equal(missing.isError, true);
   assert.match(missing.content[0].text, /Unknown OKF concept URI/);
+
+  const stale = await callJson(client, "get_concept", { uri: "okf://local/former/alpha" });
+  assert.equal(stale.result.isError, true);
+  assert.equal(stale.payload.code, "concept_not_found");
+  assert.equal(stale.payload.details.recovery.retryWith.uri, "okf://local/alpha");
 
   const invalidDate = await client.callTool({
     name: "search_concepts",

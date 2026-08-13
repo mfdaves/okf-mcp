@@ -7,6 +7,8 @@ const yaml = require("js-yaml");
 const { parseMarkdownText, normalizeSlashes } = require("./parser");
 const {
   bundleExcludesPath,
+  conceptMatchSummary,
+  findConceptMatches,
   resolveLinkPath,
   semanticReferences,
 } = require("./indexer");
@@ -25,6 +27,14 @@ function slug(value, fallback) {
   return text
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "") || String(fallback || "concept");
+}
+
+function isConfiguredGeneratorOutput(project, absolutePath) {
+  return Boolean(project && project.root && absolutePath && (project.plugins || []).some((plugin) => {
+    if (!plugin || !plugin.output) return false;
+    const relative = path.relative(path.resolve(project.root, String(plugin.output)), absolutePath);
+    return relative === "" || (!relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative));
+  }));
 }
 
 function normalizeConceptPath(value) {
@@ -79,15 +89,12 @@ function deriveConceptPathSuggestion(index, bundle, input) {
   let strategy = prefix ? "explicit_prefix" : "type_slug";
   let evidence = { matchingConcepts: 0, dominantDirectoryCount: 0, dominantDirectoryRatio: 0 };
 
-  if (!prefix && type !== "Attested Computation" && index && Array.isArray(index.documents)) {
-    const matching = index.documents.filter((document) => (
-      document
-      && document.bundle === bundle.id
-      && document.valid
-      && !document.reserved
-      && document.type === type
-      && typeof document.path === "string"
-    ));
+  if (type !== "Attested Computation" && index) {
+    const matching = findConceptMatches(index, {
+      bundle: bundle.id,
+      type,
+      pathPrefix: prefix,
+    });
     const counts = new Map();
     matching.forEach((document) => {
       const directory = path.posix.dirname(document.path);
@@ -185,14 +192,34 @@ class ConceptAuthoringService {
 
   suggestConceptPath(input) {
     const bundle = this.getBundle(input && input.bundle);
-    const suggestion = deriveConceptPathSuggestion(this.store.getIndex(), bundle, input || {});
+    const index = this.store.getIndex();
+    const suggestion = deriveConceptPathSuggestion(index, bundle, input || {});
     const target = this.store.resolveConceptFile(bundle.id, suggestion.path);
+    const titleMatches = findConceptMatches(index, {
+      bundle: bundle.id,
+      type: input && input.type,
+      title: input && input.title,
+    });
+    const matches = titleMatches.slice(0, 5).map((doc) => conceptMatchSummary(doc));
+    const available = !fs.existsSync(target.absolutePath);
+    const only = matches.length === 1 && matches[0];
+    const generatorOwned = only && (only.generatedFile
+      || only.generatedBy && only.generatedBy.startsWith("process:")
+      || isConfiguredGeneratorOutput(this.store.project, titleMatches[0].absolutePath));
     return {
       bundle: bundle.id,
       path: suggestion.path,
       uri: `okf://${bundle.id}/${suggestion.path.replace(/\.md$/i, "")}`,
       absolutePath: target.absolutePath,
-      available: !fs.existsSync(target.absolutePath),
+      available,
+      creatable: available && titleMatches.length === 0,
+      titleMatches: matches,
+      titleMatchesOmitted: Math.max(0, titleMatches.length - matches.length),
+      ...(matches.length === 1 ? { existingConcept: matches[0] } : {}),
+      recommendedOperation: titleMatches.length
+        ? titleMatches.length > 1 ? "review_matches"
+          : generatorOwned ? "change_generator" : "update"
+        : available ? "create" : "inspect_existing",
       strategy: suggestion.strategy,
       evidence: suggestion.evidence,
     };
@@ -868,6 +895,7 @@ class ConceptAuthoringService {
 module.exports = {
   ConceptAuthoringService,
   deriveConceptPathSuggestion,
+  isConfiguredGeneratorOutput,
   normalizeConceptPath,
   renderConceptMarkdown,
   renderFrontmatter,

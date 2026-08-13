@@ -1,5 +1,6 @@
 "use strict";
 
+const fs = require("node:fs");
 const path = require("path");
 const {
   McpServer,
@@ -14,6 +15,7 @@ const {
   conceptSignals,
   conceptSummary,
   loadProjectBundles,
+  recoverConceptLocator,
   resolveConcept,
   validateIndex,
 } = require("./indexer");
@@ -127,6 +129,10 @@ function objectParameter(description, extra) {
   }, extra || {});
 }
 
+function detailParameter(description) {
+  return stringParameter(description, { enum: ["compact", "full"], default: "compact" });
+}
+
 function relationParameter(description) {
   return {
     type: "object",
@@ -227,6 +233,7 @@ const LIVE_CHANGES_DESCRIPTION = [
 
 const LIVE_CHANGE_TOOL_PROPERTIES = {
   bundle: nonEmptyStringParameter("Writable bundle id; optional when exactly one local root is configured."),
+  detail: detailParameter("Receipt detail level; compact removes repeated planning fields while full preserves the v0.7 receipt layout."),
   message: stringParameter("Optional Git commit summary when automatic commits are enabled.", {
     maxLength: MAX_COMMIT_MESSAGE_BYTES,
   }),
@@ -244,10 +251,11 @@ const LIVE_CHANGE_EFFECTS_OUTPUT = {
   description: "Compact structured summary of the fields changed by this operation.",
   additionalProperties: true,
   properties: {
+    changedFields: stringArrayParameter("Substantive concept fields changed, excluding server-managed generation provenance."),
     bodyChanged: optionalBooleanParameter("Whether the Markdown body changed."),
     tags: objectParameter("Tags added and removed by the operation."),
     sources: objectParameter("Sources added and removed by the operation."),
-    relations: objectParameter("Relations added and removed by the operation."),
+    relations: objectParameter("Added, removed, and updated relation values as structured { type, target, label?, description? } objects."),
     metadata: objectParameter("Metadata fields set and removed by the operation."),
   },
 };
@@ -263,6 +271,11 @@ const LIVE_CHANGE_SUMMARY_OUTPUT = {
     absolutePath: stringParameter("Absolute target concept filename."),
     uri: stringParameter("Canonical concept URI."),
     title: stringParameter("Resulting concept title."),
+    baseRevision: {
+      description: "Source revision before the operation; null for creates.",
+      oneOf: [{ type: "string" }, { type: "null" }],
+    },
+    candidateRevision: stringParameter("Revision of the validated candidate bytes."),
     effects: LIVE_CHANGE_EFFECTS_OUTPUT,
   },
 };
@@ -271,8 +284,8 @@ const LIVE_CHANGE_OUTPUT_PROPERTIES = {
   status: stringParameter("Validation or application outcome."),
   readyToApply: optionalBooleanParameter("Whether policy, graph, revision, and configured Git preconditions currently allow apply."),
   filesChanged: optionalBooleanParameter("Whether filesystem changes remain when the request returns."),
-  snapshot: objectParameter("Time-of-check metadata for this planning result."),
-  preconditions: objectParameter("Revision and Git preconditions checked for the batch."),
+  snapshot: objectParameter("Full-receipt time-of-check metadata for this planning result."),
+  preconditions: objectParameter("Full-receipt revision and Git preconditions checked for the batch."),
   generated: objectParameter("Server-owned generation actor and timestamp."),
   target: objectParameter("Absolute bundle, repository, and affected-file locations."),
   durability: objectParameter("Working-tree and automatic-commit durability state."),
@@ -331,6 +344,7 @@ const TOOL_DEFINITIONS = {
       bundle: nonEmptyStringParameter("Limit results to this bundle id."),
       type: nonEmptyStringParameter("Limit results to this exact concept type."),
       tag: nonEmptyStringParameter("Limit results to concepts containing this tag."),
+      detail: detailParameter("Compact returns only URI, title, type, and description; full includes navigation metadata and signals."),
       limit: integerParameter("Maximum number of concepts to return.", 1, 250, 25),
       offset: integerParameter("Number of matching concepts to skip before returning results.", 0, undefined, 0),
     },
@@ -377,6 +391,7 @@ const TOOL_DEFINITIONS = {
       attestationReady: optionalBooleanParameter("Require static Attested Computation readiness."),
       generatedBy: nonEmptyStringParameter("Limit results to this generator actor."),
       verifiedBy: nonEmptyStringParameter("Limit results to concepts verified by this actor."),
+      detail: detailParameter("Compact returns only URI, title, type, and description; full includes ranking, navigation metadata, and signals."),
       limit: integerParameter("Maximum number of concepts to return.", 1, 250, 25),
       offset: integerParameter("Number of matching concepts to skip before returning results.", 0, undefined, 0),
     },
@@ -743,6 +758,45 @@ function jsonContent(value, options) {
   return result;
 }
 
+function liveRequest(args) {
+  const input = Object.assign({}, args || {});
+  const detail = input.detail || "compact";
+  delete input.detail;
+  return { input, detail };
+}
+
+function projectLiveReceipt(receipt, detail) {
+  if (detail === "full") return receipt;
+  const compact = structuredClone(receipt);
+  const preconditionGit = compact.preconditions && compact.preconditions.git;
+  if (preconditionGit || compact.git) {
+    compact.git = Object.assign({}, preconditionGit || {}, compact.git || {});
+  }
+  delete compact.snapshot;
+  delete compact.preconditions;
+  if (compact.target) delete compact.target.absolutePaths;
+  if (compact.durability) delete compact.durability.filesChanged;
+  (compact.changes || []).forEach((change) => {
+    delete change.bundle;
+    const effects = change.effects;
+    if (!effects) return;
+    ["beforeRevision", "afterRevision", "bytesBefore", "bytesAfter"].forEach((key) => delete effects[key]);
+    if (effects.bodyChanged === false) delete effects.bodyChanged;
+    ["tags", "sources", "relations", "metadata"].forEach((name) => {
+      const group = effects[name];
+      if (!group) return;
+      Object.keys(group).forEach((key) => {
+        const list = group[key];
+        if (!list || !Array.isArray(list.values)) return;
+        if (!list.omitted) delete list.omitted;
+        if (!list.values.length && !list.omitted) delete group[key];
+      });
+      if (!Object.keys(group).length) delete effects[name];
+    });
+  });
+  return compact;
+}
+
 function toolEnabled(state, name) {
   if (PROJECT_HELPER_TOOL_NAMES.has(name)) {
     return Boolean(state && state.authoringService);
@@ -850,7 +904,7 @@ function readResource(index, uri) {
 }
 
 function listConcepts(index, args) {
-  const options = Object.assign({}, args || {});
+  const options = Object.assign({ detail: "compact" }, args || {});
   if (options.type && !options.types) {
     options.types = [options.type];
   }
@@ -860,15 +914,27 @@ function listConcepts(index, args) {
   return searchConcepts(index, options);
 }
 
-function getConcept(index, args, repositoryMappings) {
-  const locator = args && (args.id || args.uri)
+function conceptLocator(args) {
+  return args && (args.id || args.uri)
     ? (args.id || args.uri)
     : args && args.bundle && args.path
       ? `okf://${args.bundle}/${args.path}`
       : null;
+}
+
+function getConcept(index, args, repositoryMappings) {
+  const locator = conceptLocator(args);
   const doc = resolveConcept(index, locator);
   if (!doc) {
-    throw new ToolExecutionError(`Unknown OKF concept URI or ID: ${locator || "<missing>"}`);
+    const recovery = recoverConceptLocator(index, locator, {
+      bundle: args && args.bundle,
+      limit: 5,
+    });
+    throw new ToolExecutionError(
+      `Unknown OKF concept URI or ID: ${locator || "<missing>"}`,
+      recovery.status === "ambiguous" ? "concept_locator_ambiguous" : "concept_not_found",
+      { recovery },
+    );
   }
   if (!doc.valid || doc.reserved) {
     throw new ToolExecutionError(`Locator is not a valid OKF concept: ${locator}`);
@@ -891,6 +957,18 @@ function getConcept(index, args, repositoryMappings) {
     })),
     gitSources: describeConceptGitSources(index, doc, repositoryMappings),
   });
+}
+
+function conceptIndexIsStale(index, args) {
+  const doc = resolveConcept(index, conceptLocator(args));
+  if (!doc) return true;
+  const bundle = (index.bundles || []).find((entry) => entry.id === doc.bundle);
+  if (!bundle || bundle.remote) return false;
+  try {
+    return !fs.lstatSync(doc.absolutePath).isFile();
+  } catch (_error) {
+    return true;
+  }
 }
 
 function listTypes(index) {
@@ -999,10 +1077,11 @@ async function callTool(state, name, args) {
       case "list_concepts":
         return jsonContent(listConcepts(index, args));
       case "get_concept":
-        return jsonContent(getConcept(index, args, state.repositoryMappings));
+        if (conceptIndexIsStale(index, args)) rebuildStateIndex(state);
+        return jsonContent(getConcept(state.index, args, state.repositoryMappings));
       case "search_concepts":
         return jsonContent(await expectedToolOperation(
-          () => searchConcepts(index, args),
+          () => searchConcepts(index, Object.assign({ detail: "compact" }, args)),
           { translateTypeError: true },
         ));
       case "list_types":
@@ -1145,8 +1224,9 @@ async function callTool(state, name, args) {
           () => requireAuthoring(state).rejectProposal(args),
         ));
       case "okf_validate_changes": {
+        const request = liveRequest(args);
         const result = await expectedToolOperation(
-          () => requireLiveAuthoring(state).validateChanges(args, {
+          () => requireLiveAuthoring(state).validateChanges(request.input, {
             additionalBundles: state.remoteBundles,
           }),
           { translateTypeError: true },
@@ -1154,11 +1234,12 @@ async function callTool(state, name, args) {
         if (result.applied || result.filesChanged) {
           rebuildStateIndex(state);
         }
-        return jsonContent(result, { structured: true });
+        return jsonContent(projectLiveReceipt(result, request.detail), { structured: true });
       }
       case "okf_apply_changes": {
+        const request = liveRequest(args);
         const result = await expectedToolOperation(
-          () => requireLiveAuthoring(state).applyChanges(args, {
+          () => requireLiveAuthoring(state).applyChanges(request.input, {
             additionalBundles: state.remoteBundles,
           }),
           { translateTypeError: true },
@@ -1166,7 +1247,7 @@ async function callTool(state, name, args) {
         if (result.applied || result.filesChanged) {
           rebuildStateIndex(state);
         }
-        return jsonContent(result, {
+        return jsonContent(projectLiveReceipt(result, request.detail), {
           structured: true,
           isError: result.applied === false,
         });
