@@ -107,8 +107,12 @@ test("tools/list and tools/call enforce configured MCP capabilities", async (t) 
   assert.equal(readOnlyNames.has("search_concepts"), true);
   assert.equal(readOnlyNames.has("okf_validate_concept"), false);
   assert.equal(readOnlyNames.has("okf_propose_concept"), false);
+  assert.equal(readOnlyNames.has("okf_validate_changes"), false);
   assert.equal(readOnlyNames.has("okf_apply_changes"), false);
   assert.equal(readOnlyNames.has("load_remote_bundle"), false);
+  const readOnlyBundles = await callJson(readOnly.client, "list_bundles");
+  assert.equal(Object.hasOwn(readOnlyBundles.payload[0], "absoluteRoot"), false);
+  assert.equal(Object.hasOwn(readOnlyBundles.payload[0], "projectRoot"), false);
   await assert.rejects(
     () => readOnly.client.callTool({
       name: "load_remote_bundle",
@@ -131,7 +135,22 @@ test("tools/list and tools/call enforce configured MCP capabilities", async (t) 
   assert.equal(projectNames.has("okf_get_proposal"), true);
   assert.equal(projectNames.has("okf_propose_concept"), false);
   assert.equal(projectNames.has("okf_accept_proposal"), false);
+  assert.equal(projectNames.has("okf_validate_changes"), false);
   assert.equal(projectNames.has("okf_apply_changes"), false);
+  await assert.rejects(
+    () => project.client.callTool({
+      name: "okf_validate_changes",
+      arguments: {
+        bundle: "local",
+        changes: [{ op: "create", type: "Concept", title: "Blocked validation" }],
+      },
+    }),
+    (error) => {
+      assert.equal(error.code, -32602);
+      assert.match(error.message, /not found/);
+      return true;
+    },
+  );
   await assert.rejects(
     () => project.client.callTool({
       name: "okf_propose_concept",
@@ -171,6 +190,7 @@ test("tools/list and tools/call enforce configured MCP capabilities", async (t) 
   assert.equal(enabledNames.has("okf_propose_concept"), true);
   assert.equal(enabledNames.has("okf_accept_proposal"), true);
   assert.equal(enabledNames.has("load_remote_bundle"), true);
+  assert.equal(enabledNames.has("okf_validate_changes"), false);
   assert.equal(enabledNames.has("okf_apply_changes"), false);
 
   const live = await connectMcp(t, [], {
@@ -179,6 +199,7 @@ test("tools/list and tools/call enforce configured MCP capabilities", async (t) 
     actor: "openai/gpt-5.6",
   });
   const liveNames = toolNames(await live.client.listTools());
+  assert.equal(liveNames.has("okf_validate_changes"), true);
   assert.equal(liveNames.has("okf_apply_changes"), true);
   assert.equal(liveNames.has("okf_propose_concept"), false);
 });
@@ -242,7 +263,7 @@ test("accepted local proposals retain configured and runtime remote bundles and 
   await callJson(client, "okf_accept_proposal", { proposalId });
   const afterAccepted = await callJson(client, "search_concepts", { query: "accepted" });
   assert.equal(afterAccepted.payload.results.some((result) => result.uri === "okf://local/accepted"), true);
-  const live = await callJson(client, "okf_apply_changes", {
+  const liveInput = {
     bundle: "local",
     changes: [{
       op: "create",
@@ -251,7 +272,12 @@ test("accepted local proposals retain configured and runtime remote bundles and 
       title: "Live",
       relations: [{ type: "related_to", target: "okf://runtime/runtime.md" }],
     }],
-  });
+  };
+  const livePreview = await callJson(client, "okf_validate_changes", liveInput);
+  assert.equal(livePreview.payload.valid, true);
+  assert.equal(livePreview.payload.readyToApply, true);
+  assert.equal(fs.existsSync(path.join(bundle, "live.md")), false);
+  const live = await callJson(client, "okf_apply_changes", liveInput);
   assert.equal(live.payload.applied, true);
 
   for (const uri of [

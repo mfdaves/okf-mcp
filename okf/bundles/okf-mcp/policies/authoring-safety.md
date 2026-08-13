@@ -23,13 +23,17 @@ relations:
     target: repo://test/mcp-hardening.test.js
   - type: checked_by
     target: repo://test/live-authoring.test.js
+  - type: checked_by
+    target: repo://test/live-authoring-correctness.test.js
+  - type: checked_by
+    target: repo://test/live-agent-workflow.test.js
 ---
 
 # Authoring Safety
 
 Authoring is allowed for an explicit local `--root` or local roots declared by `okf.project.yaml`. MCP proposal mutations require `--authoring`; coordinated computation proposals also require `--allow-computation-authoring`. Direct authoring requires `--write` and a configured actor. Remote roots are read only.
 
-Concept paths must be safe relative `.md` paths inside the selected bundle. Absolute paths, parent traversal, reserved `index.md` and `log.md` targets, symbolic-link traversal, and non-directory parents are rejected.
+Concept paths must be safe relative `.md` paths inside the selected bundle. Absolute paths, parent traversal, hidden/control-plane segments such as `.git`, case-insensitive reserved `index.md` and `log.md` targets, Markdown-file ancestor segments, symbolic-link traversal, and non-directory parents are rejected.
 
 New concepts cannot reuse a canonical Concept ID or compatibility alias. Updates are bound to the existing bundle and path and cannot change the custom-id alias.
 
@@ -37,7 +41,9 @@ Candidates must satisfy the concept format, configured relation vocabulary, and 
 
 Proposal creation never writes a concept file. Acceptance repeats validation. Updates also compare the source revision immediately before replacement and return conflicts for detected concurrent changes. After acceptance, the MCP index is rebuilt without discarding configured or runtime-loaded remote bundle state.
 
-Direct authoring exposes one destructive batch tool. It validates the combined future graph, stamps generation metadata at the server boundary, serializes batches under one process-local writer lock, stages every file before publication, and rolls back its published files on write or post-write validation failure. It rejects generated-file flags, `process:*` generation owners, configured generator outputs, and computation contracts. Optional Git commits require a clean worktree before any write and never push; a commit failure leaves the valid batch visible as applied but uncommitted.
+Direct authoring exposes a read-only batch validator and one destructive apply tool with the same structured grammar. They share the combined-future-graph planner, while apply repeats the plan under one process-local writer lock, stamps generation metadata at the server boundary, stages every file before publication, and validates persisted state. It rejects generated-file flags, `process:*` generation owners, configured generator outputs, and computation contracts.
+
+Rollback revision-checks a published target immediately before restoring it. Detected external replacements are preserved and reported as rollback conflicts, but this is best-effort detection rather than a cross-process compare-and-swap primitive. Optional Git commits require a clean worktree before publication, reject active filter attributes and hidden `assume-unchanged`/`skip-worktree` index flags, and disable replace-object resolution. They build an isolated index directly from validated Markdown bytes, create the exact tree without mutating the shared index, publish it through a compare-and-swap ref update, synchronize only affected ordinary-index paths afterward, and never push. Commit, target, index, and durability states remain explicit when a timeout or concurrent replacement cannot be classified safely.
 
 Computation, executor, and attester artifacts are always inert. Inspection and preflight never execute them, fetch external contract URIs, echo parameter or receipt values, persist receipts, or claim attestation. Migration adds no unverifiable provenance or trust claims and never accepts its own proposals.
 

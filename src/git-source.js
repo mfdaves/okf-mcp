@@ -12,10 +12,13 @@ const DEFAULT_GIT_TIMEOUT_MS = 10000;
 const MAX_GIT_TIMEOUT_MS = 60000;
 
 class GitSourceError extends Error {
-  constructor(code, message) {
+  constructor(code, message, details) {
     super(message);
     this.name = "GitSourceError";
     this.code = code;
+    if (details !== undefined) {
+      this.details = details;
+    }
   }
 }
 
@@ -27,8 +30,8 @@ function isPlainObject(value) {
   return prototype === Object.prototype || prototype === null;
 }
 
-function sourceError(code, message) {
-  return new GitSourceError(code, message);
+function sourceError(code, message, details) {
+  return new GitSourceError(code, message, details);
 }
 
 function normalizeLines(value) {
@@ -392,7 +395,13 @@ function readGitSource(source, repositoryMappings, options) {
   if (size > maxBytes) {
     throw sourceError(
       "git_source_too_large",
-      `Git source exceeds the configured ${maxBytes} byte limit.`,
+      `Git source is ${size} bytes and exceeds the configured ${maxBytes} byte limit.`,
+      {
+        actualBytes: size,
+        limitBytes: maxBytes,
+        maxAllowedBytes: MAX_GIT_SOURCE_BYTES,
+        retryable: size <= MAX_GIT_SOURCE_BYTES,
+      },
     );
   }
 

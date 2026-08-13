@@ -63,6 +63,7 @@ async function smokeMcp(okfMcp, installedRoot, mode) {
     const toolNames = tools.tools.map((tool) => tool.name);
     assert.equal(toolNames.includes("get_concept"), true);
     assert.equal(toolNames.includes("okf_accept_proposal"), false);
+    assert.equal(toolNames.includes("okf_validate_changes"), false);
     assert.equal(toolNames.includes("okf_apply_changes"), false);
     assert.equal(toolNames.includes("load_remote_bundle"), false);
 
@@ -85,6 +86,53 @@ async function smokeMcp(okfMcp, installedRoot, mode) {
     });
     const searchPayload = JSON.parse(search.content[0].text);
     assert.equal(searchPayload.results[0].uri, "okf://okf-mcp/runtime/mcp-server");
+  } finally {
+    await client.close();
+  }
+  assert.equal(stderr, "");
+}
+
+async function smokeLiveValidation(okfMcp, installedRoot, mode) {
+  const target = path.join(installedRoot, "package-smoke-preview.md");
+  const transport = new StdioClientTransport({
+    command: okfMcp,
+    args: ["--root", installedRoot, "--write", "--actor", "process:package-smoke", "mcp"],
+    cwd: repositoryRoot,
+    stderr: "pipe",
+  });
+  let stderr = "";
+  transport.stderr.on("data", (chunk) => {
+    stderr += String(chunk);
+  });
+  const client = new Client(
+    { name: "okf-package-live-smoke", version: "1" },
+    { versionNegotiation: { mode } },
+  );
+  try {
+    await client.connect(transport);
+    const modern = typeof mode === "object";
+    assert.equal(client.getProtocolEra(), modern ? "modern" : "legacy");
+    const tools = await client.listTools();
+    const byName = new Map(tools.tools.map((tool) => [tool.name, tool]));
+    assert.equal(byName.get("okf_validate_changes").annotations.readOnlyHint, true);
+    assert.equal(byName.get("okf_apply_changes").annotations.destructiveHint, true);
+    const result = await client.callTool({
+      name: "okf_validate_changes",
+      arguments: {
+        changes: [{
+          op: "create",
+          path: "package-smoke-preview.md",
+          type: "Reference",
+          title: "Package Smoke Preview",
+        }],
+      },
+    });
+    assert.equal(result.isError, undefined);
+    const payload = result.structuredContent || JSON.parse(result.content[0].text);
+    assert.equal(payload.valid, true);
+    assert.equal(payload.readyToApply, true);
+    assert.equal(payload.durability.state, "not_persisted");
+    assert.equal(fs.existsSync(target), false);
   } finally {
     await client.close();
   }
@@ -194,6 +242,8 @@ async function main() {
 
     await smokeMcp(okfMcp, installedRoot, "legacy");
     await smokeMcp(okfMcp, installedRoot, { pin: "2026-07-28" });
+    await smokeLiveValidation(okfMcp, installedRoot, "legacy");
+    await smokeLiveValidation(okfMcp, installedRoot, { pin: "2026-07-28" });
 
     process.stdout.write(JSON.stringify({
       package: `${packageMetadata.name}@${packageMetadata.version}`,

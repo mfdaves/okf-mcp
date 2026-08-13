@@ -35,7 +35,7 @@ Node 22 or newer is required.
 Install from the GitHub release:
 
 ```bash
-git clone --branch v0.6.0 https://github.com/mfdaves/okf-mcp.git
+git clone --branch v0.7.0 https://github.com/mfdaves/okf-mcp.git
 cd okf-mcp
 npm ci
 node bin/okf-mcp.js --root ./path/to/okf validate
@@ -44,14 +44,14 @@ node bin/okf-mcp.js --root ./path/to/okf validate
 Pin the published version for reproducible use:
 
 ```bash
-npx -y @mfdaves/okf-mcp@0.6.0 --version
-npx -y @mfdaves/okf-mcp@0.6.0 --root ./path/to/okf validate
+npx -y @mfdaves/okf-mcp@0.7.0 --version
+npx -y @mfdaves/okf-mcp@0.7.0 --root ./path/to/okf validate
 ```
 
 For a persistent installation:
 
 ```bash
-npm install --global @mfdaves/okf-mcp@0.6.0
+npm install --global @mfdaves/okf-mcp@0.7.0
 
 okf --version
 okf --root ./path/to/okf validate
@@ -95,7 +95,7 @@ okf --root okf/bundles/okf-mcp concept overview/okf-mcp
 Load the reference bundle directly from this release:
 
 ```bash
-okf --remote-bundle okf-mcp=https://github.com/mfdaves/okf-mcp/tree/v0.6.0/okf/bundles/okf-mcp --inspect
+okf --remote-bundle okf-mcp=https://github.com/mfdaves/okf-mcp/tree/v0.7.0/okf/bundles/okf-mcp --inspect
 ```
 
 The `@mfdaves/okf-mcp` npm package includes both `okf.project.yaml` and the
@@ -182,7 +182,7 @@ Example client configuration:
       "command": "npx",
       "args": [
         "-y",
-        "@mfdaves/okf-mcp@0.6.0",
+        "@mfdaves/okf-mcp@0.7.0",
         "--root",
         "/absolute/path/to/okf",
         "mcp"
@@ -201,7 +201,7 @@ Project config mode, with read-only project helpers but without proposal mutatio
       "command": "npx",
       "args": [
         "-y",
-        "@mfdaves/okf-mcp@0.6.0",
+        "@mfdaves/okf-mcp@0.7.0",
         "--project",
         "/absolute/path/to/repo/okf.project.yaml",
         "mcp"
@@ -211,7 +211,7 @@ Project config mode, with read-only project helpers but without proposal mutatio
 }
 ```
 
-Add `--authoring` to enable proposal creation, acceptance, and rejection. For a smaller direct-write surface, add `--write --actor <actor>` to expose one transactional `okf_apply_changes` tool; add `--git-commit` to commit each successful batch when the catalog is in a clean Git worktree. Add `--allow-remote-tool` to let MCP clients load arbitrary supported public remote bundles at runtime. Configured remote bundles remain readable without that runtime-loading flag.
+Add `--authoring` to enable proposal creation, acceptance, and rejection. For a smaller direct-write surface, add `--write --actor <actor>` to expose read-only `okf_validate_changes` and validated-batch `okf_apply_changes`; add `--git-commit` to commit each successful batch when the catalog is in a clean Git worktree. Add `--allow-remote-tool` to let MCP clients load arbitrary supported public remote bundles at runtime. Configured remote bundles remain readable without that runtime-loading flag.
 
 The stdio server uses `@modelcontextprotocol/server` v2. It serves the modern
 `2026-07-28` MCP revision and the SDK's compatibility path for 2025-era
@@ -316,6 +316,7 @@ okf --root /path/to/catalog \
 - `okf_get_proposal`
 - `okf_accept_proposal`
 - `okf_reject_proposal`
+- `okf_validate_changes`
 - `okf_apply_changes`
 - `get_graph`
 - `get_neighbors`
@@ -345,7 +346,7 @@ Tool discovery and direct invocation use the same capability checks:
 | `--authoring --allow-computation-authoring` | enabled | disabled | enabled | disabled |
 | `--allow-remote-tool` | disabled | disabled | disabled | enabled |
 
-An explicit local root or project workspace exposes concept validation, path suggestion, and proposal inspection helpers. Proposal mutation tools require `--authoring`. The direct live tool instead requires `--write` plus a truthful actor using `human:<id>`, `process:<id>`, or `provider/model` syntax. In normal single-root mode, callers omit `bundle`; it is required only to select among multiple project roots. Remote roots remain read only.
+An explicit local root or project workspace exposes concept validation, path suggestion, and proposal inspection helpers. Proposal mutation tools require `--authoring`. The direct live tools instead require `--write` plus a truthful actor using `human:<id>`, `process:<id>`, or `provider/model` syntax. In normal single-root mode, callers omit `bundle`; it is required only to select among multiple project roots. Remote roots remain read only.
 
 Generic concept tools cannot create or change an Attested Computation contract. `okf_propose_attested_computation` additionally requires `--allow-computation-authoring` and creates one coordinated review proposal for the concept plus an optional external computation file.
 
@@ -357,7 +358,7 @@ Start the server with the direct-write capability only when the MCP client/user 
 okf --root /path/to/catalog --write --actor openai/gpt-5.6 mcp
 ```
 
-The agent sees one destructive tool. It supplies structured concept fields rather than YAML; OKF serializes compatible Markdown frontmatter and stamps the configured `generated.by` plus one `generated.at` timestamp for the whole batch.
+The agent sees one read-only batch validator and one destructive apply tool. It supplies structured concept fields rather than YAML; OKF serializes compatible Markdown frontmatter and stamps the configured `generated.by` plus one `generated.at` timestamp for the whole batch.
 
 ```json
 {
@@ -381,11 +382,13 @@ The agent sees one destructive tool. It supplies structured concept fields rathe
 }
 ```
 
-Create paths are optional and derive deterministically from type and title. Updates identify an existing `uri`; scalar fields replace existing values, while `tags`, `sources`, and `relations` use explicit `add`/`remove` patches. `metadata` carries extension frontmatter but cannot override identity, generation, collection, or computation fields.
+Create paths are optional. The server first uses a strong dominant directory convention from existing concepts of the same type, then falls back to deterministic type/title slugs. `okf_suggest_concept_path` reports the strategy, evidence, availability, canonical URI, and absolute filename. Updates identify an existing `uri`; scalar fields replace existing values, while `tags`, `sources`, and `relations` use explicit `add`/`remove` patches. `metadata` carries extension frontmatter but cannot override identity, generation, collection, or computation fields. Paths and URIs are immutable during update: moving a concept changes its portable identity and remains a separate, intentionally unsupported operation.
 
-Every 1–100 item batch is validated as one future graph, so concepts created together can reference one another. The server writes nothing unless every candidate is valid, revision checks still match, and every target stays inside one writable bundle. Process-generated documents, generator output directories, reserved files, and Attested Computation contracts are not live-write targets.
+Every 1–100 item batch is validated as one future graph, so concepts created together can reference one another. Call `okf_validate_changes` with the complete intended batch to receive a time-of-check preview without writing files. Validation and apply share the same planner; apply repeats every check under the writer queue because revisions and Git state can change after a preview. Results include compact semantic effects, canonical and absolute targets, source revisions, graph diagnostics, Git preconditions, and an explicit durability state without echoing full bodies.
 
-Add `--git-commit` as server policy to create one commit per successful batch. A detected Git worktree must be completely clean and have a configured identity before any file is staged. The tool never pushes. Non-Git catalogs are written normally; if staging or commit fails after valid files were written, the result is `applied_uncommitted` and includes the Git error so the work remains recoverable.
+The server writes nothing unless every candidate is valid, revision checks still match, and every target stays inside one writable bundle. Process-generated documents, generator output directories, hidden/control-plane paths such as `.git/**`, reserved files, and Attested Computation contracts are not live-write targets. Rollback checks revisions immediately before each restore and reports detected replacements as a partial `rollback_conflict`. That protection is best effort under the documented single-external-writer requirement; it is not a cross-process compare-and-swap guarantee.
+
+Add `--git-commit` as server policy to create one commit per successful batch. A detected Git worktree must be completely clean and have a configured identity before publication. Active Git filter attributes and `assume-unchanged`/`skip-worktree` index flags block the operation so validation cannot execute configured filters or overlook hidden user changes; replace-object resolution is disabled so hidden replacement history cannot alter the parent tree. The server builds an isolated index from the validated Markdown bytes, creates that exact tree with `commit-tree`, publishes it with a compare-and-swap ref update, synchronizes only the affected ordinary-index paths afterward, and never pushes. Concurrent unrelated staged entries cannot enter the commit. A determinate commit failure leaves matching valid files as working-tree-only; an ambiguous ref-update timeout is reported as unknown unless the resulting commit tree can be proven. Non-Git catalogs are written normally. Every response makes the repository root, commit state, index state, target-byte state, and persistence boundary explicit.
 
 ## Authoring Concepts
 
@@ -437,7 +440,7 @@ Omitted frontmatter fields and an omitted body are preserved. The concept URI ca
 
 Safety rules:
 
-- concept paths must be safe relative `.md` paths inside a writable bundle
+- concept paths must be safe, non-hidden relative `.md` paths inside a writable bundle
 - concept writes cannot traverse symbolic links under a writable bundle
 - missing subdirectories are created only when a proposal is accepted
 - `index.md` and `log.md` cannot be authored as concepts

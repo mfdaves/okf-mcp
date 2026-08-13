@@ -19,6 +19,10 @@ relations:
     target: repo://test/mcp-hardening.test.js
   - type: checked_by
     target: repo://test/live-authoring.test.js
+  - type: checked_by
+    target: repo://test/live-mcp-contract.test.js
+  - type: checked_by
+    target: repo://test/live-agent-workflow.test.js
 ---
 
 # MCP Tool Catalog
@@ -33,11 +37,13 @@ Validation tools inspect bundles, projects, and candidate concepts without writi
 
 Static computation tools inspect contracts, read indexed assets, prepare parameter digests, and check receipt field names without execution, attestation, value echo, or persistence. Migration tools check or preview Stage A without writes.
 
-`read_git_source` reads one pinned `sources[].git` entry from a checkout or bare repository explicitly mapped by the MCP host. It reads the Git object database rather than the working tree and never fetches.
+`read_git_source` reads one pinned `sources[].git` entry from a checkout or bare repository explicitly mapped by the MCP host. It reads the Git object database rather than the working tree and never fetches. Oversized content errors include the observed size, active limit, maximum supported limit, and whether a bounded retry can succeed.
 
-An explicit local root or project workspace exposes candidate validation, path suggestion, and proposal inspection. Normal proposal mutations require `--authoring`; the coordinated computation proposal additionally requires `--allow-computation-authoring`. `--write --actor <actor>` exposes only `okf_apply_changes`, which accepts structured create/update batches without requiring agents to compose YAML. Runtime calls to `load_remote_bundle` require `--allow-remote-tool`.
+An explicit local root or project workspace exposes candidate validation, path suggestion, and proposal inspection. Normal proposal mutations require `--authoring`; the coordinated computation proposal additionally requires `--allow-computation-authoring`. `--write --actor <actor>` exposes read-only `okf_validate_changes` plus destructive `okf_apply_changes`, both accepting the same structured create/update batch grammar without requiring agents to compose YAML. Runtime calls to `load_remote_bundle` require `--allow-remote-tool`.
 
-`okf_apply_changes` validates 1–100 operations as one future graph, stamps one server-owned `generated.at` with the configured `generated.by`, then publishes the complete local batch and refreshes the index. Optional `--git-commit` policy creates one scoped commit from a clean worktree. Commit failure leaves valid files applied and reports `applied_uncommitted`; the tool never pushes.
+`okf_validate_changes` and `okf_apply_changes` plan 1–100 operations as one future graph, including cross-batch and loaded-remote references. Validation returns a non-durable time-of-check receipt. Apply repeats planning under the process-local writer queue, stamps one server-owned `generated.at` with the configured `generated.by`, publishes the complete local batch, validates persisted state, and refreshes the index. Receipts expose bounded semantic effects, absolute targets, revisions, graph diagnostics, Git preconditions, and durability without echoing full bodies.
+
+Optional `--git-commit` policy rejects filter declarations and hidden `assume-unchanged`/`skip-worktree` index flags, disables replace-object resolution, pins the checked-out symbolic branch, constructs an isolated index from validated bytes, and publishes its exact tree with a compare-and-swap ref update from a clean worktree. The shared index is not used to assemble the commit, so unrelated concurrently staged paths cannot enter it; only affected index paths are synchronized after publication. Determinate failures preserve matching valid working-tree files. Ambiguous outcomes, checkout changes, target replacements, and best-effort revision-checked rollback conflicts are reported explicitly; the tool never pushes.
 
 Every tool supplies a purpose-specific description, descriptions for all input parameters, and MCP annotations for read behavior, destructive behavior, idempotency, and external access. Tool discovery and direct invocation use the same capability checks, so a hidden tool also fails when called by name. Annotations remain hints to clients; server-side validation is authoritative.
 

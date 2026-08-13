@@ -456,7 +456,7 @@ test("Git policy commits a clean batch, rejects dirty state, and preserves commi
   const failingCommit = fixedService(root, {
     gitCommit: true,
     spawnSync(command, args, options) {
-      if (args.includes("commit")) {
+      if (args.includes("commit-tree")) {
         return { status: 1, stdout: "", stderr: "simulated commit failure" };
       }
       return realSpawnSync(command, args, options);
@@ -483,7 +483,10 @@ test("Git policy treats a non-Git catalog as a normal uncommitted apply", async 
   assert.deepEqual(result.git, {
     enabled: true,
     repository: false,
+    repositoryRoot: null,
     committed: false,
+    commitState: "not_repository",
+    persistence: "working_tree",
     reason: "not_git_repository",
   });
 });

@@ -127,6 +127,9 @@ test("MCP reads only a declared pinned Git source through an explicit mapping", 
   t.after(() => fs.rmSync(repository, { recursive: true, force: true }));
   git(repository, ["init", "--quiet"]);
   write(repository, "src/example.js", "first\nsecond\nthird\n");
+  write(repository, "src/at-limit.txt", "z".repeat(65536));
+  write(repository, "src/large.txt", "x".repeat(65537));
+  write(repository, "src/too-large.txt", "y".repeat(1048577));
   git(repository, ["add", "--all"]);
   git(repository, [
     "-c", "user.name=OKF Test", "-c", "user.email=okf@example.invalid",
@@ -156,6 +159,22 @@ test("MCP reads only a declared pinned Git source through an explicit mapping", 
     "      lines:",
     "        from: 2",
     "        to: 3",
+    "  - id: at-limit",
+    "    resource: /repositories/example.md",
+    "    git:",
+    `      revision: ${revision}`,
+    "      path: src/at-limit.txt",
+    "  - id: large",
+    "    resource: /repositories/example.md",
+    "    git:",
+    `      revision: ${revision}`,
+    "      path: src/large.txt",
+    "  - id: too-large",
+    "    resource: /repositories/example.md",
+    "    git:",
+    `      revision: ${revision}`,
+    "      path: src/too-large.txt",
+    "      lines: { from: 1, to: 1 }",
     "---",
     "",
     "# Implementation",
@@ -174,4 +193,44 @@ test("MCP reads only a declared pinned Git source through an explicit mapping", 
   assert.equal(result.content, "second\nthird\n");
   assert.equal(result.repository.conceptId, "repositories/example");
   assert.match(result.sha256, /^sha256:[0-9a-f]{64}$/);
+
+  const atLimit = await callJson(client, "read_git_source", {
+    concept: "implementation",
+    sourceId: "at-limit",
+  });
+  assert.equal(atLimit.result.isError, undefined);
+  assert.equal(atLimit.payload.content.length, 65536);
+
+  const large = await callJson(client, "read_git_source", {
+    concept: "implementation",
+    sourceId: "large",
+  });
+  assert.equal(large.result.isError, true);
+  assert.equal(large.payload.code, "git_source_too_large");
+  assert.deepEqual(large.payload.details, {
+    actualBytes: 65537,
+    limitBytes: 65536,
+    maxAllowedBytes: 1048576,
+    retryable: true,
+  });
+
+  const retried = await callJson(client, "read_git_source", {
+    concept: "implementation",
+    sourceId: "large",
+    maxContentBytes: 65537,
+  });
+  assert.equal(retried.result.isError, undefined);
+  assert.equal(retried.payload.content.length, 65537);
+
+  const tooLarge = await callJson(client, "read_git_source", {
+    concept: "implementation",
+    sourceId: "too-large",
+  });
+  assert.equal(tooLarge.result.isError, true);
+  assert.deepEqual(tooLarge.payload.details, {
+    actualBytes: 1048577,
+    limitBytes: 65536,
+    maxAllowedBytes: 1048576,
+    retryable: false,
+  });
 });

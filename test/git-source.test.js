@@ -220,7 +220,16 @@ test("rejects Git symlinks, gitlinks, oversized blobs, and invalid UTF-8", (t) =
   );
   assert.throws(
     () => readGitSource(source(repository, fixture.revision, "src/large.txt"), mapping, { maxBytes: 4 }),
-    assertCode("git_source_too_large"),
+    (error) => {
+      assertCode("git_source_too_large")(error);
+      assert.deepEqual(error.details, {
+        actualBytes: 10,
+        limitBytes: 4,
+        maxAllowedBytes: 1024 * 1024,
+        retryable: true,
+      });
+      return true;
+    },
   );
   assert.throws(
     () => readGitSource(source(repository, fixture.revision, "src/invalid.txt"), mapping),

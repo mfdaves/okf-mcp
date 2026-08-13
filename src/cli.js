@@ -485,7 +485,7 @@ function usage() {
     "  --root, -r <directory>      Load one official OKF bundle root.",
     "  --repo <concept-id=path>    Map a Git Repository concept to a checkout or bare repo; repeatable.",
     "  --authoring                 Enable MCP proposal authoring tools.",
-    "  --write                     Enable direct atomic MCP concept writes (requires --actor).",
+    "  --write                     Enable direct validated-batch MCP concept writes (requires --actor).",
     "  --actor <actor>             Stamp live writes with human:id, process:id, or provider/model.",
     "  --git-commit                Commit each live write batch when the catalog is in a clean Git repo.",
     "  --allow-remote-tool         Enable runtime remote-bundle loading over MCP.",

@@ -6,7 +6,11 @@ const path = require("node:path");
 const { spawnSync: nodeSpawnSync } = require("node:child_process");
 const { isDeepStrictEqual } = require("node:util");
 
-const { normalizeConceptPath, renderConceptMarkdown, slug } = require("./authoring");
+const {
+  deriveConceptPathSuggestion,
+  normalizeConceptPath,
+  renderConceptMarkdown,
+} = require("./authoring");
 const {
   attachProject,
   buildIndex,
@@ -17,6 +21,9 @@ const {
 const { validActor } = require("./v02");
 
 const MAX_CHANGES = 100;
+const MAX_COMMIT_MESSAGE_BYTES = 1024;
+const MAX_EFFECT_ITEMS = 20;
+const MAX_EFFECT_TEXT = 240;
 const MANAGED_METADATA_KEYS = new Set([
   "id",
   "type",
@@ -34,6 +41,20 @@ const MANAGED_METADATA_KEYS = new Set([
   "executor",
   "attester",
 ]);
+
+class AuthoringPolicyError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "AuthoringPolicyError";
+  }
+}
+
+class AuthoringOperationalError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "AuthoringOperationalError";
+  }
+}
 
 function isPlainObject(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -346,8 +367,127 @@ function commandFailure(result, fallback) {
     || fallback;
 }
 
+function commandSucceeded(result) {
+  return Boolean(result && !result.error && result.status === 0);
+}
+
 function revisionFor(text) {
   return `sha256:${crypto.createHash("sha256").update(text).digest("hex")}`;
+}
+
+function byteLength(text) {
+  return Buffer.byteLength(String(text || ""), "utf8");
+}
+
+function sortedUnique(values) {
+  return Array.from(new Set(values)).sort();
+}
+
+function boundedEffectList(values) {
+  const normalized = sortedUnique(values).map((value) => {
+    const text = String(value);
+    return text.length > MAX_EFFECT_TEXT ? `${text.slice(0, MAX_EFFECT_TEXT - 1)}…` : text;
+  });
+  return {
+    values: normalized.slice(0, MAX_EFFECT_ITEMS),
+    omitted: Math.max(0, normalized.length - MAX_EFFECT_ITEMS),
+  };
+}
+
+function collectionEffects(before, after, identity) {
+  const previous = new Map((before || []).map((value) => [identity(value), value]));
+  const next = new Map((after || []).map((value) => [identity(value), value]));
+  const added = Array.from(next.keys()).filter((key) => !previous.has(key)).sort();
+  const removed = Array.from(previous.keys()).filter((key) => !next.has(key)).sort();
+  const updated = Array.from(next.keys()).filter((key) => (
+      previous.has(key) && !isDeepStrictEqual(previous.get(key), next.get(key))
+  )).sort();
+  return {
+    added: boundedEffectList(added),
+    removed: boundedEffectList(removed),
+    updated: boundedEffectList(updated),
+  };
+}
+
+function metadataEffects(before, after) {
+  const excluded = new Set(["tags", "sources", "relations", "generated"]);
+  const keys = sortedUnique(Object.keys(before || {}).concat(Object.keys(after || {})))
+    .filter((key) => !excluded.has(key));
+  return {
+    set: boundedEffectList(keys.filter((key) => hasOwn(after, key) && !isDeepStrictEqual(before[key], after[key]))),
+    removed: boundedEffectList(keys.filter((key) => hasOwn(before, key) && !hasOwn(after, key))),
+  };
+}
+
+function effectsForCandidate(candidate) {
+  const before = candidate.op === "update" ? candidate.originalFrontmatter : {};
+  const after = candidate.frontmatter;
+  const tags = collectionEffects(before.tags, after.tags, (value) => String(value));
+  const sources = collectionEffects(before.sources, after.sources, sourceIdentity);
+  const relations = collectionEffects(before.relations, after.relations, relationKey);
+  const metadata = metadataEffects(before, after);
+  const bodyChanged = candidate.op === "create"
+    ? true
+    : normalizeBody(candidate.originalBody) !== normalizeBody(candidate.body);
+  const changedFields = [];
+  if (bodyChanged) changedFields.push("body");
+  const hasEffect = (group) => group.values.length || group.omitted;
+  if (hasEffect(tags.added) || hasEffect(tags.removed) || hasEffect(tags.updated)) changedFields.push("tags");
+  if (hasEffect(sources.added) || hasEffect(sources.removed) || hasEffect(sources.updated)) changedFields.push("sources");
+  if (hasEffect(relations.added) || hasEffect(relations.removed) || hasEffect(relations.updated)) changedFields.push("relations");
+  if (hasEffect(metadata.set) || hasEffect(metadata.removed)) changedFields.push("metadata");
+  if (!isDeepStrictEqual(before.generated, after.generated)) changedFields.push("generated");
+  return {
+    changedFields,
+    bodyChanged,
+    tags,
+    sources,
+    relations,
+    metadata,
+    beforeRevision: candidate.baseRevision,
+    afterRevision: candidate.publishedRevision,
+    bytesBefore: candidate.originalText === undefined ? 0 : byteLength(candidate.originalText),
+    bytesAfter: byteLength(candidate.markdown),
+  };
+}
+
+function policyCode(message) {
+  const text = String(message || "");
+  if (/generated|generator/i.test(text)) return "generated_owner_protected";
+  if (/Attested Computation|computation contract/i.test(text)) return "computation_authoring_prohibited";
+  if (/excluded by the bundle policy/i.test(text)) return "excluded_target";
+  if (/no effective changes/i.test(text)) return "no_effective_changes";
+  if (/same concept more than once/i.test(text)) return "duplicate_batch_target";
+  if (/already exists/i.test(text)) return "target_exists";
+  if (/unknown valid OKF concept/i.test(text)) return "concept_not_found";
+  if (/server-managed/i.test(text)) return "managed_metadata_protected";
+  if (/1 through \d+ operations/i.test(text)) return "invalid_batch_size";
+  if (/outside|travers|safe relative|unsafe segment|reserved index|reserved .*file|Markdown file|Markdown path/i.test(text)) return "unsafe_target_path";
+  if (/worktree must be completely clean/i.test(text)) return "git_worktree_dirty";
+  if (/Git filter attributes|repository-configured filters/i.test(text)) return "git_filter_attribute_unsupported";
+  if (/assume-unchanged|skip-worktree|Git index flags/i.test(text)) return "git_index_flag_unsupported";
+  if (/detached HEAD|symbolic branch|checked-out Git ref/i.test(text)) return "git_head_ref_unsupported";
+  if (/Git user\.(name|email)/i.test(text)) return "git_identity_missing";
+  if (/must have an existing HEAD/i.test(text)) return "git_head_missing";
+  if (/commit message/i.test(text)) return "invalid_commit_message";
+  return "authoring_policy_rejected";
+}
+
+function policyValidation(message) {
+  const code = policyCode(message);
+  return {
+    valid: false,
+    conformant: false,
+    validForProject: false,
+    diagnostics: [{
+      code,
+      severity: "error",
+      layer: "authoring",
+      message,
+    }],
+    errors: [{ code, message }],
+    warnings: [],
+  };
 }
 
 function temporaryPath(target) {
@@ -437,14 +577,14 @@ class LiveAuthoringService {
     return target;
   }
 
-  createCandidate(change, bundle, generated) {
+  createCandidate(change, bundle, currentIndex, generated) {
     const type = nonEmptyString(change.type, "changes[].type");
     if (type === "Attested Computation") {
       throw new Error("Live concept authoring cannot create Attested Computation contracts.");
     }
     const title = nonEmptyString(change.title, "changes[].title");
     const conceptPath = normalizeConceptPath(
-      change.path || `${slug(type, "concept")}/${slug(title, "concept")}.md`,
+      change.path || deriveConceptPathSuggestion(currentIndex, bundle, { type, title }).path,
     );
     if (!bundleAllowsPath(bundle, conceptPath)) {
       throw new Error(`Concept path is excluded by the bundle policy: ${conceptPath}`);
@@ -486,6 +626,9 @@ class LiveAuthoringService {
       markdown,
       target,
       baseRevision: null,
+      publishedRevision: revisionFor(markdown),
+      originalFrontmatter: {},
+      originalBody: "",
     };
   }
 
@@ -551,8 +694,11 @@ class LiveAuthoringService {
       markdown,
       target,
       baseRevision: diskRevision,
+      publishedRevision: revisionFor(markdown),
       originalText,
       originalMode,
+      originalFrontmatter: Object.assign({}, existing.frontmatter),
+      originalBody: existing.body,
     };
   }
 
@@ -591,105 +737,856 @@ class LiveAuthoringService {
     };
   }
 
-  runGit(directory, args) {
+  runGit(directory, args, options) {
     const environment = Object.assign({}, process.env);
     Object.keys(environment).filter((key) => key.startsWith("GIT_")).forEach((key) => {
       delete environment[key];
     });
+    if (options && options.environment) {
+      Object.assign(environment, options.environment);
+    }
     environment.GIT_LITERAL_PATHSPECS = "1";
     environment.GIT_TERMINAL_PROMPT = "0";
-    return this.spawnSync("git", [
-      "-C",
-      directory,
-      "-c",
-      "core.hooksPath=/dev/null",
-      "-c",
-      "commit.gpgSign=false",
-    ].concat(args), {
+    environment.GIT_PAGER = "cat";
+    environment.GIT_NO_REPLACE_OBJECTS = "1";
+    if (options && options.readOnly) {
+      environment.GIT_OPTIONAL_LOCKS = "0";
+    }
+    const spawnOptions = {
       encoding: "utf8",
       shell: false,
-      maxBuffer: 1024 * 1024,
+      maxBuffer: 8 * 1024 * 1024,
       timeout: 15000,
       env: environment,
+    };
+    if (options && hasOwn(options, "input")) {
+      spawnOptions.input = options.input;
+    }
+    try {
+      return this.spawnSync("git", [
+        "-C",
+        directory,
+        "-c",
+        "core.hooksPath=/dev/null",
+        "-c",
+        "core.fsmonitor=false",
+        "-c",
+        "commit.gpgSign=false",
+        "-c",
+        "diff.external=",
+      ].concat(args), spawnOptions);
+    } catch (error) {
+      return { status: null, stdout: "", stderr: "", error };
+    }
+  }
+
+  readGitValue(repository, args, options) {
+    const result = this.runGit(repository, args, options);
+    return commandSucceeded(result) ? String(result.stdout || "").trim() : null;
+  }
+
+  activeGitFilterAttributes(repository, candidates) {
+    const tracked = this.runGit(repository, ["ls-files", "-z"], { readOnly: true });
+    if (!commandSucceeded(tracked)) {
+      throw new AuthoringOperationalError(
+        `Could not inspect tracked Git paths: ${commandFailure(tracked, "git ls-files failed")}`,
+      );
+    }
+    const paths = sortedUnique(
+      String(tracked.stdout || "").split("\0").filter(Boolean)
+        .concat(this.repositoryFiles({ repository }, candidates)),
+    );
+    const active = [];
+    for (let offset = 0; offset < paths.length; offset += 200) {
+      const chunk = paths.slice(offset, offset + 200);
+      const inspected = this.runGit(
+        repository,
+        ["check-attr", "-z", "--all", "--"].concat(chunk),
+        { readOnly: true },
+      );
+      if (!commandSucceeded(inspected)) {
+        throw new AuthoringOperationalError(
+          `Could not inspect Git filter attributes: ${commandFailure(inspected, "git check-attr failed")}`,
+        );
+      }
+      const values = String(inspected.stdout || "").split("\0");
+      for (let index = 0; index + 2 < values.length; index += 3) {
+        const attribute = values[index + 1];
+        if (attribute === "filter") {
+          active.push({ path: values[index], filter: values[index + 2] || "set" });
+        }
+      }
+    }
+    return active;
+  }
+
+  unsupportedGitIndexFlags(repository) {
+    const inspected = this.runGit(repository, ["ls-files", "-v", "-z"], { readOnly: true });
+    if (!commandSucceeded(inspected)) {
+      throw new AuthoringOperationalError(
+        `Could not inspect Git index flags: ${commandFailure(inspected, "git ls-files failed")}`,
+      );
+    }
+    return String(inspected.stdout || "").split("\0").filter(Boolean).flatMap((entry) => {
+      const tag = entry[0] || "";
+      const flagged = tag === "S" || (/[a-z]/.test(tag) && tag === tag.toLowerCase());
+      if (!flagged) {
+        return [];
+      }
+      return [{
+        path: entry.slice(2),
+        flag: tag === "S" ? "skip-worktree" : "assume-unchanged",
+      }];
     });
   }
 
-  prepareGit(bundle) {
+  prepareGit(bundle, candidates) {
+    const preflight = {
+      enabled: this.gitCommit,
+      repository: null,
+      repositoryStatus: this.gitCommit ? "not_git_repository" : "not_inspected",
+      repositoryRoot: null,
+      headBefore: null,
+      headRef: null,
+      worktreeClean: null,
+      identityConfigured: null,
+      ready: !this.gitCommit,
+      diagnostics: [],
+    };
     if (!this.gitCommit) {
-      return { enabled: false, repository: null };
+      return preflight;
     }
-    const discovered = this.runGit(bundle.root, ["rev-parse", "--show-toplevel"]);
+    const discovered = this.runGit(bundle.root, ["rev-parse", "--show-toplevel"], { readOnly: true });
     if (discovered.error) {
-      throw new Error(`Git executable is unavailable: ${discovered.error.message}`);
+      if (this.gitCommit) {
+        throw new AuthoringOperationalError(`Git executable is unavailable: ${discovered.error.message}`);
+      }
+      return Object.assign(preflight, {
+        repositoryStatus: "unavailable",
+        inspectionError: discovered.error.message,
+      });
     }
     if (discovered.status !== 0) {
       const detail = commandOutput(discovered);
       if (/not a git repository/i.test(detail)) {
-        return { enabled: true, repository: null };
+        preflight.ready = true;
+        return preflight;
       }
-      throw new Error(`Could not inspect Git repository: ${detail || `git exited ${discovered.status}`}`);
+      if (this.gitCommit) {
+        throw new AuthoringOperationalError(`Could not inspect Git repository: ${detail || `git exited ${discovered.status}`}`);
+      }
+      return Object.assign(preflight, {
+        repositoryStatus: "inspection_failed",
+        inspectionError: detail || `git exited ${discovered.status}`,
+      });
     }
-    const repository = String(discovered.stdout || "").trim();
-    const status = this.runGit(repository, ["status", "--porcelain=v1", "--untracked-files=all"]);
-    if (status.error || status.status !== 0) {
-      throw new Error(`Could not inspect Git status: ${commandFailure(status, "git status failed")}`);
+    const repository = path.resolve(String(discovered.stdout || "").trim());
+    preflight.repository = repository;
+    preflight.repositoryRoot = repository;
+    preflight.repositoryStatus = "detected";
+    const symbolicHead = this.runGit(
+      repository,
+      ["symbolic-ref", "-q", "HEAD"],
+      { readOnly: true },
+    );
+    if (symbolicHead.error || (symbolicHead.status !== 0 && symbolicHead.status !== 1)) {
+      throw new AuthoringOperationalError(
+        `Could not inspect the checked-out Git ref: ${commandFailure(symbolicHead, "git symbolic-ref failed")}`,
+      );
     }
-    if (String(status.stdout || "").trim()) {
-      throw new Error("Git worktree must be completely clean before an automatic OKF commit.");
-    }
+    const headRef = commandSucceeded(symbolicHead)
+      ? String(symbolicHead.stdout || "").trim()
+      : null;
+    preflight.headRef = headRef;
+    const headBefore = this.readGitValue(
+      repository,
+      ["rev-parse", "--verify", headRef || "HEAD"],
+      { readOnly: true },
+    );
+    preflight.headBefore = headBefore;
+    const missingIdentity = [];
     for (const key of ["user.name", "user.email"]) {
-      const configured = this.runGit(repository, ["config", "--get", key]);
-      if (configured.error || configured.status !== 0 || !String(configured.stdout || "").trim()) {
-        throw new Error(`Git ${key} must be configured before an automatic OKF commit.`);
+      const configured = this.runGit(repository, ["config", "--get", key], { readOnly: true });
+      if (configured && configured.error) {
+        throw new AuthoringOperationalError(
+          `Could not inspect Git ${key}: ${configured.error.message}`,
+        );
+      }
+      if (configured && configured.status !== 0 && configured.status !== 1) {
+        throw new AuthoringOperationalError(
+          `Could not inspect Git ${key}: ${commandFailure(configured, `git config exited ${configured.status}`)}`,
+        );
+      }
+      if (!commandSucceeded(configured) || !String(configured.stdout || "").trim()) {
+        missingIdentity.push(key);
       }
     }
-    return { enabled: true, repository };
+    preflight.identityConfigured = missingIdentity.length === 0;
+    const unsupportedIndexFlags = this.unsupportedGitIndexFlags(repository);
+    preflight.unsupportedIndexFlags = unsupportedIndexFlags.slice(0, MAX_EFFECT_ITEMS);
+    const activeFilters = this.activeGitFilterAttributes(repository, candidates);
+    preflight.activeFilterAttributes = activeFilters.slice(0, MAX_EFFECT_ITEMS);
+    if (!activeFilters.length && !unsupportedIndexFlags.length) {
+      const status = this.runGit(
+        repository,
+        ["status", "--porcelain=v1", "--untracked-files=all"],
+        { readOnly: true },
+      );
+      if (!commandSucceeded(status)) {
+        throw new AuthoringOperationalError(
+          `Could not inspect Git status: ${commandFailure(status, "git status failed")}`,
+        );
+      }
+      preflight.worktreeClean = !String(status.stdout || "").trim();
+    }
+    preflight.ready = !this.gitCommit || Boolean(
+      headBefore
+      && headRef
+      && preflight.worktreeClean
+      && preflight.identityConfigured
+      && !activeFilters.length
+      && !unsupportedIndexFlags.length,
+    );
+    if (this.gitCommit && !headBefore) {
+      preflight.diagnostics.push({
+        code: "git_head_missing",
+        message: "Git repository must have an existing HEAD before an automatic OKF commit.",
+      });
+    }
+    if (this.gitCommit && headBefore && !headRef) {
+      preflight.diagnostics.push({
+        code: "git_detached_head_unsupported",
+        message: "Automatic OKF commits require a checked-out symbolic branch; detached HEAD is not supported.",
+      });
+    }
+    if (this.gitCommit && preflight.worktreeClean === false) {
+      preflight.diagnostics.push({
+        code: "git_worktree_dirty",
+        message: "Git worktree must be completely clean before an automatic OKF commit.",
+      });
+    }
+    if (this.gitCommit && missingIdentity.length) {
+      preflight.diagnostics.push({
+        code: "git_identity_missing",
+        message: `Git ${missingIdentity[0]} must be configured before an automatic OKF commit.`,
+      });
+    }
+    if (this.gitCommit && activeFilters.length) {
+      preflight.diagnostics.push({
+        code: "git_filter_attribute_unsupported",
+        message: "Automatic OKF commits reject active Git filter attributes so validation cannot execute repository-configured filters and committed bytes remain exact.",
+        paths: activeFilters.slice(0, MAX_EFFECT_ITEMS),
+        omitted: Math.max(0, activeFilters.length - MAX_EFFECT_ITEMS),
+      });
+    }
+    if (this.gitCommit && unsupportedIndexFlags.length) {
+      preflight.diagnostics.push({
+        code: "git_index_flag_unsupported",
+        message: "Automatic OKF commits reject assume-unchanged and skip-worktree Git index flags because they can hide user changes from clean-worktree inspection.",
+        paths: unsupportedIndexFlags.slice(0, MAX_EFFECT_ITEMS),
+        omitted: Math.max(0, unsupportedIndexFlags.length - MAX_EFFECT_ITEMS),
+      });
+    }
+    return preflight;
+  }
+
+  repositoryFiles(preflight, candidates) {
+    const files = sortedUnique(candidates.map((candidate) => (
+      path.relative(preflight.repository, candidate.target.absolutePath).replace(/\\/g, "/")
+    )));
+    if (files.some((file) => !file || file === ".." || file.startsWith("../") || path.isAbsolute(file))) {
+      throw new AuthoringPolicyError("An affected concept path is outside the detected Git repository.");
+    }
+    return files;
+  }
+
+  inspectGitState(repository, revision, files) {
+    const affected = this.runGit(repository, [
+      "diff", "--no-ext-diff", "--cached", "--quiet", revision, "--",
+    ].concat(files));
+    const global = this.runGit(repository, [
+      "diff", "--no-ext-diff", "--cached", "--quiet", revision, "--",
+    ]);
+    const worktree = this.runGit(repository, [
+      "status", "--porcelain=v1", "-z", "--untracked-files=all", "--",
+    ].concat(files));
+    const state = (result) => {
+      if (result && !result.error && result.status === 0) return "clean";
+      if (result && !result.error && result.status === 1) return "dirty";
+      return "unknown";
+    };
+    return {
+      affectedIndexState: state(affected),
+      indexState: state(global),
+      affectedWorktreeState: !commandSucceeded(worktree)
+        ? "unknown"
+        : String(worktree.stdout || "").split("\0").filter(Boolean).some((entry) => (
+          entry.startsWith("??") || entry.length > 1 && entry[1] !== " "
+        )) ? "dirty" : "clean",
+    };
+  }
+
+  classifyCommit(preflight, expectedTree) {
+    const headAfter = this.readGitValue(
+      preflight.repository,
+      ["rev-parse", "--verify", preflight.headRef || "HEAD"],
+    );
+    if (!headAfter) {
+      return { commitState: "unknown", committed: null, headAfter: null };
+    }
+    if (headAfter === preflight.headBefore) {
+      return { commitState: "not_committed", committed: false, headAfter };
+    }
+    const treeAfter = this.readGitValue(preflight.repository, ["rev-parse", `${headAfter}^{tree}`]);
+    const parentAfter = this.readGitValue(preflight.repository, ["rev-parse", `${headAfter}^`]);
+    if (expectedTree && treeAfter === expectedTree && parentAfter === preflight.headBefore) {
+      return {
+        commitState: "committed",
+        committed: true,
+        commitSha: headAfter,
+        headAfter,
+        treeAfter,
+      };
+    }
+    return {
+      commitState: "unknown",
+      committed: null,
+      headAfter,
+      treeAfter,
+      parentAfter,
+    };
+  }
+
+  inspectPublishedTargets(candidates) {
+    const checks = candidates.map((candidate) => {
+      try {
+        const stat = fs.lstatSync(candidate.target.absolutePath);
+        if (!stat.isFile() || stat.isSymbolicLink()) {
+          return {
+            path: candidate.path,
+            absolutePath: candidate.target.absolutePath,
+            expectedRevision: candidate.publishedRevision,
+            observedState: "non_regular",
+            observedRevision: null,
+            matches: false,
+          };
+        }
+        const observedRevision = revisionFor(fs.readFileSync(candidate.target.absolutePath));
+        return {
+          path: candidate.path,
+          absolutePath: candidate.target.absolutePath,
+          expectedRevision: candidate.publishedRevision,
+          observedState: "regular",
+          observedRevision,
+          matches: observedRevision === candidate.publishedRevision,
+        };
+      } catch (error) {
+        return {
+          path: candidate.path,
+          absolutePath: candidate.target.absolutePath,
+          expectedRevision: candidate.publishedRevision,
+          observedState: error && error.code === "ENOENT" ? "missing" : "unavailable",
+          observedRevision: null,
+          matches: false,
+        };
+      }
+    });
+    const conflicts = checks.filter((check) => !check.matches);
+    return {
+      targetState: conflicts.length ? "conflict" : "matching",
+      validatedFilesPresent: conflicts.length === 0,
+      targetChecks: checks,
+      targetConflicts: conflicts,
+    };
+  }
+
+  synchronizeCommittedIndex(preflight, classification, files) {
+    const currentHeadRef = this.readGitValue(
+      preflight.repository,
+      ["symbolic-ref", "-q", "HEAD"],
+    );
+    if (!preflight.headRef || currentHeadRef !== preflight.headRef) {
+      const inspected = this.inspectGitState(
+        preflight.repository,
+        classification.headAfter,
+        files,
+      );
+      return Object.assign({
+        indexSynchronization: "skipped_checkout_changed",
+        checkoutState: "changed",
+        currentHeadRef,
+        indexSynchronizationError: "The checked-out Git ref changed before affected index paths could be synchronized.",
+      }, inspected);
+    }
+    const indexPath = this.gitIndexPath(preflight.repository);
+    const headPath = this.gitControlPath(preflight.repository, "HEAD");
+    const branchPath = preflight.headRef
+      ? this.gitControlPath(preflight.repository, preflight.headRef)
+      : null;
+    if (!indexPath || !headPath || !branchPath) {
+      const inspected = this.inspectGitState(
+        preflight.repository,
+        classification.headAfter,
+        files,
+      );
+      return Object.assign({
+        indexSynchronization: "skipped_index_unavailable",
+        indexSynchronizationError: "Could not resolve the Git index path.",
+      }, inspected);
+    }
+    const lockPath = `${indexPath}.lock`;
+    const headLockPath = `${headPath}.lock`;
+    const branchLockPath = `${branchPath}.lock`;
+    let lockDescriptor = null;
+    let lockOwned = false;
+    let headLockDescriptor = null;
+    let headLockOwned = false;
+    let branchLockDescriptor = null;
+    let branchLockOwned = false;
+    let attemptedLock = "index";
+    let published = false;
+    try {
+      const indexStat = fs.statSync(indexPath);
+      lockDescriptor = fs.openSync(lockPath, "wx", indexStat.mode & 0o777);
+      lockOwned = true;
+      fs.writeFileSync(lockDescriptor, fs.readFileSync(indexPath));
+      fs.closeSync(lockDescriptor);
+      lockDescriptor = null;
+      attemptedLock = "checkout";
+      headLockDescriptor = fs.openSync(headLockPath, "wx", 0o666);
+      headLockOwned = true;
+      fs.closeSync(headLockDescriptor);
+      headLockDescriptor = null;
+      attemptedLock = "branch";
+      branchLockDescriptor = fs.openSync(branchLockPath, "wx", 0o666);
+      branchLockOwned = true;
+      fs.closeSync(branchLockDescriptor);
+      branchLockDescriptor = null;
+      const lockedHeadRef = this.readGitValue(
+        preflight.repository,
+        ["symbolic-ref", "-q", "HEAD"],
+      );
+      const lockedBranchHead = this.readGitValue(
+        preflight.repository,
+        ["rev-parse", "--verify", preflight.headRef],
+      );
+      if (lockedHeadRef !== preflight.headRef
+        || lockedBranchHead !== classification.headAfter) {
+        return {
+          indexSynchronization: "skipped_checkout_changed",
+          checkoutState: "changed",
+          currentHeadRef: lockedHeadRef,
+          currentBranchHead: lockedBranchHead,
+          indexSynchronizationError: "The checked-out Git ref or its commit changed before affected index paths could be synchronized.",
+          affectedIndexState: "unknown",
+          indexState: "unknown",
+          affectedWorktreeState: "unknown",
+        };
+      }
+      const lockedIndex = { environment: { GIT_INDEX_FILE: lockPath } };
+      const candidateIndexChanged = this.runGit(preflight.repository, [
+        "diff", "--no-ext-diff", "--cached", "--quiet", preflight.headBefore, "--",
+      ].concat(files), lockedIndex);
+      if (!commandSucceeded(candidateIndexChanged)) {
+        const inspected = this.inspectGitState(
+          preflight.repository,
+          classification.headAfter,
+          files,
+        );
+        return Object.assign({
+          indexSynchronization: candidateIndexChanged && !candidateIndexChanged.error
+            && candidateIndexChanged.status === 1
+            ? "skipped_affected_index_changed"
+            : "skipped_index_unavailable",
+          indexSynchronizationError: candidateIndexChanged && !candidateIndexChanged.error
+            && candidateIndexChanged.status === 1
+            ? "Affected Git index entries changed after preflight and were preserved."
+            : commandFailure(candidateIndexChanged, "Could not verify affected Git index entries."),
+        }, inspected);
+      }
+      const reset = this.runGit(preflight.repository, [
+        "reset", "--quiet", classification.headAfter, "--",
+      ].concat(files), lockedIndex);
+      if (!commandSucceeded(reset)) {
+        const inspected = this.inspectGitState(
+          preflight.repository,
+          classification.headAfter,
+          files,
+        );
+        return Object.assign({
+          indexSynchronization: "failed",
+          indexSynchronizationError: commandFailure(reset, "Could not synchronize committed index paths."),
+        }, inspected);
+      }
+      const verified = this.runGit(preflight.repository, [
+        "diff", "--no-ext-diff", "--cached", "--quiet", classification.headAfter, "--",
+      ].concat(files), lockedIndex);
+      if (!commandSucceeded(verified)) {
+        const inspected = this.inspectGitState(
+          preflight.repository,
+          classification.headAfter,
+          files,
+        );
+        return Object.assign({
+          indexSynchronization: "failed_verification",
+          indexSynchronizationError: commandFailure(verified, "Synchronized index verification failed."),
+        }, inspected);
+      }
+      fs.renameSync(lockPath, indexPath);
+      published = true;
+      return Object.assign({
+        indexSynchronization: "synchronized",
+      }, this.inspectGitState(preflight.repository, classification.headAfter, files));
+    } catch (error) {
+      const inspected = this.inspectGitState(
+        preflight.repository,
+        classification.headAfter,
+        files,
+      );
+      return Object.assign({
+        indexSynchronization: error && error.code === "EEXIST"
+          ? attemptedLock === "index"
+            ? "skipped_index_locked"
+            : attemptedLock === "checkout"
+              ? "skipped_checkout_locked"
+              : "skipped_branch_locked"
+          : "failed",
+        indexSynchronizationError: error && error.code === "EEXIST"
+          ? `The Git ${attemptedLock} state is locked by another writer; its state was preserved.`
+          : error && error.message ? error.message : String(error),
+      }, inspected);
+    } finally {
+      if (lockDescriptor !== null) {
+        try {
+          fs.closeSync(lockDescriptor);
+        } catch {
+          // Best-effort descriptor cleanup after a failed synchronization.
+        }
+      }
+      if (headLockDescriptor !== null) {
+        try {
+          fs.closeSync(headLockDescriptor);
+        } catch {
+          // Best-effort descriptor cleanup after a failed synchronization.
+        }
+      }
+      if (branchLockDescriptor !== null) {
+        try {
+          fs.closeSync(branchLockDescriptor);
+        } catch {
+          // Best-effort descriptor cleanup after a failed synchronization.
+        }
+      }
+      if (lockOwned && !published) {
+        for (const target of [lockPath, `${lockPath}.lock`]) {
+          try {
+            fs.unlinkSync(target);
+          } catch (error) {
+            if (!error || error.code !== "ENOENT") {
+              // The index itself remains untouched; the receipt reports synchronization failure.
+            }
+          }
+        }
+      }
+      for (const [owned, target] of [
+        [branchLockOwned, branchLockPath],
+        [headLockOwned, headLockPath],
+      ]) {
+        if (!owned) continue;
+        try {
+          fs.unlinkSync(target);
+        } catch (error) {
+          if (!error || error.code !== "ENOENT") {
+            // The receipt already reports the synchronization outcome.
+          }
+        }
+      }
+    }
+  }
+
+  finalizeGitFailure(preflight, files, failure, expectedTree, candidates) {
+    const classification = this.classifyCommit(preflight, expectedTree);
+    if (classification.committed === true) {
+      const synchronized = this.synchronizeCommittedIndex(preflight, classification, files);
+      const targets = this.inspectPublishedTargets(candidates);
+      return Object.assign({}, classification, {
+        enabled: true,
+        repository: true,
+        repositoryRoot: preflight.repository,
+        commitState: "observed_committed",
+        persistence: "git_commit",
+        warning: commandFailure(failure, "Git reported failure after the commit became visible."),
+      }, synchronized, targets);
+    }
+    if (classification.committed === false) {
+      const inspected = this.inspectGitState(preflight.repository, preflight.headBefore, files);
+      const targets = this.inspectPublishedTargets(candidates);
+      return Object.assign({
+        enabled: true,
+        repository: true,
+        repositoryRoot: preflight.repository,
+        committed: false,
+        commitState: "not_committed",
+        persistence: targets.validatedFilesPresent ? "working_tree" : "unknown",
+        error: commandFailure(failure, "Git commit failed"),
+      }, classification, inspected, targets);
+    }
+    const inspected = classification.headAfter
+      ? this.inspectGitState(preflight.repository, classification.headAfter, files)
+      : { affectedIndexState: "unknown", indexState: "unknown", affectedWorktreeState: "unknown" };
+    const targets = this.inspectPublishedTargets(candidates);
+    return Object.assign({
+      enabled: true,
+      repository: true,
+      repositoryRoot: preflight.repository,
+      committed: null,
+      commitState: "unknown",
+      persistence: "unknown",
+      error: commandFailure(failure, "Git commit outcome could not be determined"),
+    }, classification, inspected, targets);
+  }
+
+  gitControlPath(repository, name) {
+    const controlPath = this.readGitValue(
+      repository,
+      ["rev-parse", "--git-path", name],
+      { readOnly: true },
+    );
+    if (!controlPath) {
+      return null;
+    }
+    return path.isAbsolute(controlPath)
+      ? controlPath
+      : path.resolve(repository, controlPath);
+  }
+
+  gitIndexPath(repository) {
+    return this.gitControlPath(repository, "index");
+  }
+
+  temporaryGitIndex(repository) {
+    const absoluteIndex = this.gitIndexPath(repository);
+    return absoluteIndex
+      ? `${absoluteIndex}.okf-${process.pid}-${crypto.randomBytes(8).toString("hex")}`
+      : null;
+  }
+
+  removeTemporaryGitIndex(indexPath) {
+    [indexPath, `${indexPath}.lock`].forEach((target) => {
+      try {
+        fs.unlinkSync(target);
+      } catch (error) {
+        if (!error || error.code !== "ENOENT") {
+          // A leftover isolated index is inert and must not obscure the commit result.
+        }
+      }
+    });
+  }
+
+  buildValidatedGitTree(preflight, candidates, files) {
+    const indexPath = this.temporaryGitIndex(preflight.repository);
+    if (!indexPath) {
+      return { failure: { status: 1, stderr: "Could not allocate an isolated Git index." } };
+    }
+    const isolated = { environment: { GIT_INDEX_FILE: indexPath } };
+    try {
+      const seeded = this.runGit(
+        preflight.repository,
+        ["read-tree", preflight.headBefore],
+        isolated,
+      );
+      if (!commandSucceeded(seeded)) {
+        return { failure: seeded };
+      }
+      for (const candidate of candidates) {
+        const hashed = this.runGit(
+          preflight.repository,
+          ["hash-object", "-w", "--stdin"],
+          { input: candidate.markdown },
+        );
+        if (!commandSucceeded(hashed)) {
+          return { failure: hashed };
+        }
+        const objectId = String(hashed.stdout || "").trim();
+        let mode = "100644";
+        if (candidate.op === "update") {
+          const relativePath = path.relative(
+            preflight.repository,
+            candidate.target.absolutePath,
+          ).replace(/\\/g, "/");
+          const seededEntry = this.runGit(preflight.repository, [
+            "ls-files", "-s", "-z", "--", relativePath,
+          ], isolated);
+          if (!commandSucceeded(seededEntry)) {
+            return { failure: seededEntry };
+          }
+          const match = String(seededEntry.stdout || "").match(/^([0-7]{6})\s/);
+          if (!match) {
+            return {
+              failure: {
+                status: 1,
+                stderr: `Could not preserve the pinned Git tree mode for ${relativePath}.`,
+              },
+            };
+          }
+          mode = match[1];
+        }
+        const updated = this.runGit(preflight.repository, [
+          "update-index",
+          "--add",
+          "--cacheinfo",
+          mode,
+          objectId,
+          path.relative(preflight.repository, candidate.target.absolutePath).replace(/\\/g, "/"),
+        ], isolated);
+        if (!commandSucceeded(updated)) {
+          return { failure: updated };
+        }
+      }
+      const written = this.runGit(preflight.repository, ["write-tree"], isolated);
+      if (!commandSucceeded(written)) {
+        return { failure: written };
+      }
+      const expectedTree = String(written.stdout || "").trim();
+      const changed = this.runGit(preflight.repository, [
+        "diff", "--no-ext-diff", "--name-only", "-z",
+        preflight.headBefore, expectedTree, "--",
+      ]);
+      const changedFiles = commandSucceeded(changed)
+        ? String(changed.stdout || "").split("\0").filter(Boolean).sort()
+        : null;
+      if (!changedFiles || !isDeepStrictEqual(changedFiles, files.slice().sort())) {
+        return {
+          expectedTree,
+          failure: {
+            status: 1,
+            stderr: commandSucceeded(changed)
+              ? "The isolated Git tree did not exactly match the validated OKF batch paths."
+              : commandFailure(changed, "Could not inspect the isolated Git tree."),
+          },
+        };
+      }
+      return { expectedTree };
+    } finally {
+      this.removeTemporaryGitIndex(indexPath);
+    }
   }
 
   commitGit(preflight, candidates, message) {
     if (!preflight.enabled) {
-      return { enabled: false, committed: false };
+      return {
+        enabled: false,
+        committed: false,
+        commitState: "not_requested",
+        repository: Boolean(preflight.repository),
+        repositoryRoot: preflight.repository,
+        persistence: "working_tree",
+      };
     }
     if (!preflight.repository) {
-      return { enabled: true, repository: false, committed: false, reason: "not_git_repository" };
-    }
-    const files = candidates.map((candidate) => (
-      path.relative(preflight.repository, candidate.target.absolutePath).replace(/\\/g, "/")
-    ));
-    if (files.some((file) => !file || file === ".." || file.startsWith("../"))) {
       return {
         enabled: true,
-        repository: true,
+        repository: false,
+        repositoryRoot: null,
         committed: false,
-        error: "An affected concept path is outside the detected Git repository.",
+        commitState: "not_repository",
+        persistence: "working_tree",
+        reason: "not_git_repository",
       };
     }
-    const add = this.runGit(preflight.repository, ["add", "--"].concat(files));
-    if (add.error || add.status !== 0) {
-      return {
+    const files = this.repositoryFiles(preflight, candidates);
+    let expectedTree = null;
+    try {
+      const initialTargets = this.inspectPublishedTargets(candidates);
+      if (!initialTargets.validatedFilesPresent) {
+        return this.finalizeGitFailure(preflight, files, {
+          status: 1,
+          stderr: "A published concept changed before the Git commit tree was built.",
+        }, null, candidates);
+      }
+      const built = this.buildValidatedGitTree(preflight, candidates, files);
+      expectedTree = built.expectedTree || null;
+      if (built.failure) {
+        return this.finalizeGitFailure(
+          preflight,
+          files,
+          built.failure,
+          expectedTree,
+          candidates,
+        );
+      }
+      const verifiedTargets = this.inspectPublishedTargets(candidates);
+      const headRefStillBefore = this.readGitValue(
+        preflight.repository,
+        ["symbolic-ref", "-q", "HEAD"],
+      );
+      const refStillBefore = this.readGitValue(
+        preflight.repository,
+        ["rev-parse", "--verify", preflight.headRef],
+      );
+      if (!verifiedTargets.validatedFilesPresent
+        || headRefStillBefore !== preflight.headRef
+        || refStillBefore !== preflight.headBefore) {
+        return this.finalizeGitFailure(preflight, files, {
+          status: 1,
+          stderr: !verifiedTargets.validatedFilesPresent
+            ? "A published concept changed before the Git ref update."
+            : "The checked-out Git ref changed before the validated commit could be published.",
+        }, expectedTree, candidates);
+      }
+      const committed = this.runGit(preflight.repository, [
+        "commit-tree", expectedTree, "-p", preflight.headBefore, "-m", message,
+      ]);
+      if (!commandSucceeded(committed)) {
+        return this.finalizeGitFailure(
+          preflight,
+          files,
+          committed,
+          expectedTree,
+          candidates,
+        );
+      }
+      const commitSha = String(committed.stdout || "").trim();
+      const finalTargets = this.inspectPublishedTargets(candidates);
+      if (!finalTargets.validatedFilesPresent) {
+        return this.finalizeGitFailure(preflight, files, {
+          status: 1,
+          stderr: "A published concept changed before the validated commit was published.",
+        }, expectedTree, candidates);
+      }
+      const updated = this.runGit(preflight.repository, [
+        "update-ref", "-m", "okf-mcp live authoring",
+        preflight.headRef, commitSha, preflight.headBefore,
+      ]);
+      const classification = this.classifyCommit(preflight, expectedTree);
+      if (!commandSucceeded(updated) || classification.committed !== true) {
+        return this.finalizeGitFailure(
+          preflight,
+          files,
+          updated,
+          expectedTree,
+          candidates,
+        );
+      }
+      const synchronized = this.synchronizeCommittedIndex(preflight, classification, files);
+      const targets = this.inspectPublishedTargets(candidates);
+      return Object.assign({
         enabled: true,
         repository: true,
-        committed: false,
-        error: commandFailure(add, "git add failed"),
-      };
+        repositoryRoot: preflight.repository,
+        committed: true,
+        commitState: "committed",
+        persistence: "git_commit",
+      }, classification, synchronized, targets);
+    } catch (error) {
+      return this.finalizeGitFailure(
+        preflight,
+        files,
+        { status: null, stdout: "", stderr: "", error },
+        expectedTree,
+        candidates,
+      );
     }
-    const commit = this.runGit(preflight.repository, ["commit", "-m", message, "--"].concat(files));
-    if (commit.error || commit.status !== 0) {
-      return {
-        enabled: true,
-        repository: true,
-        committed: false,
-        error: commandFailure(commit, "git commit failed"),
-      };
-    }
-    const revision = this.runGit(preflight.repository, ["rev-parse", "HEAD"]);
-    return {
-      enabled: true,
-      repository: true,
-      committed: true,
-      commitSha: revision.status === 0 ? String(revision.stdout || "").trim() : null,
-      ...(revision.status === 0 ? {} : { warning: commandFailure(revision, "Commit succeeded but its SHA could not be read.") }),
-    };
   }
 
   defaultMessage(candidates) {
@@ -697,6 +1594,23 @@ class LiveAuthoringService {
       return `docs(okf): ${candidates[0].op === "create" ? "add" : "update"} ${candidates[0].title}`;
     }
     return `docs(okf): apply ${candidates.length} concept changes`;
+  }
+
+  commitMessage(input, candidates) {
+    if (hasOwn(input, "message") && typeof input.message !== "string") {
+      throw new AuthoringPolicyError("Git commit message must be a string.");
+    }
+    const supplied = hasOwn(input, "message") ? input.message.trim() : "";
+    const message = supplied || this.defaultMessage(candidates);
+    if (message.includes("\0")) {
+      throw new AuthoringPolicyError("Git commit message cannot contain NUL characters.");
+    }
+    if (byteLength(message) > MAX_COMMIT_MESSAGE_BYTES) {
+      throw new AuthoringPolicyError(
+        `Git commit message must not exceed ${MAX_COMMIT_MESSAGE_BYTES} UTF-8 bytes.`,
+      );
+    }
+    return message;
   }
 
   ensureParentDirectories(candidate, createdDirectories) {
@@ -772,8 +1686,66 @@ class LiveAuthoringService {
     });
   }
 
+  inspectPublishedTarget(candidate) {
+    try {
+      const stat = fs.lstatSync(candidate.target.absolutePath);
+      if (stat.isSymbolicLink() || !stat.isFile()) {
+        return { state: "non_regular", revision: null };
+      }
+      return {
+        state: "regular",
+        revision: revisionFor(fs.readFileSync(candidate.target.absolutePath)),
+      };
+    } catch (error) {
+      if (error && error.code === "ENOENT") {
+        return { state: "missing", revision: null };
+      }
+      throw error;
+    }
+  }
+
+  rollbackCandidate(candidate) {
+    const inspected = this.inspectPublishedTarget(candidate);
+    const receipt = {
+      op: candidate.op,
+      path: candidate.path,
+      absolutePath: candidate.target.absolutePath,
+      expectedPublishedRevision: candidate.publishedRevision,
+      observedRevision: inspected.revision,
+    };
+    if (candidate.op === "create" && inspected.state === "missing") {
+      return Object.assign(receipt, { status: "already_absent", restored: true });
+    }
+    if (inspected.state !== "regular" || inspected.revision !== candidate.publishedRevision) {
+      return Object.assign(receipt, {
+        status: "conflict",
+        restored: false,
+        observedState: inspected.state,
+      });
+    }
+    if (candidate.op === "create") {
+      fs.unlinkSync(candidate.target.absolutePath);
+      return Object.assign(receipt, { status: "removed", restored: true });
+    }
+    restoreFile(candidate.target.absolutePath, candidate.originalText, candidate.originalMode);
+    const restored = this.inspectPublishedTarget(candidate);
+    if (restored.state !== "regular" || restored.revision !== candidate.baseRevision) {
+      return Object.assign(receipt, {
+        status: "restore_verification_failed",
+        restored: false,
+        restoredRevision: restored.revision,
+      });
+    }
+    return Object.assign(receipt, {
+      status: "restored",
+      restored: true,
+      restoredRevision: restored.revision,
+    });
+  }
+
   rollback(applied, staged, createdDirectories) {
     const failures = [];
+    const outcomes = [];
     staged.forEach((candidate) => {
       if (fs.existsSync(candidate.temporary)) {
         try {
@@ -785,23 +1757,298 @@ class LiveAuthoringService {
     });
     applied.slice().reverse().forEach((candidate) => {
       try {
-        if (candidate.op === "create") {
-          if (fs.existsSync(candidate.target.absolutePath)) fs.unlinkSync(candidate.target.absolutePath);
-        } else {
-          restoreFile(candidate.target.absolutePath, candidate.originalText, candidate.originalMode);
-        }
+        outcomes.push(this.rollbackCandidate(candidate));
       } catch (error) {
-        failures.push(error);
+        const failure = {
+          op: candidate.op,
+          path: candidate.path,
+          absolutePath: candidate.target.absolutePath,
+          status: "error",
+          restored: false,
+          error: error && error.message ? error.message : String(error),
+        };
+        outcomes.push(failure);
+        failures.push(failure);
       }
     });
     try {
       this.cleanupDirectories(createdDirectories || []);
     } catch (error) {
-      failures.push(error);
+      failures.push({
+        status: "directory_cleanup_error",
+        error: error && error.message ? error.message : String(error),
+      });
     }
-    if (failures.length) {
-      throw new Error(`OKF batch rollback failed: ${failures[0].message}`);
+    const conflicts = outcomes.filter((outcome) => !outcome.restored);
+    return {
+      complete: conflicts.length === 0 && failures.length === 0,
+      outcomes,
+      conflicts,
+      failures,
+    };
+  }
+
+  generatedStamp() {
+    const timestampValue = this.now();
+    return {
+      by: this.actor,
+      at: timestampValue instanceof Date
+        ? timestampValue.toISOString()
+        : new Date(timestampValue).toISOString(),
+    };
+  }
+
+  targetReceipt(bundle, candidates, gitPreflight) {
+    const bundleRoot = this.store.resolveWritableBundleRoot(bundle);
+    const projectRoot = this.store.projectRoot
+      ? path.resolve(this.store.projectRoot)
+      : bundleRoot;
+    return {
+      bundle: bundle.id,
+      bundleRoot,
+      projectRoot,
+      repositoryRoot: gitPreflight && gitPreflight.repositoryRoot
+        ? gitPreflight.repositoryRoot
+        : null,
+      absolutePaths: candidates.map((candidate) => candidate.target.absolutePath),
+    };
+  }
+
+  candidateSummaries(candidates) {
+    return candidates.map((candidate) => ({
+      op: candidate.op,
+      bundle: candidate.bundle,
+      path: candidate.path,
+      absolutePath: candidate.target.absolutePath,
+      uri: candidate.uri,
+      title: candidate.title,
+      baseRevision: candidate.baseRevision,
+      candidateRevision: candidate.publishedRevision,
+      effects: effectsForCandidate(candidate),
+    }));
+  }
+
+  durabilityReceipt(git, filesChanged, stateOverride) {
+    const persistence = git && git.persistence
+      ? git.persistence
+      : filesChanged ? "working_tree" : "none";
+    return {
+      state: stateOverride || (filesChanged
+        ? git && ["committed", "observed_committed"].includes(git.commitState)
+          ? "git_committed"
+          : git && git.commitState === "unknown"
+            ? "commit_state_unknown"
+            : "filesystem_published_uncommitted"
+        : "not_persisted"),
+      filesChanged: Boolean(filesChanged),
+      persistence,
+      committed: git && hasOwn(git, "committed") ? git.committed : false,
+      commitState: git && git.commitState ? git.commitState : "not_requested",
+      affectedIndexState: git && git.affectedIndexState ? git.affectedIndexState : "not_inspected",
+      indexState: git && git.indexState ? git.indexState : "not_inspected",
+      crashDurable: false,
+    };
+  }
+
+  snapshotReceipt(plan) {
+    return {
+      checkedAt: plan.generated.at,
+      timeOfCheck: true,
+      generatedBy: plan.generated.by,
+      graphValidation: "future_overlay",
+    };
+  }
+
+  preconditionsReceipt(plan) {
+    return {
+      allSatisfied: Boolean(plan.validation.valid && plan.gitPreflight.ready),
+      revisions: plan.candidates.map((candidate) => ({
+        path: candidate.path,
+        absolutePath: candidate.target.absolutePath,
+        baseRevision: candidate.baseRevision,
+        candidateRevision: candidate.publishedRevision,
+      })),
+      git: {
+        enabled: plan.gitPreflight.enabled,
+        ready: plan.gitPreflight.ready,
+        repositoryStatus: plan.gitPreflight.repositoryStatus,
+        repositoryRoot: plan.gitPreflight.repositoryRoot,
+        headBefore: plan.gitPreflight.headBefore,
+        headRef: plan.gitPreflight.headRef,
+        worktreeClean: plan.gitPreflight.worktreeClean,
+        identityConfigured: plan.gitPreflight.identityConfigured,
+        diagnostics: plan.gitPreflight.diagnostics,
+      },
+    };
+  }
+
+  planChanges(input, context) {
+    if (!isPlainObject(input)) {
+      throw new AuthoringPolicyError("okf_apply_changes requires an object argument.");
     }
+    if (!Array.isArray(input.changes) || input.changes.length < 1 || input.changes.length > MAX_CHANGES) {
+      throw new AuthoringPolicyError(`changes must contain from 1 through ${MAX_CHANGES} operations.`);
+    }
+    let bundle;
+    try {
+      bundle = this.getBundle(input.bundle);
+    } catch (error) {
+      if (error && error.code) throw error;
+      throw new AuthoringPolicyError(error && error.message ? error.message : String(error));
+    }
+    const generated = this.generatedStamp();
+    const additionalBundles = context && Array.isArray(context.additionalBundles)
+      ? context.additionalBundles
+      : [];
+    const currentIndex = this.buildIndex(additionalBundles);
+    const candidates = input.changes.map((change, index) => {
+      if (!isPlainObject(change)) {
+        throw new AuthoringPolicyError(`changes[${index}] must be an object.`);
+      }
+      try {
+        if (change.op === "create") {
+          return this.createCandidate(change, bundle, currentIndex, generated);
+        }
+        if (change.op === "update") {
+          return this.updateCandidate(change, bundle, currentIndex, generated);
+        }
+        throw new AuthoringPolicyError(`changes[${index}].op must be create or update.`);
+      } catch (error) {
+        if (error instanceof AuthoringPolicyError || error instanceof AuthoringOperationalError) {
+          throw error;
+        }
+        if (error && error.code) throw error;
+        throw new AuthoringPolicyError(error && error.message ? error.message : String(error));
+      }
+    });
+    const targetPaths = new Set();
+    candidates.forEach((candidate) => {
+      const key = path.resolve(candidate.target.absolutePath);
+      if (targetPaths.has(key)) {
+        throw new AuthoringPolicyError(`A batch cannot target the same concept more than once: ${candidate.path}`);
+      }
+      targetPaths.add(key);
+    });
+    const absoluteTargets = Array.from(targetPaths);
+    for (let left = 0; left < absoluteTargets.length; left += 1) {
+      for (let right = left + 1; right < absoluteTargets.length; right += 1) {
+        if (absoluteTargets[left].startsWith(`${absoluteTargets[right]}${path.sep}`)
+          || absoluteTargets[right].startsWith(`${absoluteTargets[left]}${path.sep}`)) {
+          throw new AuthoringPolicyError(
+            "A batch cannot place one concept path underneath another concept file path.",
+          );
+        }
+      }
+    }
+    const message = this.commitMessage(input, candidates);
+    const overrides = new Map(candidates.map((candidate) => [
+      `${candidate.bundle}\u0000${candidate.path}`,
+      candidate.markdown,
+    ]));
+    const validation = this.validationResult(
+      this.buildIndex(additionalBundles, overrides),
+      candidates,
+    );
+    const gitPreflight = this.prepareGit(bundle, candidates);
+    return {
+      input,
+      bundle,
+      generated,
+      additionalBundles,
+      candidates,
+      message,
+      validation,
+      gitPreflight,
+      target: this.targetReceipt(bundle, candidates, gitPreflight),
+      changes: this.candidateSummaries(candidates),
+    };
+  }
+
+  validationReceipt(plan) {
+    const git = {
+      enabled: plan.gitPreflight.enabled,
+      repository: Boolean(plan.gitPreflight.repository),
+      repositoryRoot: plan.gitPreflight.repositoryRoot,
+      repositoryStatus: plan.gitPreflight.repositoryStatus,
+      ready: plan.gitPreflight.ready,
+      headBefore: plan.gitPreflight.headBefore,
+      headRef: plan.gitPreflight.headRef,
+      worktreeClean: plan.gitPreflight.worktreeClean,
+      identityConfigured: plan.gitPreflight.identityConfigured,
+      diagnostics: plan.gitPreflight.diagnostics,
+      commitState: "not_attempted",
+      persistence: "none",
+    };
+    const readyToApply = Boolean(plan.validation.valid && plan.gitPreflight.ready);
+    return {
+      valid: plan.validation.valid,
+      readyToApply,
+      applied: false,
+      filesChanged: false,
+      status: !plan.validation.valid ? "invalid" : readyToApply ? "ready" : "blocked",
+      snapshot: this.snapshotReceipt(plan),
+      preconditions: this.preconditionsReceipt(plan),
+      generated: plan.generated,
+      target: plan.target,
+      durability: this.durabilityReceipt(git, false),
+      changes: plan.changes,
+      validation: plan.validation,
+      git,
+    };
+  }
+
+  invalidValidationReceipt(error) {
+    const validation = policyValidation(error && error.message ? error.message : String(error));
+    const generated = this.generatedStamp();
+    return {
+      valid: false,
+      readyToApply: false,
+      applied: false,
+      filesChanged: false,
+      status: "invalid",
+      snapshot: {
+        checkedAt: generated.at,
+        timeOfCheck: true,
+        generatedBy: generated.by,
+        graphValidation: "not_run",
+      },
+      preconditions: {
+        allSatisfied: false,
+        revisions: [],
+        git: {
+          enabled: this.gitCommit,
+          ready: false,
+          repositoryStatus: "not_inspected",
+          repositoryRoot: null,
+          diagnostics: [],
+        },
+      },
+      generated,
+      durability: this.durabilityReceipt(null, false),
+      changes: [],
+      validation,
+      git: {
+        enabled: this.gitCommit,
+        repository: false,
+        repositoryRoot: null,
+        repositoryStatus: "not_inspected",
+        commitState: "not_attempted",
+        persistence: "none",
+      },
+    };
+  }
+
+  async validateChanges(input, context) {
+    return this.store.withWriteLock(() => {
+      try {
+        return this.validationReceipt(this.planChanges(input, context));
+      } catch (error) {
+        if (!(error instanceof AuthoringPolicyError)) {
+          throw error;
+        }
+        return this.invalidValidationReceipt(error);
+      }
+    });
   }
 
   async applyChanges(input, context) {
@@ -809,60 +2056,37 @@ class LiveAuthoringService {
   }
 
   async applyChangesUnlocked(input, context) {
-    if (!isPlainObject(input)) {
-      throw new Error("okf_apply_changes requires an object argument.");
-    }
-    if (!Array.isArray(input.changes) || input.changes.length < 1 || input.changes.length > MAX_CHANGES) {
-      throw new Error(`changes must contain from 1 through ${MAX_CHANGES} operations.`);
-    }
-    const bundle = this.getBundle(input.bundle);
-    const timestampValue = this.now();
-    const generated = {
-      by: this.actor,
-      at: timestampValue instanceof Date
-        ? timestampValue.toISOString()
-        : new Date(timestampValue).toISOString(),
-    };
-    const additionalBundles = context && Array.isArray(context.additionalBundles)
-      ? context.additionalBundles
-      : [];
-    const currentIndex = this.buildIndex(additionalBundles);
-    const candidates = input.changes.map((change, index) => {
-      if (!isPlainObject(change)) {
-        throw new Error(`changes[${index}] must be an object.`);
-      }
-      if (change.op === "create") {
-        return this.createCandidate(change, bundle, generated);
-      }
-      if (change.op === "update") {
-        return this.updateCandidate(change, bundle, currentIndex, generated);
-      }
-      throw new Error(`changes[${index}].op must be create or update.`);
-    });
-    const targetPaths = new Set();
-    candidates.forEach((candidate) => {
-      const key = path.resolve(candidate.target.absolutePath);
-      if (targetPaths.has(key)) {
-        throw new Error(`A batch cannot target the same concept more than once: ${candidate.path}`);
-      }
-      targetPaths.add(key);
-    });
-    const overrides = new Map(candidates.map((candidate) => [
-      `${candidate.bundle}\u0000${candidate.path}`,
-      candidate.markdown,
-    ]));
-    const futureIndex = this.buildIndex(additionalBundles, overrides);
-    const validation = this.validationResult(futureIndex, candidates);
-    if (!validation.valid) {
+    const plan = this.planChanges(input, context);
+    if (!plan.validation.valid) {
       return {
         applied: false,
+        readyToApply: false,
+        filesChanged: false,
         status: "rejected",
-        generated,
-        validation,
+        snapshot: this.snapshotReceipt(plan),
+        preconditions: this.preconditionsReceipt(plan),
+        generated: plan.generated,
+        target: plan.target,
+        durability: this.durabilityReceipt(null, false),
+        changes: plan.changes,
+        validation: plan.validation,
+        git: {
+          enabled: plan.gitPreflight.enabled,
+          repository: Boolean(plan.gitPreflight.repository),
+          repositoryRoot: plan.gitPreflight.repositoryRoot,
+          repositoryStatus: plan.gitPreflight.repositoryStatus,
+          commitState: "not_attempted",
+          persistence: "none",
+        },
       };
     }
-    const gitPreflight = this.prepareGit(bundle);
-    const transaction = this.stageCandidates(candidates);
+    if (!plan.gitPreflight.ready) {
+      const blocker = plan.gitPreflight.diagnostics[0];
+      throw new AuthoringPolicyError(blocker
+        ? blocker.message
+        : "Configured Git preconditions do not currently allow automatic apply.");
+    }
+    const transaction = this.stageCandidates(plan.candidates);
     const staged = transaction.staged;
     const applied = [];
     try {
@@ -882,57 +2106,136 @@ class LiveAuthoringService {
         }
       });
     } catch (error) {
-      this.rollback(applied, staged, transaction.createdDirectories);
+      const rollback = this.rollback(applied, staged, transaction.createdDirectories);
+      if (!rollback.complete) {
+        return {
+          applied: false,
+          readyToApply: false,
+          filesChanged: true,
+          status: "rollback_conflict",
+          snapshot: this.snapshotReceipt(plan),
+          preconditions: this.preconditionsReceipt(plan),
+          generated: plan.generated,
+          target: plan.target,
+          durability: this.durabilityReceipt(null, true, "partial_filesystem_state"),
+          changes: plan.changes,
+          validation: plan.validation,
+          rollback,
+          error: error && error.message ? error.message : String(error),
+        };
+      }
       throw error;
     }
     let persistedValidation;
     try {
       persistedValidation = this.validationResult(
-        this.buildIndex(additionalBundles),
-        candidates,
+        this.buildIndex(plan.additionalBundles),
+        plan.candidates,
       );
     } catch (error) {
-      this.rollback(applied, staged, transaction.createdDirectories);
+      const rollback = this.rollback(applied, staged, transaction.createdDirectories);
+      if (!rollback.complete) {
+        return {
+          applied: false,
+          readyToApply: false,
+          filesChanged: true,
+          status: "rollback_conflict",
+          snapshot: this.snapshotReceipt(plan),
+          preconditions: this.preconditionsReceipt(plan),
+          generated: plan.generated,
+          target: plan.target,
+          durability: this.durabilityReceipt(null, true, "partial_filesystem_state"),
+          changes: plan.changes,
+          validation: plan.validation,
+          rollback,
+          error: error && error.message ? error.message : String(error),
+        };
+      }
       throw error;
     }
     if (!persistedValidation.valid) {
-      this.rollback(applied, staged, transaction.createdDirectories);
+      const rollback = this.rollback(applied, staged, transaction.createdDirectories);
       return {
         applied: false,
-        status: "rolled_back",
-        generated,
+        readyToApply: false,
+        filesChanged: !rollback.complete,
+        status: rollback.complete ? "rolled_back" : "rollback_conflict",
+        snapshot: this.snapshotReceipt(plan),
+        preconditions: this.preconditionsReceipt(plan),
+        generated: plan.generated,
+        target: plan.target,
+        durability: this.durabilityReceipt(
+          null,
+          !rollback.complete,
+          rollback.complete ? "rolled_back" : "partial_filesystem_state",
+        ),
+        changes: plan.changes,
         validation: persistedValidation,
+        rollback,
       };
     }
-    const message = hasOwn(input, "message") && String(input.message).trim()
-      ? String(input.message).trim()
-      : this.defaultMessage(candidates);
     let git;
     try {
-      git = this.commitGit(gitPreflight, candidates, message);
+      git = this.commitGit(plan.gitPreflight, plan.candidates, plan.message);
     } catch (error) {
       git = {
-        enabled: gitPreflight.enabled,
-        repository: Boolean(gitPreflight.repository),
-        committed: false,
+        enabled: plan.gitPreflight.enabled,
+        repository: Boolean(plan.gitPreflight.repository),
+        repositoryRoot: plan.gitPreflight.repositoryRoot,
+        committed: null,
+        commitState: "unknown",
+        persistence: "unknown",
         error: error && error.message ? error.message : String(error),
       };
     }
-    const summaries = candidates.map((candidate) => ({
-      op: candidate.op,
-      bundle: candidate.bundle,
-      path: candidate.path,
-      uri: candidate.uri,
-      title: candidate.title,
-    }));
+    if (git.targetState === "conflict") {
+      let currentValidation = persistedValidation;
+      try {
+        currentValidation = this.validationResult(
+          this.buildIndex(plan.additionalBundles),
+          [],
+        );
+      } catch {
+        // Preserve the last complete validation receipt when the conflicting state is unreadable.
+      }
+      if (git.committed !== true) {
+        return {
+          applied: false,
+          readyToApply: false,
+          filesChanged: true,
+          status: "post_publication_conflict",
+          snapshot: this.snapshotReceipt(plan),
+          preconditions: this.preconditionsReceipt(plan),
+          generated: plan.generated,
+          target: plan.target,
+          durability: this.durabilityReceipt(git, true, "partial_filesystem_state"),
+          changes: plan.changes,
+          validation: currentValidation,
+          git,
+          error: git.error || "Validated concept bytes were replaced before Git persistence completed.",
+        };
+      }
+      persistedValidation = currentValidation;
+    }
+    const status = git.commitState === "unknown"
+      ? "applied_commit_unknown"
+      : git.committed === true && git.targetState === "conflict"
+        ? "applied_worktree_diverged"
+      : git.enabled && git.repository && !git.committed
+        ? "applied_uncommitted"
+        : "applied";
     return {
       applied: true,
-      status: git.enabled && git.repository && !git.committed
-        ? "applied_uncommitted"
-        : "applied",
-      generated,
-      changes: summaries,
-      validation,
+      readyToApply: git.targetState !== "conflict",
+      filesChanged: true,
+      status,
+      snapshot: this.snapshotReceipt(plan),
+      preconditions: this.preconditionsReceipt(plan),
+      generated: plan.generated,
+      target: plan.target,
+      durability: this.durabilityReceipt(git, true),
+      changes: plan.changes,
+      validation: persistedValidation,
       git,
     };
   }
@@ -941,5 +2244,6 @@ class LiveAuthoringService {
 module.exports = {
   LiveAuthoringService,
   MAX_CHANGES,
+  MAX_COMMIT_MESSAGE_BYTES,
   MANAGED_METADATA_KEYS,
 };

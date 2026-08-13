@@ -22,7 +22,11 @@ const { MAX_QUERY_CHARACTERS, MAX_QUERY_TERMS } = require("./search-index");
 const { exportGraph, findPaths, getGraph, getNeighbors, getSubgraph, graphSummary } = require("./graph");
 const { fetchGitHubBundle, fetchRemoteBundles, sanitizeRemoteId } = require("./remote");
 const { ConceptAuthoringService } = require("./authoring");
-const { LiveAuthoringService, MAX_CHANGES } = require("./live-authoring");
+const {
+  LiveAuthoringService,
+  MAX_CHANGES,
+  MAX_COMMIT_MESSAGE_BYTES,
+} = require("./live-authoring");
 const { FileConceptStore } = require("./store");
 const { loadProjectConfig } = require("./project");
 const {
@@ -39,9 +43,15 @@ const packageMetadata = require("../package.json");
 const MAX_MCP_MESSAGE_BYTES = 1024 * 1024;
 
 class ToolExecutionError extends Error {
-  constructor(message) {
+  constructor(message, code, details) {
     super(message);
     this.name = "ToolExecutionError";
+    if (typeof code === "string" && code) {
+      this.code = code;
+    }
+    if (details !== undefined) {
+      this.details = details;
+    }
   }
 }
 
@@ -147,11 +157,11 @@ function collectionPatchParameter(description, item) {
     type: "object",
     description,
     additionalProperties: false,
+    minProperties: 1,
     properties: {
       add: { type: "array", items: item },
       remove: { type: "array", items: item },
     },
-    anyOf: [{ required: ["add"] }, { required: ["remove"] }],
   };
 }
 
@@ -184,6 +194,7 @@ const LIVE_CREATE_CHANGE = {
 const LIVE_UPDATE_CHANGE = {
   type: "object",
   additionalProperties: false,
+  minProperties: 3,
   properties: {
     op: { type: "string", const: "update", description: "Update an existing concept in place." },
     uri: nonEmptyStringParameter("Canonical or compatible URI of the existing concept."),
@@ -206,19 +217,93 @@ const LIVE_UPDATE_CHANGE = {
     removeMetadataKeys: stringArrayParameter("Extension frontmatter keys to remove; managed fields are rejected.", { nonEmptyItems: true }),
   },
   required: ["op", "uri"],
-  anyOf: [
-    { required: ["title"] },
-    { required: ["description"] },
-    { required: ["body"] },
-    { required: ["tags"] },
-    { required: ["sources"] },
-    { required: ["relations"] },
-    { required: ["metadata"] },
-    { required: ["removeMetadataKeys"] },
-  ],
 };
 
-function defineTool(description, annotations, properties, required, schemaExtras) {
+const LIVE_CHANGES_DESCRIPTION = [
+  `One through ${MAX_CHANGES} concept create or update operations handled as one batch.`,
+  "Create grammar: { op: 'create', type, title, path?, description?, body?, tags?: string[], sources?: (string | structured source object)[], relations?: { type, target, label?, description? }[], metadata?: object }.",
+  "Update grammar: { op: 'update', uri, title?, description?, body?, tags?: { add?: string[], remove?: string[] }, sources?: { add?: (string | source object)[], remove?: (string | { id } | { resource })[] }, relations?: { add?: relation[], remove?: relation[] }, metadata?, removeMetadataKeys? }; relation = { type, target, label?, description? }; include at least one update field.",
+].join(" ");
+
+const LIVE_CHANGE_TOOL_PROPERTIES = {
+  bundle: nonEmptyStringParameter("Writable bundle id; optional when exactly one local root is configured."),
+  message: stringParameter("Optional Git commit summary when automatic commits are enabled.", {
+    maxLength: MAX_COMMIT_MESSAGE_BYTES,
+  }),
+  changes: {
+    type: "array",
+    description: LIVE_CHANGES_DESCRIPTION,
+    minItems: 1,
+    maxItems: MAX_CHANGES,
+    items: { oneOf: [LIVE_CREATE_CHANGE, LIVE_UPDATE_CHANGE] },
+  },
+};
+
+const LIVE_CHANGE_EFFECTS_OUTPUT = {
+  type: "object",
+  description: "Compact structured summary of the fields changed by this operation.",
+  additionalProperties: true,
+  properties: {
+    bodyChanged: optionalBooleanParameter("Whether the Markdown body changed."),
+    tags: objectParameter("Tags added and removed by the operation."),
+    sources: objectParameter("Sources added and removed by the operation."),
+    relations: objectParameter("Relations added and removed by the operation."),
+    metadata: objectParameter("Metadata fields set and removed by the operation."),
+  },
+};
+
+const LIVE_CHANGE_SUMMARY_OUTPUT = {
+  type: "object",
+  description: "Compact receipt for one validated or applied concept operation.",
+  additionalProperties: true,
+  properties: {
+    op: stringParameter("Operation kind."),
+    bundle: stringParameter("Target bundle id."),
+    path: stringParameter("Bundle-relative concept path."),
+    absolutePath: stringParameter("Absolute target concept filename."),
+    uri: stringParameter("Canonical concept URI."),
+    title: stringParameter("Resulting concept title."),
+    effects: LIVE_CHANGE_EFFECTS_OUTPUT,
+  },
+};
+
+const LIVE_CHANGE_OUTPUT_PROPERTIES = {
+  status: stringParameter("Validation or application outcome."),
+  readyToApply: optionalBooleanParameter("Whether policy, graph, revision, and configured Git preconditions currently allow apply."),
+  filesChanged: optionalBooleanParameter("Whether filesystem changes remain when the request returns."),
+  snapshot: objectParameter("Time-of-check metadata for this planning result."),
+  preconditions: objectParameter("Revision and Git preconditions checked for the batch."),
+  generated: objectParameter("Server-owned generation actor and timestamp."),
+  target: objectParameter("Absolute bundle, repository, and affected-file locations."),
+  durability: objectParameter("Working-tree and automatic-commit durability state."),
+  changes: {
+    type: "array",
+    description: "Compact operation receipts.",
+    items: LIVE_CHANGE_SUMMARY_OUTPUT,
+  },
+  validation: objectParameter("Complete future-graph validation result."),
+  git: objectParameter("Git policy and commit result."),
+};
+
+const LIVE_VALIDATE_OUTPUT = {
+  type: "object",
+  description: "Read-only validation receipt for a structured concept batch.",
+  additionalProperties: true,
+  properties: Object.assign({
+    valid: optionalBooleanParameter("Whether authoring policy and the complete future graph are valid, independent of transient Git readiness."),
+  }, LIVE_CHANGE_OUTPUT_PROPERTIES),
+};
+
+const LIVE_APPLY_OUTPUT = {
+  type: "object",
+  description: "Application, target, durability, and validation receipt for a structured concept batch.",
+  additionalProperties: true,
+  properties: Object.assign({
+    applied: optionalBooleanParameter("Whether the complete batch was applied."),
+  }, LIVE_CHANGE_OUTPUT_PROPERTIES),
+};
+
+function defineTool(description, annotations, properties, required, schemaExtras, outputSchema) {
   return {
     description,
     annotations,
@@ -229,6 +314,7 @@ function defineTool(description, annotations, properties, required, schemaExtras
       ...(required && required.length ? { required } : {}),
       ...(schemaExtras || {}),
     },
+    ...(outputSchema ? { outputSchema } : {}),
   };
 }
 
@@ -514,21 +600,21 @@ const TOOL_DEFINITIONS = {
     },
     ["proposalId"],
   ),
-  okf_apply_changes: defineTool(
-    "Validate and atomically apply one or more structured concept creates or updates to one local bundle.",
-    DESTRUCTIVE_WRITE,
-    {
-      bundle: nonEmptyStringParameter("Writable bundle id; optional when exactly one local root is configured."),
-      message: stringParameter("Optional Git commit summary when automatic commits are enabled."),
-      changes: {
-        type: "array",
-        description: "One through 100 concept create or update operations applied as one batch.",
-        minItems: 1,
-        maxItems: MAX_CHANGES,
-        items: { oneOf: [LIVE_CREATE_CHANGE, LIVE_UPDATE_CHANGE] },
-      },
-    },
+  okf_validate_changes: defineTool(
+    "Validate a complete structured concept create or update batch without changing files.",
+    READ_ONLY,
+    LIVE_CHANGE_TOOL_PROPERTIES,
     ["changes"],
+    undefined,
+    LIVE_VALIDATE_OUTPUT,
+  ),
+  okf_apply_changes: defineTool(
+    "Validate and apply one or more structured concept creates or updates to one local bundle as one batch.",
+    DESTRUCTIVE_WRITE,
+    LIVE_CHANGE_TOOL_PROPERTIES,
+    ["changes"],
+    undefined,
+    LIVE_APPLY_OUTPUT,
   ),
   get_graph: defineTool(
     "Return a bounded set of OKF graph nodes and edges with optional concept filters.",
@@ -632,6 +718,7 @@ const COMPUTATION_AUTHORING_TOOL_NAMES = new Set([
   "okf_propose_attested_computation",
 ]);
 const LIVE_WRITE_TOOL_NAMES = new Set([
+  "okf_validate_changes",
   "okf_apply_changes",
 ]);
 const RUNTIME_REMOTE_TOOL_NAMES = new Set([
@@ -647,6 +734,9 @@ function jsonContent(value, options) {
       },
     ],
   };
+  if (options && options.structured) {
+    result.structuredContent = value;
+  }
   if (options && options.isError) {
     result.isError = true;
   }
@@ -696,7 +786,7 @@ function canonicalResourceUri(uri) {
   }
 }
 
-function publicBundles(index) {
+function publicBundles(index, options) {
   return index.bundles.map((bundle) => {
     const documentCount = index.documents.filter((doc) => doc.bundle === bundle.id).length;
     const conceptCount = index.concepts.filter((doc) => doc.bundle === bundle.id).length;
@@ -720,12 +810,17 @@ function publicBundles(index) {
         exclude: bundle.exclude || [],
       };
     }
-    const root = index.project && index.project.root
-      ? path.relative(index.project.root, bundle.root).replace(/\\/g, "/") || "."
+    const absoluteRoot = path.resolve(bundle.root);
+    const projectRoot = index.project && index.project.root
+      ? path.resolve(index.project.root)
+      : null;
+    const root = projectRoot
+      ? path.relative(projectRoot, absoluteRoot).replace(/\\/g, "/") || "."
       : "<configured>";
     return {
       id: bundle.id,
       root,
+      ...((options && options.includeAbsolutePaths) ? { absoluteRoot, projectRoot } : {}),
       documentCount,
       conceptCount,
       assetCount,
@@ -877,7 +972,11 @@ async function expectedToolOperation(operation, options) {
     if (programmingError) {
       throw error;
     }
-    throw new ToolExecutionError(error && error.message ? error.message : String(error));
+    throw new ToolExecutionError(
+      error && error.message ? error.message : String(error),
+      error && error.code,
+      error && error.details,
+    );
   }
 }
 
@@ -894,7 +993,9 @@ async function callTool(state, name, args) {
   try {
     switch (name) {
       case "list_bundles":
-        return jsonContent(publicBundles(index));
+        return jsonContent(publicBundles(index, {
+          includeAbsolutePaths: Boolean(state.allowWrite),
+        }));
       case "list_concepts":
         return jsonContent(listConcepts(index, args));
       case "get_concept":
@@ -1043,6 +1144,18 @@ async function callTool(state, name, args) {
         return jsonContent(await expectedToolOperation(
           () => requireAuthoring(state).rejectProposal(args),
         ));
+      case "okf_validate_changes": {
+        const result = await expectedToolOperation(
+          () => requireLiveAuthoring(state).validateChanges(args, {
+            additionalBundles: state.remoteBundles,
+          }),
+          { translateTypeError: true },
+        );
+        if (result.applied || result.filesChanged) {
+          rebuildStateIndex(state);
+        }
+        return jsonContent(result, { structured: true });
+      }
       case "okf_apply_changes": {
         const result = await expectedToolOperation(
           () => requireLiveAuthoring(state).applyChanges(args, {
@@ -1050,10 +1163,13 @@ async function callTool(state, name, args) {
           }),
           { translateTypeError: true },
         );
-        if (result.applied) {
+        if (result.applied || result.filesChanged) {
           rebuildStateIndex(state);
         }
-        return jsonContent(result, { isError: result.applied === false });
+        return jsonContent(result, {
+          structured: true,
+          isError: result.applied === false,
+        });
       }
       case "get_graph":
         return jsonContent(getGraph(index, args));
@@ -1094,11 +1210,14 @@ async function callTool(state, name, args) {
     if (!(error instanceof ToolExecutionError)) {
       throw error;
     }
-    return jsonContent({
+    const failure = {
       error: "Tool execution failed",
       tool: name,
       message: error.message,
-    }, { isError: true });
+      ...(error.code ? { code: error.code } : {}),
+      ...(error.details !== undefined ? { details: error.details } : {}),
+    };
+    return jsonContent(failure, { isError: true, structured: true });
   }
 }
 
@@ -1274,6 +1393,9 @@ function registerMcpInterface(state) {
         description: definition.description,
         annotations: definition.annotations,
         inputSchema: fromJsonSchema(definition.inputSchema),
+        ...(definition.outputSchema
+          ? { outputSchema: fromJsonSchema(definition.outputSchema) }
+          : {}),
       },
       async (args) => {
         const current = pendingToolCall.then(async () => {

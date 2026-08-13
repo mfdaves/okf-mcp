@@ -29,9 +29,9 @@ The SDK serves the modern `2026-07-28` revision and its compatibility path for 2
 
 The SDK validates protocol messages and tool arguments before application dispatch. Expected application failures return tool results with `isError: true`; unexpected implementation failures are masked. Stdout remains reserved for protocol messages.
 
-Each indexed Markdown document is exposed as a `text/markdown` resource. The [MCP tool catalog](../interfaces/mcp-tools.md) exposes discovery, search, graph navigation, validation, remote loading, and proposal-based authoring.
+Each indexed Markdown document is exposed as a `text/markdown` resource. The [MCP tool catalog](../interfaces/mcp-tools.md) exposes discovery, search, graph navigation, validation, remote loading, proposal-based authoring, and explicitly gated live batch validation/apply.
 
-Root mode is the normal single-catalog interface and can supply the local store used by the [authoring workflow](../workflows/concept-authoring.md). Project mode remains an optional federation/configuration extension. Proposal mutation tools remain disabled unless the server starts with `--authoring`; runtime remote loading remains disabled unless it starts with `--allow-remote-tool`.
+Root mode is the normal single-catalog interface and can supply the local store used by the [authoring workflow](../workflows/concept-authoring.md). Project mode remains an optional federation/configuration extension. Proposal mutation tools remain disabled unless the server starts with `--authoring`; live batch tools remain disabled unless it starts with `--write --actor <actor>`; runtime remote loading remains disabled unless it starts with `--allow-remote-tool`.
 
 Remote GitHub bundles are fetched as Markdown and added to the in-memory index. They remain read only and never execute remote code. After an accepted local proposal, one reconstruction path rebuilds the index from configured local bundles, configured remote bundles, and runtime-loaded remote bundles, preserving remote concepts and relationships. The lexical search index is cached against that reconstructed OKF index, so the next query builds a fresh per-server BM25+ view without global or persisted state.
 

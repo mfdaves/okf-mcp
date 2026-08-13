@@ -29,7 +29,7 @@ A reviewer then inspects the proposal and either accepts or rejects it. Acceptan
 
 Invalid candidates never become proposals. A proposal that becomes invalid before acceptance remains inspectable and returns the current validation result.
 
-For a trusted client approval boundary, `--write --actor <actor>` exposes one direct `okf_apply_changes` tool. Agents submit structured concept fields rather than YAML. The server derives optional paths, patches tags/sources/relations, stamps one generation actor and time, validates the complete future graph, and publishes all files or none. Optional Git policy creates one commit for the batch without pushing.
+For a trusted client approval boundary, `--write --actor <actor>` exposes read-only `okf_validate_changes` and destructive `okf_apply_changes`. Agents submit structured concept fields rather than YAML. The server derives optional paths from strong same-type directory conventions or deterministic slugs, patches tags/sources/relations, stamps one generation actor and time, and validates the complete future graph. A validation receipt is a non-durable time-of-check preview; apply repeats the checks before publication. Optional Git policy pins the checked-out symbolic branch, builds one exact isolated tree from validated bytes, and compare-and-swap publishes it without pushing.
 
 Direct writes do not replace generator ownership or computation review. Process-generated concepts, configured generator outputs, and Attested Computation contracts remain outside this workflow.
 

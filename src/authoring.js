@@ -32,8 +32,15 @@ function normalizeConceptPath(value) {
   if (!raw) {
     throw new Error("Concept path is required.");
   }
-  if (raw.startsWith("/") || raw.includes("\0")) {
+  if (raw.startsWith("/") || /^[A-Za-z]:\//.test(raw) || /[\u0000-\u001f\u007f]/.test(raw)) {
     throw new Error("Concept path must be a safe relative path.");
+  }
+  const rawParts = raw.split("/");
+  if (rawParts.some((part) => !part || part === "." || part === ".." || part.startsWith("."))) {
+    throw new Error("Concept path must be a safe relative path without empty, hidden, dot, or parent segments.");
+  }
+  if (rawParts.slice(0, -1).some((part) => part.toLowerCase().endsWith(".md"))) {
+    throw new Error("Concept path cannot place a Markdown file inside another Markdown path.");
   }
   const normalized = path.posix.normalize(raw);
   if (!normalized || normalized === "." || normalized.startsWith("../") || normalized === "..") {
@@ -45,11 +52,70 @@ function normalizeConceptPath(value) {
   if (!normalized.toLowerCase().endsWith(".md")) {
     throw new Error("Concept path must end with .md.");
   }
-  const base = path.posix.basename(normalized);
+  const base = path.posix.basename(normalized).toLowerCase();
   if (base === "index.md" || base === "log.md") {
     throw new Error("Concept path cannot be a reserved index.md or log.md file.");
   }
   return normalized;
+}
+
+function deriveConceptPathSuggestion(index, bundle, input) {
+  const rawPrefix = input && input.prefix
+    ? normalizeSlashes(String(input.prefix).trim())
+    : "";
+  if (rawPrefix.startsWith("/") || /^[A-Za-z]:\//.test(rawPrefix)) {
+    throw new Error("Path prefix must be a safe relative path inside the bundle.");
+  }
+  const prefix = rawPrefix.replace(/\/+$/g, "");
+  if (prefix) {
+    normalizeConceptPath(`${prefix}/placeholder.md`);
+  }
+  const type = String((input && input.type) || "").trim();
+  const typePart = type === "Attested Computation"
+    ? "computations"
+    : slug(type, "concept");
+  const titlePart = slug(input && input.title, typePart);
+  let parent = prefix ? `${prefix}/${typePart}` : typePart;
+  let strategy = prefix ? "explicit_prefix" : "type_slug";
+  let evidence = { matchingConcepts: 0, dominantDirectoryCount: 0, dominantDirectoryRatio: 0 };
+
+  if (!prefix && type !== "Attested Computation" && index && Array.isArray(index.documents)) {
+    const matching = index.documents.filter((document) => (
+      document
+      && document.bundle === bundle.id
+      && document.valid
+      && !document.reserved
+      && document.type === type
+      && typeof document.path === "string"
+    ));
+    const counts = new Map();
+    matching.forEach((document) => {
+      const directory = path.posix.dirname(document.path);
+      const normalizedDirectory = directory === "." ? "" : directory;
+      counts.set(normalizedDirectory, (counts.get(normalizedDirectory) || 0) + 1);
+    });
+    const dominant = Array.from(counts.entries()).sort((left, right) => (
+      right[1] - left[1] || left[0].localeCompare(right[0])
+    ))[0];
+    const dominantCount = dominant ? dominant[1] : 0;
+    const ratio = matching.length ? dominantCount / matching.length : 0;
+    evidence = {
+      matchingConcepts: matching.length,
+      dominantDirectoryCount: dominantCount,
+      dominantDirectoryRatio: Number(ratio.toFixed(3)),
+    };
+    if (dominant && dominantCount >= 2 && ratio >= 0.6) {
+      parent = dominant[0];
+      strategy = "dominant_same_type_directory";
+      evidence.dominantDirectory = dominant[0] || ".";
+    }
+  }
+
+  return {
+    path: normalizeConceptPath([parent, `${titlePart}.md`].filter(Boolean).join("/")),
+    strategy,
+    evidence,
+  };
 }
 
 function renderFrontmatter(frontmatter) {
@@ -119,17 +185,16 @@ class ConceptAuthoringService {
 
   suggestConceptPath(input) {
     const bundle = this.getBundle(input && input.bundle);
-    const prefix = input && input.prefix ? normalizeSlashes(String(input.prefix)).replace(/^\/+|\/+$/g, "") : "";
-    if (prefix && (prefix === "." || prefix.startsWith("../") || prefix.includes("/../"))) {
-      throw new Error("Path prefix must stay inside the bundle.");
-    }
-    const typePart = input && input.type === "Attested Computation"
-      ? "computations"
-      : slug(input && input.type, "concept");
-    const titlePart = slug(input && input.title, typePart);
+    const suggestion = deriveConceptPathSuggestion(this.store.getIndex(), bundle, input || {});
+    const target = this.store.resolveConceptFile(bundle.id, suggestion.path);
     return {
       bundle: bundle.id,
-      path: normalizeConceptPath([prefix, typePart, `${titlePart}.md`].filter(Boolean).join("/")),
+      path: suggestion.path,
+      uri: `okf://${bundle.id}/${suggestion.path.replace(/\.md$/i, "")}`,
+      absolutePath: target.absolutePath,
+      available: !fs.existsSync(target.absolutePath),
+      strategy: suggestion.strategy,
+      evidence: suggestion.evidence,
     };
   }
 
@@ -802,6 +867,7 @@ class ConceptAuthoringService {
 
 module.exports = {
   ConceptAuthoringService,
+  deriveConceptPathSuggestion,
   normalizeConceptPath,
   renderConceptMarkdown,
   renderFrontmatter,
