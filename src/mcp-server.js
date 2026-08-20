@@ -31,6 +31,7 @@ const {
 } = require("./live-authoring");
 const { FileConceptStore } = require("./store");
 const { loadProjectConfig } = require("./project");
+const { ProducerService } = require("./producers");
 const {
   checkComputationReceipt,
   getProvenance,
@@ -78,6 +79,18 @@ const DESTRUCTIVE_WRITE = {
 const REMOTE_LOAD = {
   readOnlyHint: false,
   destructiveHint: false,
+  idempotentHint: false,
+  openWorldHint: true,
+};
+const PRODUCER_PREVIEW = {
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: true,
+};
+const PRODUCER_RUN = {
+  readOnlyHint: false,
+  destructiveHint: true,
   idempotentHint: false,
   openWorldHint: true,
 };
@@ -631,6 +644,28 @@ const TOOL_DEFINITIONS = {
     undefined,
     LIVE_APPLY_OUTPUT,
   ),
+  okf_list_producers: defineTool(
+    "List configured producer instances without loading or executing their packages.",
+    READ_ONLY,
+  ),
+  okf_preview_producer: defineTool(
+    "Read source metadata, generate a candidate OKF 0.2 bundle, and validate its publication diff without writing files.",
+    PRODUCER_PREVIEW,
+    {
+      producer: nonEmptyStringParameter("Configured producer instance name."),
+      detail: detailParameter("Receipt detail level; full includes bounded bundle-relative changed paths."),
+    },
+    ["producer"],
+  ),
+  okf_run_producer: defineTool(
+    "Regenerate, strictly validate, safely publish, and reindex one configured OKF producer.",
+    PRODUCER_RUN,
+    {
+      producer: nonEmptyStringParameter("Configured producer instance name."),
+      detail: detailParameter("Receipt detail level; full includes bounded bundle-relative changed paths."),
+    },
+    ["producer"],
+  ),
   get_graph: defineTool(
     "Return a bounded set of OKF graph nodes and edges with optional concept filters.",
     READ_ONLY,
@@ -739,6 +774,13 @@ const LIVE_WRITE_TOOL_NAMES = new Set([
 const RUNTIME_REMOTE_TOOL_NAMES = new Set([
   "load_remote_bundle",
 ]);
+const PRODUCER_TOOL_NAMES = new Set([
+  "okf_list_producers",
+  "okf_preview_producer",
+]);
+const PRODUCER_WRITE_TOOL_NAMES = new Set([
+  "okf_run_producer",
+]);
 
 function jsonContent(value, options) {
   const result = {
@@ -797,7 +839,40 @@ function projectLiveReceipt(receipt, detail) {
   return compact;
 }
 
+function producerReceipt(receipt, detail) {
+  const instance = receipt.instance || {};
+  const result = {
+    producer: instance.name,
+    type: instance.type,
+    bundle: instance.bundle,
+    okfVersion: "0.2",
+    valid: receipt.valid === true,
+    readyToApply: receipt.readyToApply === true,
+    ...(receipt.applied !== undefined ? { applied: receipt.applied === true } : {}),
+    ...(receipt.conformant !== undefined ? { conformant: receipt.conformant === true } : {}),
+    ...(receipt.validForProject !== undefined ? { validForProject: receipt.validForProject === true } : {}),
+    ...(receipt.generatedAt ? { generatedAt: receipt.generatedAt } : {}),
+    counts: receipt.counts || { create: 0, update: 0, delete: 0, unchanged: 0 },
+    summary: receipt.summary || {},
+    diagnostics: Array.isArray(receipt.diagnostics) ? receipt.diagnostics.slice(0, 100) : [],
+  };
+  if (detail === "full" && receipt.changes) {
+    result.changes = {};
+    Object.entries(receipt.changes).forEach(([kind, entries]) => {
+      result.changes[kind] = entries.slice(0, 100);
+      if (entries.length > 100) result.changes[`${kind}Omitted`] = entries.length - 100;
+    });
+  }
+  return result;
+}
+
 function toolEnabled(state, name) {
+  if (PRODUCER_TOOL_NAMES.has(name)) {
+    return Boolean(state && state.producerService);
+  }
+  if (PRODUCER_WRITE_TOOL_NAMES.has(name)) {
+    return Boolean(state && state.producerService && state.allowWrite && state.actor);
+  }
   if (PROJECT_HELPER_TOOL_NAMES.has(name)) {
     return Boolean(state && state.authoringService);
   }
@@ -1252,6 +1327,30 @@ async function callTool(state, name, args) {
           isError: result.applied === false,
         });
       }
+      case "okf_list_producers":
+        return jsonContent(state.producerService.list(), { structured: true });
+      case "okf_preview_producer": {
+        const result = await expectedToolOperation(
+          () => state.producerService.preview(args.producer, {
+            additionalBundles: state.remoteBundles,
+          }),
+          { translateTypeError: true },
+        );
+        return jsonContent(producerReceipt(result, args.detail || "compact"), { structured: true });
+      }
+      case "okf_run_producer": {
+        const result = await expectedToolOperation(
+          () => state.producerService.run(args.producer, {
+            additionalBundles: state.remoteBundles,
+          }),
+          { translateTypeError: true },
+        );
+        if (result.applied) rebuildStateIndex(state);
+        return jsonContent(producerReceipt(result, args.detail || "compact"), {
+          structured: true,
+          isError: result.applied === false,
+        });
+      }
       case "get_graph":
         return jsonContent(getGraph(index, args));
       case "get_neighbors":
@@ -1338,7 +1437,9 @@ function createState(bundleArgs, options) {
     project,
     authoringService,
     liveAuthoringService: options && options.liveAuthoringService,
+    producerService: options && options.producerService,
     allowWrite: Boolean(options && options.allowWrite),
+    actor: options && options.actor,
     allowAuthoring: Boolean(options && options.allowAuthoring),
     allowRuntimeRemoteLoad: Boolean(options && options.allowRuntimeRemoteLoad),
     allowComputationAuthoring: Boolean(options && options.allowComputationAuthoring),
@@ -1346,6 +1447,17 @@ function createState(bundleArgs, options) {
     allowCustomRelationTypes,
     repositoryMappings: (options && options.repositoryMappings) || new Map(),
   };
+  if (!state.producerService && project && (project.producers || []).length
+    && authoringService && authoringService.store) {
+    state.producerService = new ProducerService({
+      project,
+      store: authoringService.store,
+      bundles: localBundleArgs,
+      loader: options && options.producerLoader,
+      env: options && options.producerEnv,
+      now: options && options.producerNow,
+    });
+  }
   return state;
 }
 
@@ -1373,7 +1485,12 @@ async function createStateAsync(bundleArgs, options) {
       relationTypes: loaded.project.relationTypes,
       authoringService,
       liveAuthoringService,
+      producerService: options.producerService,
+      producerLoader: options.producerLoader,
+      producerEnv: options.producerEnv,
+      producerNow: options.producerNow,
       allowWrite: options.allowWrite,
+      actor: options.actor,
       allowAuthoring: options.allowAuthoring,
       allowRuntimeRemoteLoad: options.allowRuntimeRemoteLoad,
       allowComputationAuthoring: options.allowComputationAuthoring,
@@ -1403,7 +1520,9 @@ async function createStateAsync(bundleArgs, options) {
       relationTypes: store.getRelationTypes(),
       authoringService,
       liveAuthoringService,
+      producerService: options.producerService,
       allowWrite: options.allowWrite,
+      actor: options.actor,
       allowAuthoring: options.allowAuthoring,
       allowRuntimeRemoteLoad: options.allowRuntimeRemoteLoad,
       allowComputationAuthoring: options.allowComputationAuthoring,
@@ -1433,7 +1552,9 @@ async function createStateAsync(bundleArgs, options) {
     initialRemoteBundles: remoteBundles,
     authoringService: options && options.authoringService,
     liveAuthoringService,
+    producerService: options && options.producerService,
     allowWrite: options && options.allowWrite,
+    actor: options && options.actor,
     allowAuthoring: options && options.allowAuthoring,
     allowRuntimeRemoteLoad: options && options.allowRuntimeRemoteLoad,
     allowComputationAuthoring: options && options.allowComputationAuthoring,

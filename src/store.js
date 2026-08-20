@@ -204,6 +204,7 @@ class FileConceptStore {
       remoteBundles: [],
       relationTypes: DEFAULT_RELATION_TYPES.slice(),
       plugins: [],
+      producers: [],
       strictLinks: Boolean(options && options.strictLinks),
       errors: [],
       rootMode: true,

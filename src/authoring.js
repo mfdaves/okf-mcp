@@ -30,11 +30,19 @@ function slug(value, fallback) {
 }
 
 function isConfiguredGeneratorOutput(project, absolutePath) {
-  return Boolean(project && project.root && absolutePath && (project.plugins || []).some((plugin) => {
+  if (!project || !project.root || !absolutePath) return false;
+  const pluginOutput = (project.plugins || []).some((plugin) => {
     if (!plugin || !plugin.output) return false;
     const relative = path.relative(path.resolve(project.root, String(plugin.output)), absolutePath);
     return relative === "" || (!relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative));
-  }));
+  });
+  if (pluginOutput) return true;
+  const managedBundles = new Set((project.producers || []).map((producer) => producer && producer.bundle));
+  return (project.bundles || []).some((bundle) => {
+    if (!bundle || !managedBundles.has(bundle.id)) return false;
+    const relative = path.relative(path.resolve(bundle.root), absolutePath);
+    return relative === "" || (!relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative));
+  });
 }
 
 function normalizeConceptPath(value) {

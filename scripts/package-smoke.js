@@ -175,7 +175,14 @@ async function main() {
         name: "--root",
         value: undefined,
         format: "filepath",
-        isRequired: true,
+        isRequired: false,
+      },
+      {
+        type: "named",
+        name: "--project",
+        value: undefined,
+        format: "filepath",
+        isRequired: false,
       },
       {
         type: "positional",
@@ -257,7 +264,7 @@ async function main() {
     process.stdout.write(JSON.stringify({
       package: `${packageMetadata.name}@${packageMetadata.version}`,
       entries: packed.entryCount,
-      concepts: 14,
+      concepts: 17,
       binaries: ["okf", "okf-mcp"],
       stdio: "passed",
     }, null, 2) + "\n");

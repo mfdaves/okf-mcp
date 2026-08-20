@@ -472,6 +472,9 @@ function buildIndex(bundleArgs, options) {
   const documentOverrides = config.documentOverrides instanceof Map
     ? config.documentOverrides
     : new Map();
+  const documentDeletions = config.documentDeletions instanceof Set
+    ? config.documentDeletions
+    : new Set();
   const strictLinks = Boolean(config.strictLinks);
   const requestedBundles = uniqueBundleIds((bundleArgs || []).map(parseBundleArg));
   const allowedRelationTypes = new Set((config.relationTypes || DEFAULT_RELATION_TYPES).map(String));
@@ -560,6 +563,9 @@ function buildIndex(bundleArgs, options) {
         return;
       }
       const key = documentOverrideKey(bundle.id, relativePath);
+      if (documentDeletions.has(key)) {
+        return;
+      }
       indexLocalDocument(
         relativePath,
         documentOverrides.has(key) ? String(documentOverrides.get(key)) : undefined,
@@ -572,7 +578,7 @@ function buildIndex(bundleArgs, options) {
         return;
       }
       const relativePath = normalizeSlashes(String(key).slice(prefix.length));
-      if (indexedPaths.has(relativePath) || !bundleAllowsPath(bundle, relativePath)) {
+      if (documentDeletions.has(key) || indexedPaths.has(relativePath) || !bundleAllowsPath(bundle, relativePath)) {
         return;
       }
       indexLocalDocument(
@@ -971,6 +977,7 @@ function attachProject(index, project) {
     path: project.path,
     root: project.root,
     plugins: project.plugins,
+    producers: project.producers,
     remoteBundles: project.remoteBundles,
     strictLinks: project.strictLinks,
   };

@@ -35,7 +35,7 @@ Node 22 or newer is required.
 Install from the GitHub release:
 
 ```bash
-git clone --branch v0.8.0 https://github.com/mfdaves/okf-mcp.git
+git clone --branch v0.9.0 https://github.com/mfdaves/okf-mcp.git
 cd okf-mcp
 npm ci
 node bin/okf-mcp.js --root ./path/to/okf validate
@@ -44,14 +44,14 @@ node bin/okf-mcp.js --root ./path/to/okf validate
 Pin the published version for reproducible use:
 
 ```bash
-npx -y @mfdaves/okf-mcp@0.8.0 --version
-npx -y @mfdaves/okf-mcp@0.8.0 --root ./path/to/okf validate
+npx -y @mfdaves/okf-mcp@0.9.0 --version
+npx -y @mfdaves/okf-mcp@0.9.0 --root ./path/to/okf validate
 ```
 
 For a persistent installation:
 
 ```bash
-npm install --global @mfdaves/okf-mcp@0.8.0
+npm install --global @mfdaves/okf-mcp@0.9.0
 
 okf --version
 okf --root ./path/to/okf validate
@@ -99,16 +99,16 @@ okf --remote-bundle okf-mcp=https://github.com/mfdaves/okf-mcp/tree/main/okf/okf
 ```
 
 The published `v0.8.0` tag retains its original
-`okf/bundles/okf-mcp` path. The shorter `okf/okf-mcp` path is prepared in the
-unpublished `0.8.1` maintenance checkpoint and ships with `0.9.0`; the
-immutable `v0.8.0` release is unchanged.
+`okf/bundles/okf-mcp` path. The shorter `okf/okf-mcp` path was prepared in the
+unpublished `0.8.1` maintenance checkpoint and ships with `v0.9.0`; the
+immutable `v0.8.0` release remains unchanged.
 
 The `@mfdaves/okf-mcp` npm package includes both `okf.project.yaml` and the
 complete reference bundle.
 
 ## Optional Multi-Bundle Project Config
 
-Use `okf.project.yaml` only when one process must federate multiple roots, configure generators, or enforce a project-wide relation vocabulary:
+Use `okf.project.yaml` only when one process must federate multiple roots, configure generators or external metadata producers, or enforce a project-wide relation vocabulary:
 
 ```yaml
 project: Example
@@ -120,6 +120,8 @@ bundles:
     exclude: ["archive/**"]
   - id: data
     root: okf/bundles/data
+  - id: company-database
+    root: okf/company-database
 relationTypes:
   - deployed_by
 remoteBundles:
@@ -133,6 +135,16 @@ plugins:
     root: docs
     output: okf/bundles/app/generated/docs
     bundle: app
+producers:
+  - name: main-database
+    type: postgresql
+    package: "@mfdaves/okf-postgres"
+    bundle: company-database
+    config:
+      connectionEnv: DATABASE_URL
+      source: company-db
+      schemas: [public]
+      includeIndexes: true
 ```
 
 Run project commands:
@@ -167,6 +179,22 @@ Commands:
 - `generate`
 - `serve`
 
+### External metadata producers
+
+Producers are separate from the built-in `plugins:` generators. A producer reads metadata from an external source and returns an in-memory candidate OKF bundle; `okf-mcp` validates and publishes that candidate. Install each producer package alongside the project, then allowlist its exact bare package name in the trusted project configuration. MCP callers can select a configured producer but cannot replace its package, configuration, credentials, queries, bundle, or output paths.
+
+The package must export the versioned `okfProducer` API. Producer API v1 targets OKF v0.2 and separates `validateConfig()` from side-effect-free destination generation. Candidate concepts require native `generated` and non-empty `sources` provenance. The host rejects unsafe paths, malformed concepts, unresolved links or typed relations, unowned file collisions, locally modified managed files, secret values in output, and any candidate that would leave the complete project invalid.
+
+For a configured project, MCP exposes:
+
+- `okf_list_producers`: list configuration without loading package code or reading the source
+- `okf_preview_producer`: read source metadata and return a validated, non-writing diff
+- `okf_run_producer`: regenerate under the shared writer queue and publish with revision checks and rollback; available only with `--write --actor <actor>`
+
+Preview and run accept only the configured producer name plus optional receipt detail. Receipts include bounded numeric source-object summaries and publication-diff counts. Publication records owned relative paths and SHA-256 digests in the bundle-local `.okf-producer.json`. Only unchanged paths owned by the prior manifest can be updated or removed; hand-authored content is never adopted implicitly. The manifest contains no producer configuration, credentials, or connection details.
+
+`@mfdaves/okf-postgres` is the PostgreSQL implementation. Its average-use v1 covers database, schema, table/view, column, key, check, enum, index, and description metadata without reading table rows. Keep connection strings in an environment variable named by `connectionEnv`; do not place a connection string in YAML.
+
 `serve` options:
 
 - `--host <host>`: bind host, default `127.0.0.1`
@@ -187,7 +215,7 @@ Example client configuration:
       "command": "npx",
       "args": [
         "-y",
-        "@mfdaves/okf-mcp@0.8.0",
+        "@mfdaves/okf-mcp@0.9.0",
         "--root",
         "/absolute/path/to/okf",
         "mcp"
@@ -206,7 +234,7 @@ Project config mode, with read-only project helpers but without proposal mutatio
       "command": "npx",
       "args": [
         "-y",
-        "@mfdaves/okf-mcp@0.8.0",
+        "@mfdaves/okf-mcp@0.9.0",
         "--project",
         "/absolute/path/to/repo/okf.project.yaml",
         "mcp"
@@ -323,6 +351,9 @@ okf --root /path/to/catalog \
 - `okf_reject_proposal`
 - `okf_validate_changes`
 - `okf_apply_changes`
+- `okf_list_producers`
+- `okf_preview_producer`
+- `okf_run_producer`
 - `get_graph`
 - `get_neighbors`
 - `get_subgraph`

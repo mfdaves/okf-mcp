@@ -2,7 +2,7 @@
 id: okf://okf-mcp/interfaces/mcp-tools
 type: OKF Interface
 title: MCP Tool Catalog
-description: Agent-facing tool contract for discovery, graph navigation, validation, remote loading, and authoring.
+description: Agent-facing tool contract for discovery, graph navigation, validation, producer execution, remote loading, and authoring.
 tags: [mcp, tools, interface, agents]
 relations:
   - type: depends_on
@@ -11,6 +11,8 @@ relations:
     target: okf://okf-mcp/runtime/indexer
   - type: related_to
     target: okf://okf-mcp/workflows/concept-authoring
+  - type: related_to
+    target: okf://okf-mcp/workflows/producer-publication
   - type: configured_by
     target: repo://src/mcp-server.js
   - type: checked_by
@@ -23,6 +25,8 @@ relations:
     target: repo://test/live-mcp-contract.test.js
   - type: checked_by
     target: repo://test/live-agent-workflow.test.js
+  - type: checked_by
+    target: repo://test/producer.test.js
 ---
 
 # MCP Tool Catalog
@@ -40,6 +44,10 @@ Static computation tools inspect contracts, read indexed assets, prepare paramet
 `read_git_source` reads one pinned `sources[].git` entry from a checkout or bare repository explicitly mapped by the MCP host. It reads the Git object database rather than the working tree and never fetches. Oversized content errors include the observed size, active limit, maximum supported limit, and whether a bounded retry can succeed.
 
 An explicit local root or project workspace exposes candidate validation, path suggestion, and proposal inspection. Normal proposal mutations require `--authoring`; the coordinated computation proposal additionally requires `--allow-computation-authoring`. `--write --actor <actor>` exposes read-only `okf_validate_changes` plus destructive `okf_apply_changes`, both accepting the same structured create/update batch grammar without requiring agents to compose YAML. Runtime calls to `load_remote_bundle` require `--allow-remote-tool`.
+
+A project with configured producers exposes `okf_list_producers` and `okf_preview_producer`. Listing is static and does not execute producer packages. Preview loads only the package allowlisted by the selected project entry, reads source metadata, and validates a complete candidate graph without changing destination files. `--write --actor <actor>` additionally exposes destructive `okf_run_producer`. Producer tool inputs select only a configured instance and receipt detail; clients cannot supply packages, connection values, SQL, bundle IDs, configuration, or output paths.
+
+Producer receipts report configured identity, bounded numeric source summaries, relative-path diffs, publication counts, and validation. They omit generated contents, configuration, secrets, connection details, and absolute paths. Run repeats generation and strict OKF v0.2 validation under the shared writer queue, publishes only manifest-owned files, validates persisted state, and refreshes the index.
 
 `okf_validate_changes` and `okf_apply_changes` plan 1–100 operations as one future graph, including cross-batch and loaded-remote references plus same-type/title conflicts. Validation returns a non-durable time-of-check receipt. Apply repeats planning under the process-local writer queue, stamps one server-owned `generated.at` with the configured `generated.by`, publishes the complete local batch, validates persisted state, and refreshes the index. Compact receipts are the default; `detail: "full"` retains the richer planning layout. Relation effects are structured, and generated provenance is separate from substantive changed fields.
 

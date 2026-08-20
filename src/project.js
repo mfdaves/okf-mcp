@@ -15,6 +15,9 @@ const DEFAULT_RELATION_TYPES = [
   "owned_by",
   "supersedes",
   "related_to",
+  "contains",
+  "contained_by",
+  "foreign_key_to",
 ];
 
 function configId(value, fallback) {
@@ -208,6 +211,65 @@ function validatePlugins(config, projectRoot, bundleIds, errors) {
   });
 }
 
+function barePackageName(value) {
+  return typeof value === "string"
+    && /^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/.test(value);
+}
+
+function normalizeProducers(config, localBundleIds, errors) {
+  if (config.producers !== undefined && !Array.isArray(config.producers)) {
+    errors.push({ code: "invalid_producers", message: "producers must be an array." });
+    return [];
+  }
+  const names = new Set();
+  const bundles = new Set();
+  return (config.producers || []).map((producer, index) => {
+    const field = `producers[${index}]`;
+    if (!producer || typeof producer !== "object" || Array.isArray(producer)) {
+      errors.push({ code: "invalid_producer", producer: index, message: "Producer entries must be objects." });
+      return null;
+    }
+    const allowed = new Set(["name", "type", "package", "bundle", "config"]);
+    Object.keys(producer).filter((key) => !allowed.has(key)).forEach((key) => {
+      errors.push({ code: "unknown_producer_field", producer: producer.name || index, field: `${field}.${key}`, message: `Unknown producer field: ${key}` });
+    });
+    const name = typeof producer.name === "string" ? producer.name.trim() : "";
+    const type = typeof producer.type === "string" ? producer.type.trim() : "";
+    const packageName = typeof producer.package === "string" ? producer.package.trim() : "";
+    const bundle = typeof producer.bundle === "string" ? producer.bundle.trim() : "";
+    if (!name || !/^[A-Za-z0-9_.-]+$/.test(name)) {
+      errors.push({ code: "invalid_producer_name", producer: index, field: `${field}.name`, message: "Producer name must contain only letters, numbers, underscores, dots, and hyphens." });
+    } else if (names.has(name)) {
+      errors.push({ code: "duplicate_producer_name", producer: name, message: "Producer names must be unique." });
+    }
+    if (name) names.add(name);
+    if (!type || !/^[A-Za-z0-9_.-]+$/.test(type)) {
+      errors.push({ code: "invalid_producer_type", producer: name || index, field: `${field}.type`, message: "Producer type must contain only letters, numbers, underscores, dots, and hyphens." });
+    }
+    if (!barePackageName(packageName)) {
+      errors.push({ code: "invalid_producer_package", producer: name || index, field: `${field}.package`, message: "Producer package must be a bare npm package name without a subpath." });
+    }
+    if (!localBundleIds.has(bundle)) {
+      errors.push({ code: "unknown_producer_bundle", producer: name || index, bundle, message: "Producer bundle must name a local project bundle." });
+    } else if (bundles.has(bundle)) {
+      errors.push({ code: "duplicate_producer_bundle", producer: name || index, bundle, message: "Only one producer may manage a local bundle." });
+    }
+    if (bundle) bundles.add(bundle);
+    if (producer.config !== undefined && (!producer.config || typeof producer.config !== "object" || Array.isArray(producer.config))) {
+      errors.push({ code: "invalid_producer_config", producer: name || index, field: `${field}.config`, message: "Producer config must be an object." });
+    }
+    return {
+      name,
+      type,
+      package: packageName,
+      bundle,
+      config: producer.config && typeof producer.config === "object" && !Array.isArray(producer.config)
+        ? producer.config
+        : {},
+    };
+  }).filter(Boolean);
+}
+
 function normalizeRemoteBundles(config, errors) {
   const remotes = Array.isArray(config.remoteBundles) ? config.remoteBundles : [];
   if (config.remoteBundles !== undefined && !Array.isArray(config.remoteBundles)) {
@@ -259,6 +321,7 @@ function loadProjectConfig(configPath) {
   const relationTypes = new Set(DEFAULT_RELATION_TYPES.concat(Array.isArray(config.relationTypes) ? config.relationTypes.map(String) : []));
   const bundles = normalizeBundles(config, resolvedPath, errors);
   const remoteBundles = normalizeRemoteBundles(config, errors);
+  const localBundleIds = new Set(bundles.map((bundle) => bundle.id));
   const allBundleIds = new Set(bundles.map((bundle) => bundle.id));
   remoteBundles.forEach((bundle) => {
     if (allBundleIds.has(bundle.id)) {
@@ -267,6 +330,7 @@ function loadProjectConfig(configPath) {
     allBundleIds.add(bundle.id);
   });
   validatePlugins(config, path.dirname(resolvedPath), allBundleIds, errors);
+  const producers = normalizeProducers(config, localBundleIds, errors);
   return {
     path: resolvedPath,
     root: path.dirname(resolvedPath),
@@ -275,6 +339,7 @@ function loadProjectConfig(configPath) {
     remoteBundles,
     relationTypes: Array.from(relationTypes),
     plugins: Array.isArray(config.plugins) ? config.plugins : [],
+    producers,
     strictLinks: Boolean(config.strictLinks),
     errors,
     raw: config,

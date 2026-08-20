@@ -9,6 +9,8 @@ module.exports = {
   ...require("./graph"),
   ...require("./project"),
   ...require("./plugins"),
+  ...require("./producers"),
+  ...require("./producer-publisher"),
   ...require("./remote"),
   ...require("./computation"),
   ...require("./git-source"),
