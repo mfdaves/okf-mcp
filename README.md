@@ -87,16 +87,21 @@ This repository publishes a self-describing OKF bundle for the product, its runt
 Validate and query the bundled reference from a checkout or installed package:
 
 ```bash
-okf --root okf/bundles/okf-mcp validate
-okf --root okf/bundles/okf-mcp search "proposal"
-okf --root okf/bundles/okf-mcp concept overview/okf-mcp
+okf --root okf/okf-mcp validate
+okf --root okf/okf-mcp search "proposal"
+okf --root okf/okf-mcp concept overview/okf-mcp
 ```
 
-Load the reference bundle directly from this release:
+Load the reference bundle directly from the current source branch:
 
 ```bash
-okf --remote-bundle okf-mcp=https://github.com/mfdaves/okf-mcp/tree/v0.8.0/okf/bundles/okf-mcp --inspect
+okf --remote-bundle okf-mcp=https://github.com/mfdaves/okf-mcp/tree/main/okf/okf-mcp --inspect
 ```
+
+The published `v0.8.0` tag retains its original
+`okf/bundles/okf-mcp` path. The shorter `okf/okf-mcp` path is prepared in the
+unpublished `0.8.1` maintenance checkpoint and ships with `0.9.0`; the
+immutable `v0.8.0` release is unchanged.
 
 The `@mfdaves/okf-mcp` npm package includes both `okf.project.yaml` and the
 complete reference bundle.

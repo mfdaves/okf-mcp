@@ -202,7 +202,7 @@ async function main() {
     assert.equal(packed.name, packageMetadata.name);
     assert.equal(packed.version, packageMetadata.version);
     assert.equal(packedPaths.has("okf.project.yaml"), true);
-    assert.equal(packedPaths.has("okf/bundles/okf-mcp/index.md"), true);
+    assert.equal(packedPaths.has("okf/okf-mcp/index.md"), true);
     assert.equal(packedPaths.has("server.json"), true);
     assert.equal(packedPaths.has(".agents/skills/okf-v02-migration/SKILL.md"), true);
     assert.equal(packedPaths.has(".agents/skills/okf-v02-migration/agents/openai.yaml"), true);
@@ -233,7 +233,7 @@ async function main() {
     ]);
 
     const installedPackageRoot = path.join(installRoot, "node_modules", ...packageMetadata.name.split("/"));
-    const installedRoot = path.join(installedPackageRoot, "okf", "bundles", "okf-mcp");
+    const installedRoot = path.join(installedPackageRoot, "okf", "okf-mcp");
     const installedServerMetadata = JSON.parse(fs.readFileSync(path.join(installedPackageRoot, "server.json"), "utf8"));
     const okf = executable(installRoot, "okf");
     const okfMcp = executable(installRoot, "okf-mcp");

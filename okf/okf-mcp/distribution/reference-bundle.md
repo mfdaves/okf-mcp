@@ -31,7 +31,7 @@ This directory is the canonical machine-readable architectural reference for `ok
 
 The latest public bundle can be loaded from:
 
-`https://github.com/mfdaves/okf-mcp/tree/main/okf/bundles/okf-mcp`
+`https://github.com/mfdaves/okf-mcp/tree/main/okf/okf-mcp`
 
 Consumers that need reproducibility should replace `main` with a release tag. Remote loading indexes only the Markdown tree and does not execute repository code.
 

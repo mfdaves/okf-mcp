@@ -84,7 +84,7 @@ test("official SDK serves both modern and legacy MCP eras", async (t) => {
 });
 
 test("compact discovery keeps a realistic research path within a token budget", async (t) => {
-  const bundle = path.resolve(__dirname, "../okf/bundles/okf-mcp");
+  const bundle = path.resolve(__dirname, "../okf/okf-mcp");
   const { client } = await connectMcp(t, [`okf-mcp=${bundle}`]);
   const uri = "okf://okf-mcp/runtime/mcp-server";
   const compactList = await callJson(client, "list_concepts", { limit: 10 });
