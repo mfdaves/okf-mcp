@@ -48,6 +48,10 @@ jobs:
         env:
           NPM_DIST_TAG: ${{ inputs.dist_tag }}
           RELEASE_REF: ${{ inputs.ref }}
+          # Bootstrap credential. npm cannot configure a trusted publisher for a
+          # package that does not exist yet, so the first publish needs a token.
+          # Remove this and the secret once trusted publishing is configured.
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           NAME="$(node -p 'require("./package.json").name')"
           VERSION="$(node -p 'require("./package.json").version')"
