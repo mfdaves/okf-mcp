@@ -1,8 +1,10 @@
 # okf-mcp
 
-`okf-mcp` is a local-first consumer, validator, graph index, CLI, and MCP server for [Open Knowledge Format v0.2](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md).
+`okf-mcp` publishes [Open Knowledge Format v0.2](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md) from the systems that already hold the knowledge, and serves the result to agents. It is a local-first consumer, validator, graph index, CLI, and MCP server.
 
-It consumes an OKF bundle directory of Markdown files with YAML frontmatter. An optional workspace mode can federate several bundles. Concepts are exposed through CLI commands and MCP resources and tools for validation, structured search, graph navigation, provenance inspection, and proposal-based authoring.
+The part that is hard is writing to a catalog safely. A configured producer reads an external source and returns a candidate bundle; okf-mcp validates it, then publishes it under an ownership manifest that records exactly which files it owns. Hand-authored content is never adopted, a source that did not change rewrites nothing, and no producer output escapes its bundle. [`@mfdaves/okf-postgres`](https://github.com/mfdaves/okf-postgres) reads PostgreSQL catalogs this way without reading a single table row.
+
+Reading is the ordinary half. It consumes an OKF bundle directory of Markdown files with YAML frontmatter. An optional workspace mode can federate several bundles. Concepts are exposed through CLI commands and MCP resources and tools for validation, structured search, graph navigation, provenance inspection, and proposal-based authoring.
 
 The core intentionally has no database, embeddings, build step, or hosted-service dependency. It uses `js-yaml` for safe YAML, CommonMark for Markdown structure, MiniSearch for in-memory BM25+ text retrieval, and the official Model Context Protocol TypeScript SDK v2 for stdio MCP. Local root mode makes no network calls. Optional remote loading fetches public Markdown concepts and only their explicitly referenced inert assets from GitHub. Nothing in the v0.2 computation support executes code or attests a receipt.
 
