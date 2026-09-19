@@ -37,7 +37,7 @@ Node 22 or newer is required.
 Install from the GitHub release:
 
 ```bash
-git clone --branch v0.9.0 https://github.com/mfdaves/okf-mcp.git
+git clone --branch v0.9.1 https://github.com/mfdaves/okf-mcp.git
 cd okf-mcp
 npm ci
 node bin/okf-mcp.js --root ./path/to/okf validate
@@ -46,14 +46,14 @@ node bin/okf-mcp.js --root ./path/to/okf validate
 Pin the published version for reproducible use:
 
 ```bash
-npx -y @mfdaves/okf-mcp@0.9.0 --version
-npx -y @mfdaves/okf-mcp@0.9.0 --root ./path/to/okf validate
+npx -y @mfdaves/okf-mcp@0.9.1 --version
+npx -y @mfdaves/okf-mcp@0.9.1 --root ./path/to/okf validate
 ```
 
 For a persistent installation:
 
 ```bash
-npm install --global @mfdaves/okf-mcp@0.9.0
+npm install --global @mfdaves/okf-mcp@0.9.1
 
 okf --version
 okf --root ./path/to/okf validate
@@ -239,7 +239,7 @@ Example client configuration:
       "command": "npx",
       "args": [
         "-y",
-        "@mfdaves/okf-mcp@0.9.0",
+        "@mfdaves/okf-mcp@0.9.1",
         "--root",
         "/absolute/path/to/okf",
         "mcp"
@@ -258,7 +258,7 @@ Project config mode, with read-only project helpers but without proposal mutatio
       "command": "npx",
       "args": [
         "-y",
-        "@mfdaves/okf-mcp@0.9.0",
+        "@mfdaves/okf-mcp@0.9.1",
         "--project",
         "/absolute/path/to/repo/okf.project.yaml",
         "mcp"
