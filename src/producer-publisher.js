@@ -4,6 +4,8 @@ const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
 
+const { splitFrontmatter } = require("./parser");
+
 const MANIFEST_NAME = ".okf-producer.json";
 
 class ProducerPublicationError extends Error {
@@ -17,6 +19,54 @@ class ProducerPublicationError extends Error {
 
 function sha256(content) {
   return `sha256:${crypto.createHash("sha256").update(content).digest("hex")}`;
+}
+
+function canonical(value) {
+  if (value instanceof Date) return JSON.stringify(value.toISOString());
+  if (value === null || typeof value !== "object") {
+    const encoded = JSON.stringify(value);
+    return encoded === undefined ? "null" : encoded;
+  }
+  if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
+  return `{${Object.keys(value).sort()
+    .map((key) => `${JSON.stringify(key)}:${canonical(value[key])}`)
+    .join(",")}}`;
+}
+
+function generatedMapping(content) {
+  let split;
+  try {
+    split = splitFrontmatter(content);
+  } catch {
+    return null;
+  }
+  const generated = split.frontmatter && split.frontmatter.generated;
+  if (!generated || typeof generated !== "object" || Array.isArray(generated)) {
+    return null;
+  }
+  return { split, generated };
+}
+
+// A producer restamps generated.at on every run. Digesting the concept without
+// that stamp lets an unchanged source stay unchanged on disk instead of
+// rewriting every managed file, which keeps the publication diff truthful.
+function stableDigest(content) {
+  const parsed = generatedMapping(content);
+  if (!parsed || parsed.generated.at === undefined) return sha256(content);
+  const stable = Object.assign({}, parsed.split.frontmatter, {
+    generated: Object.fromEntries(
+      Object.entries(parsed.generated).filter(([key]) => key !== "at"),
+    ),
+  });
+  return sha256(`${canonical(stable)}\u0000${parsed.split.body}`);
+}
+
+// Only concepts that carry their own generation provenance may be rewritten or
+// removed on a manifest claim. A hand-authored file that a damaged or forged
+// manifest lists stays on disk.
+function hasGeneratedProvenance(content) {
+  const parsed = generatedMapping(content);
+  return Boolean(parsed && (parsed.generated.by !== undefined || parsed.generated.at !== undefined));
 }
 
 function isInside(root, target) {
@@ -113,38 +163,78 @@ function readManifest(root, producer) {
 }
 
 function verifyOwnedFiles(root, owned) {
+  const contents = new Map();
   owned.forEach((expected, relativePath) => {
     assertRegularPath(root, relativePath);
     const absolutePath = path.join(root, ...relativePath.split("/"));
-    if (!fs.existsSync(absolutePath) || sha256(fs.readFileSync(absolutePath)) !== expected) {
+    if (!fs.existsSync(absolutePath)) {
       throw new ProducerPublicationError("A producer-owned file changed outside the producer.", "producer_owned_file_modified", { path: relativePath });
     }
+    const content = fs.readFileSync(absolutePath);
+    if (sha256(content) !== expected) {
+      throw new ProducerPublicationError("A producer-owned file changed outside the producer.", "producer_owned_file_modified", { path: relativePath });
+    }
+    contents.set(relativePath, content);
   });
+  return contents;
 }
 
 function inspectPublication(root, producer, files) {
   const manifestState = readManifest(root, producer);
   const owned = manifestState ? manifestState.owned : new Map();
-  verifyOwnedFiles(root, owned);
+  const ownedContents = verifyOwnedFiles(root, owned);
   const generated = new Map(files.map((file) => [file.path, file]));
   const changes = { create: [], update: [], delete: [], unchanged: [] };
+  // What each managed path will hold once publication finishes. A retained
+  // entry keeps the bytes already on disk, so the manifest stays truthful.
+  const effective = new Map();
   files.forEach((file) => {
     assertRegularPath(root, file.path);
     const absolutePath = path.join(root, ...file.path.split("/"));
     if (fs.existsSync(absolutePath) && !owned.has(file.path)) {
       throw new ProducerPublicationError("Producer output collides with an unowned file.", "producer_unowned_collision", { path: file.path });
     }
-    if (!owned.has(file.path)) changes.create.push(file.path);
-    else if (owned.get(file.path) === file.sha256) changes.unchanged.push(file.path);
-    else changes.update.push(file.path);
+    if (!owned.has(file.path)) {
+      changes.create.push(file.path);
+      effective.set(file.path, { path: file.path, sha256: file.sha256, content: file.content });
+      return;
+    }
+    const current = ownedContents.get(file.path);
+    if (owned.get(file.path) === file.sha256) {
+      changes.unchanged.push(file.path);
+      effective.set(file.path, { path: file.path, sha256: owned.get(file.path), content: file.content });
+      return;
+    }
+    if (current && stableDigest(current.toString("utf8")) === stableDigest(file.content)) {
+      changes.unchanged.push(file.path);
+      effective.set(file.path, {
+        path: file.path,
+        sha256: owned.get(file.path),
+        content: current.toString("utf8"),
+      });
+      return;
+    }
+    changes.update.push(file.path);
+    effective.set(file.path, { path: file.path, sha256: file.sha256, content: file.content });
   });
   owned.forEach((_digest, relativePath) => {
     if (!generated.has(relativePath)) changes.delete.push(relativePath);
+  });
+  changes.update.concat(changes.delete).forEach((relativePath) => {
+    const current = ownedContents.get(relativePath);
+    if (!current || !hasGeneratedProvenance(current.toString("utf8"))) {
+      throw new ProducerPublicationError(
+        "The ownership manifest claims a file that carries no generation provenance.",
+        "producer_manifest_claims_unmanaged_file",
+        { path: relativePath },
+      );
+    }
   });
   Object.values(changes).forEach((entries) => entries.sort());
   return {
     changes,
     owned,
+    effective: files.map((file) => effective.get(file.path)),
     previousManifest: manifestState && manifestState.manifest,
     previousManifestSha256: manifestState && manifestState.sha256,
   };
@@ -245,6 +335,25 @@ function restoreFiles(root, snapshots, published, createdDirectories) {
   }
 }
 
+function pruneEmptyDirectories(root, relativePaths) {
+  const visited = new Set();
+  relativePaths.forEach((relativePath) => {
+    let current = path.dirname(path.join(root, ...relativePath.split("/")));
+    while (isInside(root, current)
+      && path.resolve(current) !== path.resolve(root)
+      && !visited.has(current)) {
+      visited.add(current);
+      try {
+        if (fs.readdirSync(current).length > 0) break;
+        fs.rmdirSync(current);
+      } catch {
+        break;
+      }
+      current = path.dirname(current);
+    }
+  });
+}
+
 class ProducerPublisher {
   constructor(project, store) {
     this.project = project;
@@ -266,7 +375,7 @@ class ProducerPublisher {
     const inspection = this.inspect(producer, files);
     const root = inspection.root;
     const manifestPath = path.join(root, MANIFEST_NAME);
-    const manifestContent = `${JSON.stringify(manifestFor(producer, files), null, 2)}\n`;
+    const manifestContent = `${JSON.stringify(manifestFor(producer, inspection.effective), null, 2)}\n`;
     const changedPaths = inspection.changes.create
       .concat(inspection.changes.update, inspection.changes.delete);
     if (changedPaths.length === 0 && inspection.previousManifestSha256 === sha256(manifestContent)) {
@@ -326,6 +435,7 @@ class ProducerPublisher {
       atomicWrite(root, manifestPath, manifestContent, createdDirectories);
       published.set(manifestPath, { exists: true, content: Buffer.from(manifestContent) });
       if (validatePersisted) await validatePersisted();
+      pruneEmptyDirectories(root, inspection.changes.delete);
       return inspection.changes;
     } catch (error) {
       try {
@@ -341,6 +451,8 @@ class ProducerPublisher {
 
 module.exports = {
   MANIFEST_NAME,
+  hasGeneratedProvenance,
+  stableDigest,
   ProducerPublicationError,
   ProducerPublisher,
   manifestFor,

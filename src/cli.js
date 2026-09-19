@@ -15,6 +15,8 @@ const { searchConcepts } = require("./search");
 const { conceptSummary } = require("./indexer");
 const { findOkfRoot, findProjectConfig, loadProjectConfig } = require("./project");
 const { generateProject } = require("./plugins");
+const { ProducerService, producerReceipt } = require("./producers");
+const { FileConceptStore } = require("./store");
 const { runStdioServer } = require("./mcp-server");
 const { fetchRemoteBundles } = require("./remote");
 const { runHttpServer } = require("./http-server");
@@ -32,8 +34,10 @@ const packageMetadata = require("../package.json");
 
 const COMMANDS = new Set([
   "mcp", "validate", "graph", "search", "concept", "neighbors", "paths", "generate", "serve",
-  "provenance", "edge-kinds", "computation", "asset", "source", "migrate",
+  "provenance", "edge-kinds", "computation", "asset", "source", "migrate", "producer",
 ]);
+const PRODUCER_ACTIONS = new Set(["list", "preview", "run"]);
+const WRITE_COMMANDS = new Set(["mcp", "producer"]);
 
 class UsageError extends Error {
   constructor(message) {
@@ -459,6 +463,7 @@ function usage() {
     "  okf-mcp --project <okf.project.yaml> <command>",
     "  okf-mcp [--project <okf.project.yaml>] [--authoring] [--write --actor <actor>] [--git-commit] mcp",
     "  okf-mcp --project <okf.project.yaml> serve [--host 127.0.0.1] [--port 8765]",
+    "  okf-mcp --project <okf.project.yaml> producer run <name> --write --actor <actor>",
     "  okf-mcp <command> --bundle <path-or-id=path>",
     "",
     "Commands:",
@@ -479,6 +484,9 @@ function usage() {
     "  migrate check [bundle]      Check staged v0.2 migration readiness.",
     "  migrate preview [bundle] [actor-mappings-json]",
     "  generate                    Run configured generator plugins.",
+    "  producer list               List configured external metadata producers.",
+    "  producer preview <name>     Validate one producer's candidate bundle without writing.",
+    "  producer run <name>         Publish one producer (requires --write --actor).",
     "  serve                       Start the HTTP OKF API server.",
     "",
     "Options:",
@@ -486,7 +494,7 @@ function usage() {
     "  --repo <concept-id=path>    Map a Git Repository concept to a checkout or bare repo; repeatable.",
     "  --authoring                 Enable MCP proposal authoring tools.",
     "  --write                     Enable direct validated-batch MCP concept writes (requires --actor).",
-    "  --actor <actor>             Stamp live writes with human:id, process:id, or provider/model.",
+    "  --actor <actor>             Stamp live writes and producer runs with human:id, process:id, or provider/model.",
     "  --git-commit                Commit each live write batch when the catalog is in a clean Git repo.",
     "  --allow-remote-tool         Enable runtime remote-bundle loading over MCP.",
     "  --allow-computation-authoring Enable coordinated computation proposals (also requires --authoring).",
@@ -668,8 +676,11 @@ async function main(argv, runtime) {
   if (!COMMANDS.has(command)) {
     throw usageError(`Unknown OKF command: ${command}`);
   }
-  if (command !== "mcp" && (args.write || args.actor || args.gitCommit)) {
-    throw usageError("--write, --actor, and --git-commit are available only with the mcp command.");
+  if (!WRITE_COMMANDS.has(command) && (args.write || args.actor || args.gitCommit)) {
+    throw usageError("--write, --actor, and --git-commit are available only with the mcp and producer commands.");
+  }
+  if (command === "producer" && args.gitCommit) {
+    throw usageError("--git-commit is available only with the mcp command.");
   }
   if (command === "mcp") {
     const bundles = resolveLegacyBundles(args);
@@ -714,6 +725,37 @@ async function main(argv, runtime) {
     }
     const project = loadProjectConfig(args.project);
     printJson(generateProject(project));
+    return;
+  }
+  if (command === "producer") {
+    if (!args.project) {
+      throw usageError("producer requires --project.");
+    }
+    const action = args.positional[1] || "list";
+    if (!PRODUCER_ACTIONS.has(action)) {
+      throw usageError("producer action must be list, preview, or run.");
+    }
+    const loaded = await loadProjectBundles(args.project);
+    const service = new ProducerService({
+      project: loaded.project,
+      store: FileConceptStore.fromProject(args.project, { proposalRoot: args.proposalRoot || "" }),
+      bundles: (loaded.bundles || []).filter((bundle) => !bundle.remote),
+    });
+    if (action === "list") {
+      printJson(service.list());
+      return;
+    }
+    const name = args.positional[2];
+    if (!name) {
+      throw usageError(`producer ${action} requires a configured producer name.`);
+    }
+    if (action === "run" && !args.write) {
+      throw usageError("producer run requires --write --actor <human:id|process:id|provider/model>.");
+    }
+    const receipt = action === "run" ? await service.run(name) : await service.preview(name);
+    printJson(producerReceipt(receipt, "full"));
+    const succeeded = action === "run" ? receipt.applied === true : receipt.valid === true;
+    process.exitCode = succeeded ? 0 : 1;
     return;
   }
   const index = await loadIndex(args);

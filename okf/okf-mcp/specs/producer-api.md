@@ -21,4 +21,6 @@ The host supplies a configured bundle ID, normalized trusted configuration, one 
 
 Producer configuration comes only from `okf.project.yaml`. MCP callers select one configured instance and cannot replace its package, bundle, configuration, credentials, queries, or output location. Packages are already installed and are resolved from the trusted project root; okf-mcp never installs or fetches producer code.
 
+Resolution requires the exact bare package name to be installed under a project `node_modules` directory, and the entry node resolves must belong to that installed package. Registry installs, workspaces, links, and store-backed layouts all qualify, because a symbolic link inside `node_modules` is an install-tool detail rather than a trust boundary. A path written into configuration never resolves.
+
 The producer declaration is not proof of conformance. The [producer host](../runtime/producer-host.md) independently parses and validates every candidate and the complete future project before publication.

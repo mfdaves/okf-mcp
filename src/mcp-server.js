@@ -31,7 +31,7 @@ const {
 } = require("./live-authoring");
 const { FileConceptStore } = require("./store");
 const { loadProjectConfig } = require("./project");
-const { ProducerService } = require("./producers");
+const { ProducerService, producerReceipt } = require("./producers");
 const {
   checkComputationReceipt,
   getProvenance,
@@ -839,32 +839,6 @@ function projectLiveReceipt(receipt, detail) {
   return compact;
 }
 
-function producerReceipt(receipt, detail) {
-  const instance = receipt.instance || {};
-  const result = {
-    producer: instance.name,
-    type: instance.type,
-    bundle: instance.bundle,
-    okfVersion: "0.2",
-    valid: receipt.valid === true,
-    readyToApply: receipt.readyToApply === true,
-    ...(receipt.applied !== undefined ? { applied: receipt.applied === true } : {}),
-    ...(receipt.conformant !== undefined ? { conformant: receipt.conformant === true } : {}),
-    ...(receipt.validForProject !== undefined ? { validForProject: receipt.validForProject === true } : {}),
-    ...(receipt.generatedAt ? { generatedAt: receipt.generatedAt } : {}),
-    counts: receipt.counts || { create: 0, update: 0, delete: 0, unchanged: 0 },
-    summary: receipt.summary || {},
-    diagnostics: Array.isArray(receipt.diagnostics) ? receipt.diagnostics.slice(0, 100) : [],
-  };
-  if (detail === "full" && receipt.changes) {
-    result.changes = {};
-    Object.entries(receipt.changes).forEach(([kind, entries]) => {
-      result.changes[kind] = entries.slice(0, 100);
-      if (entries.length > 100) result.changes[`${kind}Omitted`] = entries.length - 100;
-    });
-  }
-  return result;
-}
 
 function toolEnabled(state, name) {
   if (PRODUCER_TOOL_NAMES.has(name)) {

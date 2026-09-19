@@ -154,6 +154,9 @@ okf --project okf.project.yaml validate
 okf --project okf.project.yaml search "orders"
 okf --project okf.project.yaml graph mermaid
 okf --project okf.project.yaml generate
+okf --project okf.project.yaml producer list
+okf --project okf.project.yaml producer preview main-database
+okf --project okf.project.yaml producer run main-database --write --actor process:nightly-refresh
 okf --project okf.project.yaml mcp
 okf --project okf.project.yaml mcp --authoring
 okf --project okf.project.yaml mcp --allow-remote-tool
@@ -177,21 +180,40 @@ Commands:
 - `source <concept-id-or-locator> <source-id>`
 - `migrate check|preview`
 - `generate`
+- `producer list|preview|run`
 - `serve`
 
 ### External metadata producers
 
 Producers are separate from the built-in `plugins:` generators. A producer reads metadata from an external source and returns an in-memory candidate OKF bundle; `okf-mcp` validates and publishes that candidate. Install each producer package alongside the project, then allowlist its exact bare package name in the trusted project configuration. MCP callers can select a configured producer but cannot replace its package, configuration, credentials, queries, bundle, or output paths.
 
+The package must be installed under a `node_modules` directory belonging to the project, resolved by its exact bare name. Ordinary registry installs, npm workspaces, `npm link`, and store-backed layouts such as pnpm all satisfy this; a path in configuration never does.
+
 The package must export the versioned `okfProducer` API. Producer API v1 targets OKF v0.2 and separates `validateConfig()` from side-effect-free destination generation. Candidate concepts require native `generated` and non-empty `sources` provenance. The host rejects unsafe paths, malformed concepts, unresolved links or typed relations, unowned file collisions, locally modified managed files, secret values in output, and any candidate that would leave the complete project invalid.
+
+Both interfaces run the same host. Use the CLI for scheduled refreshes:
+
+```bash
+okf --project okf.project.yaml producer preview main-database
+okf --project okf.project.yaml producer run main-database --write --actor process:nightly-refresh
+```
+
+`producer preview` exits `1` when the candidate is invalid; `producer run` exits `1` when nothing was published. Both print the same receipt the MCP tools return.
 
 For a configured project, MCP exposes:
 
 - `okf_list_producers`: list configuration without loading package code or reading the source
 - `okf_preview_producer`: read source metadata and return a validated, non-writing diff
-- `okf_run_producer`: regenerate under the shared writer queue and publish with revision checks and rollback; available only with `--write --actor <actor>`
+- `okf_run_producer`: regenerate under the shared writer queue and publish with revision checks and rollback; available only with `--write` plus a truthful `--actor` using `human:<id>`, `process:<id>`, or `provider/model` syntax
 
 Preview and run accept only the configured producer name plus optional receipt detail. Receipts include bounded numeric source-object summaries and publication-diff counts. Publication records owned relative paths and SHA-256 digests in the bundle-local `.okf-producer.json`. Only unchanged paths owned by the prior manifest can be updated or removed; hand-authored content is never adopted implicitly. The manifest contains no producer configuration, credentials, or connection details.
+
+Two rules keep a managed bundle stable across repeated runs:
+
+- A producer restamps `generated.at` on every run. The host compares each candidate against the published file ignoring that stamp, so a source that did not change reports `unchanged` and leaves the bytes, the timestamps, and the manifest untouched. Publication-diff counts therefore describe the source, not the run.
+- A manifest entry alone is not authority to destroy work. Any file the host would rewrite or remove must itself carry `generated` provenance, so a damaged, hand-merged, or forged manifest cannot make a producer delete hand-authored content.
+
+Directories emptied by a stale deletion are removed with their last managed file.
 
 `@mfdaves/okf-postgres` is the PostgreSQL implementation. Its average-use v1 covers database, schema, table/view, column, key, check, enum, index, and description metadata without reading table rows. Keep connection strings in an environment variable named by `connectionEnv`; do not place a connection string in YAML.
 

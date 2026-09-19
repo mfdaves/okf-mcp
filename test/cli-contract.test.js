@@ -167,7 +167,12 @@ test("CLI forwards live authoring policy only when explicitly enabled", async ()
 
   await assert.rejects(
     main(["--write", "--actor", "openai/gpt-5.6", "validate"], { cwd: fixture.nested }),
-    /available only with the mcp command/,
+    /available only with the mcp and producer commands/,
+  );
+
+  await assert.rejects(
+    main(["--write", "--actor", "openai/gpt-5.6", "--git-commit", "producer", "run", "x"], { cwd: fixture.nested }),
+    /--git-commit is available only with the mcp command/,
   );
 });
 
@@ -265,4 +270,38 @@ test("CLI graph and concept commands reject reserved or unknown concept identiti
     main(["--project", fixture.projectPath, "paths", "okf://cli/missing", "okf://cli/missing"]),
     /Unknown OKF concept URI/,
   );
+});
+
+test("the producer command validates its action and gates publication behind --write", async (t) => {
+  const fixture = makeProject();
+  t.after(() => fs.rmSync(fixture.root, { recursive: true, force: true }));
+  const projectPath = path.join(fixture.root, "okf.project.yaml");
+
+  await assert.rejects(
+    main(["--project", projectPath, "producer", "rewrite", "primary-db"], {}),
+    /producer action must be list, preview, or run/,
+  );
+  await assert.rejects(
+    main(["--project", projectPath, "producer", "preview"], {}),
+    /producer preview requires a configured producer name/,
+  );
+  await assert.rejects(
+    main(["--project", projectPath, "producer", "run", "primary-db"], {}),
+    /producer run requires --write/,
+  );
+  await assert.rejects(
+    main(["--root", fixture.bundle, "producer", "list"], {}),
+    /producer requires --project/,
+  );
+
+  // A project without producers still lists cleanly rather than failing.
+  const printed = [];
+  const write = process.stdout.write;
+  process.stdout.write = (chunk) => { printed.push(String(chunk)); return true; };
+  try {
+    await main(["--project", projectPath, "producer", "list"], {});
+  } finally {
+    process.stdout.write = write;
+  }
+  assert.deepEqual(JSON.parse(printed.join("")), []);
 });

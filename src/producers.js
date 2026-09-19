@@ -68,6 +68,37 @@ function isInside(root, target) {
   return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
 }
 
+// Every node_modules directory node would consult for the project, nearest
+// first. Hoisted, workspace, and store-backed installs all land in one of
+// these even when the package directory itself is a symbolic link.
+function moduleDirectories(projectRoot) {
+  const directories = [];
+  let current = path.resolve(projectRoot);
+  for (;;) {
+    directories.push(path.join(current, "node_modules"));
+    const parent = path.dirname(current);
+    if (parent === current) break;
+    current = parent;
+  }
+  return directories;
+}
+
+// The bare package name must actually be installed in one of the project's
+// node_modules directories. Node resolves symbolic links away, so the install
+// location is located lexically first and then tied back to the resolved entry.
+function locateInstalledPackage(projectRoot, projectPath, packageName) {
+  const roots = moduleDirectories(projectRoot)
+    .concat(moduleDirectories(path.dirname(projectPath)));
+  const seen = new Set();
+  for (const directory of roots) {
+    if (seen.has(directory)) continue;
+    seen.add(directory);
+    const candidate = path.join(directory, ...packageName.split("/"));
+    if (fs.existsSync(path.join(candidate, "package.json"))) return candidate;
+  }
+  return null;
+}
+
 function loadInstalledProducer(project, packageName) {
   let resolved;
   try {
@@ -78,15 +109,31 @@ function loadInstalledProducer(project, packageName) {
   if (!path.isAbsolute(resolved)) {
     throw new ProducerHostError("The configured producer package must resolve to an installed npm package.", "invalid_producer_package");
   }
-  const modulesRoot = path.join(fs.realpathSync(project.root), "node_modules");
+  let projectRoot;
+  try {
+    projectRoot = fs.realpathSync(project.root);
+  } catch {
+    projectRoot = path.resolve(project.root);
+  }
+  const projectPath = path.resolve(project.path);
+  const installDirectory = locateInstalledPackage(projectRoot, projectPath, packageName);
+  if (!installDirectory) {
+    throw new ProducerHostError("The configured producer package must be installed under a project node_modules directory.", "invalid_producer_package");
+  }
+  let realInstall;
   let realResolved;
   try {
+    realInstall = fs.realpathSync(installDirectory);
     realResolved = fs.realpathSync(resolved);
   } catch {
     throw new ProducerHostError("The configured producer package could not be resolved safely.", "invalid_producer_package");
   }
-  if (!isInside(modulesRoot, realResolved)) {
-    throw new ProducerHostError("The configured producer package must be installed under the project node_modules directory.", "invalid_producer_package");
+  // A workspace or linked install points out of node_modules; that is an
+  // install-tool detail, and anything able to write there can already run
+  // install scripts. What must hold is that the entry node resolved belongs to
+  // the package the project installed under that exact bare name.
+  if (!isInside(realInstall, realResolved)) {
+    throw new ProducerHostError("The configured producer package must resolve inside its installed package directory.", "invalid_producer_package");
   }
   return require(realResolved);
 }
@@ -232,6 +279,33 @@ function normalizeSummary(value) {
   return Object.fromEntries(entries.sort(([left], [right]) => left.localeCompare(right)));
 }
 
+function producerReceipt(receipt, detail) {
+  const instance = receipt.instance || {};
+  const result = {
+    producer: instance.name,
+    type: instance.type,
+    bundle: instance.bundle,
+    okfVersion: "0.2",
+    valid: receipt.valid === true,
+    readyToApply: receipt.readyToApply === true,
+    ...(receipt.applied !== undefined ? { applied: receipt.applied === true } : {}),
+    ...(receipt.conformant !== undefined ? { conformant: receipt.conformant === true } : {}),
+    ...(receipt.validForProject !== undefined ? { validForProject: receipt.validForProject === true } : {}),
+    ...(receipt.generatedAt ? { generatedAt: receipt.generatedAt } : {}),
+    counts: receipt.counts || { create: 0, update: 0, delete: 0, unchanged: 0 },
+    summary: receipt.summary || {},
+    diagnostics: Array.isArray(receipt.diagnostics) ? receipt.diagnostics.slice(0, 100) : [],
+  };
+  if (detail === "full" && receipt.changes) {
+    result.changes = {};
+    Object.entries(receipt.changes).forEach(([kind, entries]) => {
+      result.changes[kind] = entries.slice(0, 100);
+      if (entries.length > 100) result.changes[`${kind}Omitted`] = entries.length - 100;
+    });
+  }
+  return result;
+}
+
 class ProducerService {
   constructor(options) {
     const config = options || {};
@@ -348,7 +422,8 @@ class ProducerService {
       }
       throw new ProducerHostError("Producer publication preflight failed.", "producer_publication_preflight_failed");
     }
-    const candidateFiles = files.map((file) => Object.assign({ bundle: instance.bundle }, file));
+    const candidateFiles = (inspection.effective || files)
+      .map((file) => Object.assign({ bundle: instance.bundle }, file));
     const stalePaths = inspection.changes.delete.map((relativePath) => ({ bundle: instance.bundle, path: relativePath }));
     const candidate = buildCandidate(
       this.project,
@@ -425,6 +500,7 @@ module.exports = {
   buildCandidate,
   loadInstalledProducer,
   normalizeSummary,
+  producerReceipt,
   publicDiagnostic,
   validateCandidate,
   validateDescriptor,

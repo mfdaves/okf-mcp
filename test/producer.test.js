@@ -9,7 +9,7 @@ const test = require("node:test");
 const { isConfiguredGeneratorOutput } = require("../src/authoring");
 const { loadProjectConfig } = require("../src/project");
 const { ProducerService, loadInstalledProducer } = require("../src/producers");
-const { normalizeProducedFiles } = require("../src/producer-publisher");
+const { normalizeProducedFiles, sha256 } = require("../src/producer-publisher");
 const { FileConceptStore } = require("../src/store");
 const { callJson, connectMcp } = require("./mcp-client");
 
@@ -291,4 +291,105 @@ test("producer-managed bundle roots are protected from ordinary authoring", (t) 
   t.after(() => fs.rmSync(fixture.root, { recursive: true, force: true }));
   const project = loadProjectConfig(fixture.projectPath);
   assert.equal(isConfiguredGeneratorOutput(project, path.join(fixture.bundle, "anything.md")), true);
+});
+
+test("an unchanged source keeps published bytes instead of restamping every file", async (t) => {
+  const fixture = makeProject();
+  t.after(() => fs.rmSync(fixture.root, { recursive: true, force: true }));
+  let stamp = "2026-08-20T10:00:00.000Z";
+  const generate = async () => ({ files: output() });
+  const service = () => serviceFor(fixture, generate, { now: () => new Date(stamp) });
+
+  const first = await service().run("primary-db");
+  assert.equal(first.applied, true);
+  assert.deepEqual(first.counts, { create: 2, update: 0, delete: 0, unchanged: 0 });
+
+  const conceptPath = path.join(fixture.bundle, "database.md");
+  const published = fs.readFileSync(conceptPath, "utf8");
+  const manifestPath = path.join(fixture.bundle, ".okf-producer.json");
+  const manifest = fs.readFileSync(manifestPath, "utf8");
+
+  // Only the generation stamp moves; the catalog must not churn.
+  stamp = "2026-09-01T12:30:00.000Z";
+  const second = await service().run("primary-db");
+  assert.equal(second.applied, true);
+  assert.deepEqual(second.counts, { create: 0, update: 0, delete: 0, unchanged: 2 });
+  assert.equal(fs.readFileSync(conceptPath, "utf8"), published);
+  assert.equal(fs.readFileSync(manifestPath, "utf8"), manifest);
+
+  // A real content change still publishes.
+  const changed = await serviceFor(fixture, async () => ({ files: output("Renamed database") }), {
+    now: () => new Date(stamp),
+  }).run("primary-db");
+  assert.equal(changed.applied, true);
+  assert.deepEqual(changed.counts, { create: 0, update: 1, delete: 0, unchanged: 1 });
+  assert.match(fs.readFileSync(conceptPath, "utf8"), /Renamed database/);
+});
+
+test("a manifest claim cannot rewrite or remove a concept without generation provenance", async (t) => {
+  const fixture = makeProject();
+  t.after(() => fs.rmSync(fixture.root, { recursive: true, force: true }));
+  const generate = async () => ({ files: output() });
+  assert.equal((await serviceFor(fixture, generate).run("primary-db")).applied, true);
+
+  const handAuthored = path.join(fixture.bundle, "hand-authored.md");
+  fs.writeFileSync(handAuthored, [
+    "---",
+    "type: Note",
+    "title: Hand authored",
+    "description: Never producer managed.",
+    "---",
+    "",
+    "# Hand authored",
+    "",
+  ].join("\n"), "utf8");
+  const manifestPath = path.join(fixture.bundle, ".okf-producer.json");
+  const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+  manifest.files.push({ path: "hand-authored.md", sha256: sha256(fs.readFileSync(handAuthored)) });
+  fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+
+  const result = await serviceFor(fixture, generate).run("primary-db");
+  assert.equal(result.applied, false);
+  assert.equal(result.diagnostics.some((entry) => entry.code === "producer_manifest_claims_unmanaged_file"), true);
+  assert.equal(fs.existsSync(handAuthored), true);
+});
+
+test("publication prunes directories emptied by stale deletions", async (t) => {
+  const fixture = makeProject();
+  t.after(() => fs.rmSync(fixture.root, { recursive: true, force: true }));
+  const nested = () => output().concat([{
+    path: "views/public/report.md",
+    content: output()[1].content.replace("Application database", "Report view"),
+  }]);
+  assert.equal((await serviceFor(fixture, async () => ({ files: nested() })).run("primary-db")).applied, true);
+  assert.equal(fs.existsSync(path.join(fixture.bundle, "views", "public")), true);
+
+  const pruned = await serviceFor(fixture, async () => ({ files: output() })).run("primary-db");
+  assert.equal(pruned.applied, true);
+  assert.deepEqual(pruned.changes.delete, ["views/public/report.md"]);
+  assert.equal(fs.existsSync(path.join(fixture.bundle, "views")), false);
+});
+
+test("workspace and linked producer installs resolve through their node_modules entry", (t) => {
+  const fixture = makeProject();
+  t.after(() => fs.rmSync(fixture.root, { recursive: true, force: true }));
+  // A workspace install links node_modules/<name> at the real package directory.
+  const real = path.join(fixture.root, "packages", "okf-postgres");
+  fs.mkdirSync(real, { recursive: true });
+  fs.writeFileSync(path.join(real, "package.json"), JSON.stringify({
+    name: "@fixture/okf-postgres",
+    version: "0.1.0",
+    main: "index.js",
+  }));
+  fs.writeFileSync(path.join(real, "index.js"), "module.exports = { okfProducer: { id: 'postgresql' } };\n");
+  const linkParent = path.join(fixture.root, "node_modules", "@fixture");
+  fs.mkdirSync(linkParent, { recursive: true });
+  fs.symlinkSync(real, path.join(linkParent, "okf-postgres"), "dir");
+
+  const project = loadProjectConfig(fixture.projectPath);
+  assert.equal(loadInstalledProducer(project, "@fixture/okf-postgres").okfProducer.id, "postgresql");
+  assert.throws(
+    () => loadInstalledProducer(project, "@fixture/not-installed"),
+    /not installed/,
+  );
 });
