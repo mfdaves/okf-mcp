@@ -18,8 +18,8 @@
     "okf-mcp": "bin/okf-mcp.js"
   },
   "scripts": {
-    "test": "node --test",
-    "check": "node --test",
+    "test": "node --test \"test/*.test.js\"",
+    "check": "node --test \"test/*.test.js\"",
     "lint": "biome lint",
     "format": "biome format --write",
     "format:check": "biome format",

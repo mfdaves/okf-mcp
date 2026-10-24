@@ -1,0 +1,2 @@
+# Fixture bundles are compared byte-for-byte against their generator (test/retrieval-fixtures.test.js).
+test/fixtures/retrieval/** text eol=lf

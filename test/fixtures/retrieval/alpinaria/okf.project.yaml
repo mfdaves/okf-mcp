@@ -1,0 +1,24 @@
+project: alpinaria-seo-agent
+bundles:
+  - id: alpinaria
+    root: bundles/alpinaria
+    include: ["*.md", "**/*.md"]
+  - id: playbook
+    root: bundles/playbook
+    include: ["*.md", "**/*.md"]
+relationTypes:
+  - targets_cluster
+  - targets_page
+  - promotes_line
+  - promoted_by
+  - belongs_to_line
+  - for_audience
+  - affects_page
+  - tests_page
+  - informed_by
+  - applies_policy
+  - resolves
+  - resolved_by
+  - documented_in
+  - refreshes_page
+strictLinks: true
