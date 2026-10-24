@@ -609,17 +609,37 @@ Use `list_remote_bundles` to inspect what was loaded.
 - `limit`
 - `offset`
 
-`list_concepts` also accepts a text `query` and applies it together with its
-listing filters. Text search tokenizes case-insensitively and requires every
-query term, regardless of order. BM25+ ranks title, type, tags, aliases,
-description, path, and body matches; frontmatter remains available through
-exact structured filters but is not copied into the text index. Scores are
-relative within a result set and are not a stable cross-version scale. Compact results contain only `uri`, `title`, `type`, and `description`; title, type, and description are bounded, while full results remain lossless.
+`list_concepts` also accepts a text `query` (and `mode`) and applies it
+together with its listing filters. Text search tokenizes case-insensitively,
+folds diacritics, drops stop words and single letters, and stems every term
+with the catalog's languages (English and Italian at 1.0). `mode` is `auto`
+by default since 0.10: every term must match, and when nothing does the
+search falls back to any-term matching; `all` restores the pre-0.10
+behaviour and `any` ranks anything matching one term. BM25+ ranks title,
+type, tags, aliases, description, path, body, and an exact field (ids,
+paths, aliases, raw title tokens) that is never stemmed, so identifiers and
+SKUs still match literally; frontmatter remains available through exact
+structured filters but is not copied into the text index. Scores are
+relative within a result set and are not a stable cross-version scale; use
+ordering and `relevance` instead.
 
-Queries are bounded to 512 characters and 16 terms. Prefix expansion, fuzzy
-matching, stemming, and stop-word removal are intentionally disabled so code
-identifiers and domain terminology remain literal. Punctuation-only queries
-return no matches. Tags and types are matched case-insensitively. Arbitrary
+Query responses report `mode` (the one that ran), `queryTerms`,
+`droppedTerms`, `allTermsTotal` (concepts matching every term, also under
+`any`) and `lowConfidence`, true when the any-term fallback produced the page
+and its top result matched fewer than half of the terms. Each result carries
+`coverage` (share of query terms matched), `relevance` (score over the top
+score) and, in full detail, `matchedTerms`. Opt-in floors `minCoverage` and
+`minRelevance` drop weaker results; `freshnessPrior` down-weights deprecated
+(0.5), stale (0.7), and draft (0.85) concepts. Compact results contain
+`uri`, `title`, `type`, `description`, `coverage`, and `relevance`; title,
+type, and description are bounded, while full results remain lossless.
+
+Queries are bounded to 512 characters and 16 terms after stop words. Prefix
+expansion and fuzzy matching are intentionally disabled. The stemming
+languages come from the project config key `languages` (`auto`, `none`, or
+codes such as `[it, en]`) or `--languages` in `--root` mode; `auto` detects
+each bundle's languages from its documents. Punctuation-only queries return
+no matches. Tags and types are matched case-insensitively. Arbitrary
 frontmatter filters support exact scalar matching and array-contains
 matching. `relationType` selects concepts with an outgoing relation of that
 type.

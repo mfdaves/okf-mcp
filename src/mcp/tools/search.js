@@ -1,7 +1,7 @@
 "use strict";
 
-const { searchConcepts } = require("../../search");
-const { MAX_QUERY_CHARACTERS, MAX_QUERY_TERMS } = require("../../search-index");
+const { MAX_QUERY_CHARACTERS, MAX_QUERY_TERMS } = require("../../search/lexical");
+const { SEARCH_MODES, searchConcepts } = require("../../search/query");
 const {
   READ_ONLY,
   booleanParameter,
@@ -16,6 +16,38 @@ const {
   stringArrayParameter,
   stringParameter,
 } = require("../registry");
+
+// R-11: the description asks for keywords in the catalog's languages and exact
+// identifiers, and explains the confidence fields. It must stay free of
+// catalog text (B-6, S-3): it is composed from constants only.
+const QUERY_GUIDANCE =
+  "Write it as keywords in the catalog's languages (Italian and English word endings and " +
+  "accents are normalised) and include identifiers, codes, paths and SKUs verbatim, in quotes " +
+  "if you like: they match exactly against ids, paths, aliases and titles. Leave out question " +
+  "words; stop words and single letters are dropped.";
+
+const SEARCH_DESCRIPTION =
+  "Search OKF concepts with a text query and structured filters; returns ranked summaries " +
+  `with match confidence. ${QUERY_GUIDANCE} Mode auto requires every term and falls back to ` +
+  "any-term matching when nothing matches all of them. The response reports the mode that " +
+  "ran, queryTerms and droppedTerms, allTermsTotal (how many concepts match every term), and " +
+  "lowConfidence, true when the any-term fallback produced the page and its best result " +
+  "matched fewer than half of the terms: treat such results as weak and rephrase or narrow " +
+  "with filters. Each result carries coverage (share of query terms it matched) and relevance " +
+  "(score relative to the top result).";
+
+const MODE_DESCRIPTION =
+  "auto requires every term and falls back to any-term matching when that returns nothing; " +
+  "all requires every term (the pre-0.10 behaviour); any ranks concepts matching at least one " +
+  "term. The response's mode field says which one ran.";
+
+function modeParameter() {
+  return stringParameter(MODE_DESCRIPTION, { enum: SEARCH_MODES.slice(), default: "auto" });
+}
+
+function unitIntervalParameter(description) {
+  return { type: "number", description, minimum: 0, maximum: 1 };
+}
 
 function listConcepts(index, args) {
   const options = Object.assign({ detail: "compact" }, args || {});
@@ -35,14 +67,15 @@ const tools = {
       READ_ONLY,
       {
         query: stringParameter(
-          `Optional all-term text query matched against concept metadata and content; maximum ${MAX_QUERY_TERMS} terms.`,
+          `Optional text query applied together with the listing filters; maximum ${MAX_QUERY_TERMS} terms after stop words. ${QUERY_GUIDANCE}`,
           { maxLength: MAX_QUERY_CHARACTERS },
         ),
+        mode: modeParameter(),
         bundle: nonEmptyStringParameter("Limit results to this bundle id."),
         type: nonEmptyStringParameter("Limit results to this exact concept type."),
         tag: nonEmptyStringParameter("Limit results to concepts containing this tag."),
         detail: detailParameter(
-          "Compact returns only URI, title, type, and description; full includes navigation metadata and signals.",
+          "Compact returns only URI, title, type, and description, plus coverage and relevance when a query is given; full includes navigation metadata and signals.",
         ),
         limit: integerParameter("Maximum number of concepts to return.", 1, 250, 25),
         offset: integerParameter(
@@ -53,74 +86,83 @@ const tools = {
         ),
       },
     ),
-    handler: (state, args) => jsonContent(listConcepts(state.index, args)),
+    handler: async (state, args) =>
+      jsonContent(
+        await expectedToolOperation(() => listConcepts(state.index, args), {
+          translateTypeError: true,
+        }),
+      ),
   },
   search_concepts: {
-    ...defineTool(
-      "Search OKF concepts and return ranked summaries using text and structured filters.",
-      READ_ONLY,
-      {
-        query: stringParameter(
-          `All-term text query matched against concept metadata and content; maximum ${MAX_QUERY_TERMS} terms.`,
-          { maxLength: MAX_QUERY_CHARACTERS },
-        ),
-        bundle: nonEmptyStringParameter("Limit results to this bundle id."),
-        types: stringArrayParameter("Limit results to any of these concept types.", {
-          nonEmptyItems: true,
-        }),
-        tagsAny: stringArrayParameter("Require at least one of these tags.", {
-          nonEmptyItems: true,
-        }),
-        tagsAll: stringArrayParameter("Require all of these tags.", { nonEmptyItems: true }),
-        pathPrefix: stringParameter(
-          "Limit results to bundle relative paths beginning with this prefix.",
-        ),
-        relationType: nonEmptyStringParameter(
-          "Limit results to concepts with an outgoing relation of this type.",
-        ),
-        frontmatter: objectParameter(
-          "Exact frontmatter filters; array fields use contains matching.",
-        ),
-        linkedTo: nonEmptyStringParameter("Require an outgoing edge to this concept URI."),
-        linkedFrom: nonEmptyStringParameter("Require an incoming edge from this concept URI."),
-        orphanOnly: booleanParameter(
-          "Return only concepts without incoming or outgoing resolved edges.",
-        ),
-        statuses: stringArrayParameter("Limit results to lifecycle statuses.", {
-          nonEmptyItems: true,
-        }),
-        trustTiers: stringArrayParameter(
-          "Limit results to unverified, machine-confirmed, or human-reviewed trust tiers.",
-          { nonEmptyItems: true },
-        ),
-        freshness: stringArrayParameter(
-          "Limit results to unspecified, fresh, stale, or invalid freshness states.",
-          { nonEmptyItems: true },
-        ),
-        asOf: nonEmptyStringParameter(
-          "UTC ISO date or datetime used for deterministic freshness evaluation.",
-        ),
-        hasSources: optionalBooleanParameter(
-          "Require concepts to have or not have normalized sources.",
-        ),
-        runtime: nonEmptyStringParameter("Limit results to this Attested Computation runtime."),
-        attestationReady: optionalBooleanParameter(
-          "Require static Attested Computation readiness.",
-        ),
-        generatedBy: nonEmptyStringParameter("Limit results to this generator actor."),
-        verifiedBy: nonEmptyStringParameter("Limit results to concepts verified by this actor."),
-        detail: detailParameter(
-          "Compact returns only URI, title, type, and description; full includes ranking, navigation metadata, and signals.",
-        ),
-        limit: integerParameter("Maximum number of concepts to return.", 1, 250, 25),
-        offset: integerParameter(
-          "Number of matching concepts to skip before returning results.",
-          0,
-          undefined,
-          0,
-        ),
-      },
-    ),
+    ...defineTool(SEARCH_DESCRIPTION, READ_ONLY, {
+      query: stringParameter(
+        `Text query matched against concept metadata and content; maximum ${MAX_QUERY_TERMS} terms after stop words. ${QUERY_GUIDANCE}`,
+        { maxLength: MAX_QUERY_CHARACTERS },
+      ),
+      mode: modeParameter(),
+      minCoverage: unitIntervalParameter(
+        "Drop results that matched a smaller share of the query terms than this; off by default. Can leave total at 0.",
+      ),
+      minRelevance: unitIntervalParameter(
+        "Drop results whose score relative to the top result is below this; off by default. Can leave total at 0.",
+      ),
+      freshnessPrior: booleanParameter(
+        "Multiply scores by 0.5 for deprecated, 0.7 for stale, and 0.85 for draft concepts before ranking; off by default.",
+      ),
+      bundle: nonEmptyStringParameter("Limit results to this bundle id."),
+      types: stringArrayParameter("Limit results to any of these concept types.", {
+        nonEmptyItems: true,
+      }),
+      tagsAny: stringArrayParameter("Require at least one of these tags.", {
+        nonEmptyItems: true,
+      }),
+      tagsAll: stringArrayParameter("Require all of these tags.", { nonEmptyItems: true }),
+      pathPrefix: stringParameter(
+        "Limit results to bundle relative paths beginning with this prefix.",
+      ),
+      relationType: nonEmptyStringParameter(
+        "Limit results to concepts with an outgoing relation of this type.",
+      ),
+      frontmatter: objectParameter(
+        "Exact frontmatter filters; array fields use contains matching.",
+      ),
+      linkedTo: nonEmptyStringParameter("Require an outgoing edge to this concept URI."),
+      linkedFrom: nonEmptyStringParameter("Require an incoming edge from this concept URI."),
+      orphanOnly: booleanParameter(
+        "Return only concepts without incoming or outgoing resolved edges.",
+      ),
+      statuses: stringArrayParameter("Limit results to lifecycle statuses.", {
+        nonEmptyItems: true,
+      }),
+      trustTiers: stringArrayParameter(
+        "Limit results to unverified, machine-confirmed, or human-reviewed trust tiers.",
+        { nonEmptyItems: true },
+      ),
+      freshness: stringArrayParameter(
+        "Limit results to unspecified, fresh, stale, or invalid freshness states.",
+        { nonEmptyItems: true },
+      ),
+      asOf: nonEmptyStringParameter(
+        "UTC ISO date or datetime used for deterministic freshness evaluation.",
+      ),
+      hasSources: optionalBooleanParameter(
+        "Require concepts to have or not have normalized sources.",
+      ),
+      runtime: nonEmptyStringParameter("Limit results to this Attested Computation runtime."),
+      attestationReady: optionalBooleanParameter("Require static Attested Computation readiness."),
+      generatedBy: nonEmptyStringParameter("Limit results to this generator actor."),
+      verifiedBy: nonEmptyStringParameter("Limit results to concepts verified by this actor."),
+      detail: detailParameter(
+        "Compact returns URI, title, type, description, coverage, and relevance; full adds score, snippet, matchedTerms, navigation metadata, and signals.",
+      ),
+      limit: integerParameter("Maximum number of concepts to return.", 1, 250, 25),
+      offset: integerParameter(
+        "Number of matching concepts to skip before returning results.",
+        0,
+        undefined,
+        0,
+      ),
+    }),
     handler: async (state, args) =>
       jsonContent(
         await expectedToolOperation(

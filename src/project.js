@@ -3,6 +3,7 @@
 const fs = require("fs");
 const path = require("path");
 const { parseFrontmatterYaml, splitFrontmatter } = require("./parser");
+const { normalizeLanguages } = require("./search/languages");
 
 const DEFAULT_RELATION_TYPES = [
   "depends_on",
@@ -368,6 +369,29 @@ function normalizeProducers(config, localBundleIds, errors) {
     .filter(Boolean);
 }
 
+// `languages`: "auto" (default), "none", or the stemming language codes for
+// lexical search (plan R-2); validated against the search language registry.
+function normalizeLanguagesConfig(config, errors) {
+  if (config.languages === undefined || config.languages === null) {
+    return "auto";
+  }
+  const value = config.languages;
+  if (typeof value !== "string" && !Array.isArray(value)) {
+    errors.push({
+      code: "invalid_languages",
+      field: "languages",
+      message: 'languages must be "auto", "none", or an array of language codes.',
+    });
+    return "auto";
+  }
+  try {
+    return normalizeLanguages(value);
+  } catch (error) {
+    errors.push({ code: "invalid_languages", field: "languages", message: error.message });
+    return "auto";
+  }
+}
+
 function normalizeRemoteBundles(config, errors) {
   const remotes = Array.isArray(config.remoteBundles) ? config.remoteBundles : [];
   if (config.remoteBundles !== undefined && !Array.isArray(config.remoteBundles)) {
@@ -453,6 +477,7 @@ function loadProjectConfig(configPath) {
   });
   validatePlugins(config, path.dirname(resolvedPath), allBundleIds, errors);
   const producers = normalizeProducers(config, localBundleIds, errors);
+  const languages = normalizeLanguagesConfig(config, errors);
   return {
     path: resolvedPath,
     root: path.dirname(resolvedPath),
@@ -463,6 +488,7 @@ function loadProjectConfig(configPath) {
     plugins: Array.isArray(config.plugins) ? config.plugins : [],
     producers,
     strictLinks: Boolean(config.strictLinks),
+    languages,
     errors,
     raw: config,
   };

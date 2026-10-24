@@ -5,7 +5,6 @@ const fs = require("fs");
 const {
   attachProject,
   buildIndex,
-  buildProjectIndexAsync,
   loadProjectBundles,
   resolveConcept,
   validateIndex,
@@ -14,6 +13,12 @@ const { exportGraph, findPaths, getNeighbors, graphSummary } = require("./graph"
 const { searchConcepts } = require("./search");
 const { conceptSummary } = require("./indexer");
 const { findOkfRoot, findProjectConfig, loadProjectConfig } = require("./project");
+const { normalizeLanguages } = require("./search/languages");
+const {
+  createSearchOptions,
+  parseSearchOption,
+  withSearchLanguages,
+} = require("./search/cli-options");
 const { generateProject } = require("./plugins");
 const { ProducerService, producerReceipt } = require("./producers");
 const { FileConceptStore } = require("./store");
@@ -114,6 +119,7 @@ function parseArgs(argv) {
   let gitCommit = false;
   let allowRemoteTool = false;
   let strictLinks = false;
+  let languages = "";
   let allowComputationAuthoring = false;
   let includeAssets = false;
   let includeExternal = false;
@@ -121,14 +127,7 @@ function parseArgs(argv) {
   let receiptFile = "";
   let maxContentBytes = 65536;
   const generatedPaths = [];
-  const search = {
-    types: [],
-    tagsAny: [],
-    statuses: [],
-    trustTiers: [],
-    freshness: [],
-    frontmatter: {},
-  };
+  const search = createSearchOptions();
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     if (arg === "--root" || arg === "-r") {
@@ -264,6 +263,19 @@ function parseArgs(argv) {
       strictLinks = true;
       continue;
     }
+    if (arg === "--languages") {
+      if (!argv[index + 1] || String(argv[index + 1]).startsWith("-")) {
+        throw usageError("--languages requires auto, none, or language codes such as it,en.");
+      }
+      try {
+        normalizeLanguages(argv[index + 1]);
+      } catch (error) {
+        throw usageError(`--languages: ${error.message}`);
+      }
+      languages = argv[index + 1];
+      index += 1;
+      continue;
+    }
     if (arg === "--include-assets") {
       includeAssets = true;
       continue;
@@ -302,57 +314,9 @@ function parseArgs(argv) {
       index += 1;
       continue;
     }
-    const searchValueOptions = {
-      "--type": "types",
-      "--tag": "tagsAny",
-      "--status": "statuses",
-      "--trust-tier": "trustTiers",
-      "--freshness": "freshness",
-    };
-    if (Object.prototype.hasOwnProperty.call(searchValueOptions, arg)) {
-      if (!argv[index + 1] || String(argv[index + 1]).startsWith("-")) {
-        throw usageError(`${arg} requires a value.`);
-      }
-      search[searchValueOptions[arg]].push(argv[index + 1]);
-      index += 1;
-      continue;
-    }
-    const scalarSearchOptions = {
-      "--as-of": "asOf",
-      "--runtime": "runtime",
-      "--linked-to": "linkedTo",
-      "--linked-from": "linkedFrom",
-      "--relation-type": "relationType",
-      "--path-prefix": "pathPrefix",
-    };
-    if (Object.prototype.hasOwnProperty.call(scalarSearchOptions, arg)) {
-      if (!argv[index + 1] || String(argv[index + 1]).startsWith("-")) {
-        throw usageError(`${arg} requires a value.`);
-      }
-      search[scalarSearchOptions[arg]] = argv[index + 1];
-      index += 1;
-      continue;
-    }
-    if (arg === "--frontmatter") {
-      const value = argv[index + 1];
-      const separator = value && value.indexOf("=");
-      if (!value || separator <= 0) {
-        throw usageError("--frontmatter requires key=value.");
-      }
-      search.frontmatter[value.slice(0, separator)] = value.slice(separator + 1);
-      index += 1;
-      continue;
-    }
-    if (arg === "--has-sources" || arg === "--no-sources") {
-      search.hasSources = arg === "--has-sources";
-      continue;
-    }
-    if (arg === "--attestation-ready") {
-      search.attestationReady = true;
-      continue;
-    }
-    if (arg === "--orphan-only") {
-      search.orphanOnly = true;
+    const consumed = parseSearchOption(arg, argv, index, search, usageError);
+    if (consumed >= 0) {
+      index += consumed;
       continue;
     }
     if (arg === "--host") {
@@ -451,6 +415,7 @@ function parseArgs(argv) {
     allowRemoteTool,
     allowComputationAuthoring,
     strictLinks,
+    languages,
     includeAssets,
     includeExternal,
     parametersFile,
@@ -513,6 +478,7 @@ function usage() {
     "  --allow-remote-tool         Enable runtime remote-bundle loading over MCP.",
     "  --allow-computation-authoring Enable coordinated computation proposals (also requires --authoring).",
     "  --strict-links              Treat broken internal Markdown links as project-invalid.",
+    "  --languages <codes>         Search stemming languages for --root/--bundle mode: auto (default, detected per bundle), none, or codes such as it,en.",
     "  --include-assets            Include referenced asset nodes where supported.",
     "  --include-external          Include external provenance or graph leaves.",
     "  --generated-path <path>     Mark a generated migration target; repeat as needed.",
@@ -520,8 +486,10 @@ function usage() {
     "  --receipt-file <path|->     Read a computation receipt from a file or stdin.",
     "  --max-content-bytes <n>     Bound asset reads to 1..1048576 bytes (default 65536).",
     "  Search filters: --status, --trust-tier, --freshness, --as-of, --has-sources,",
-    "                  --runtime, --attestation-ready, --frontmatter key=value.",
-    "  Text search requires all terms and accepts at most 512 characters and 16 terms.",
+    "                  --runtime, --attestation-ready, --frontmatter key=value,",
+    "                  --mode auto|all|any, --min-coverage <0..1>, --min-relevance <0..1>, --freshness-prior.",
+    "  Text search matches every term and falls back to any term (mode auto); it accepts at most",
+    "  512 characters and 16 terms after stop words, and reports mode, coverage, and lowConfidence.",
     "  --version, -v               Print the package version.",
     "  --help, -h                  Print this help.",
     "  --debug                     Include stack traces in error output.",
@@ -624,6 +592,9 @@ function stdioServerOptions(args) {
   if (args.strictLinks) {
     options.strictLinks = true;
   }
+  if (args.languages) {
+    options.languages = args.languages;
+  }
   if (args.proposalRoot) {
     options.proposalRoot = args.proposalRoot;
   }
@@ -638,26 +609,29 @@ function stdioServerOptions(args) {
 async function loadIndex(args) {
   const remoteConfigs = args.remoteBundles.map(parseRemoteBundleArg);
   if (args.project) {
-    if (!remoteConfigs.length) {
-      return buildProjectIndexAsync(args.project, { strictLinks: args.strictLinks || undefined });
-    }
     const loaded = await loadProjectBundles(args.project);
     const remoteBundles = await fetchRemoteBundles(remoteConfigs);
     const index = buildIndex(loaded.bundles.concat(remoteBundles), {
       relationTypes: loaded.project.relationTypes,
       strictLinks: args.strictLinks || loaded.project.strictLinks,
     });
-    return attachProject(index, loaded.project);
+    return withSearchLanguages(
+      attachProject(index, loaded.project),
+      args.languages || loaded.project.languages,
+    );
   }
   const bundles = resolveLegacyBundles(args);
   const fetchedRemoteBundles = await fetchRemoteBundles(remoteConfigs);
   if (!bundles.length && !fetchedRemoteBundles.length) {
     throw usageError("At least one --bundle root or --project config is required.");
   }
-  return buildIndex(bundles.concat(fetchedRemoteBundles), {
-    strictLinks: args.strictLinks,
-    allowCustomRelationTypes: true,
-  });
+  return withSearchLanguages(
+    buildIndex(bundles.concat(fetchedRemoteBundles), {
+      strictLinks: args.strictLinks,
+      allowCustomRelationTypes: true,
+    }),
+    args.languages,
+  );
 }
 
 function printJson(value) {

@@ -548,7 +548,7 @@
           },
           "detail": {
             "default": "compact",
-            "description": "Compact returns only URI, title, type, and description; full includes navigation metadata and signals.",
+            "description": "Compact returns only URI, title, type, and description, plus coverage and relevance when a query is given; full includes navigation metadata and signals.",
             "enum": [
               "compact",
               "full"
@@ -562,6 +562,16 @@
             "minimum": 1,
             "type": "integer"
           },
+          "mode": {
+            "default": "auto",
+            "description": "auto requires every term and falls back to any-term matching when that returns nothing; all requires every term (the pre-0.10 behaviour); any ranks concepts matching at least one term. The response's mode field says which one ran.",
+            "enum": [
+              "auto",
+              "all",
+              "any"
+            ],
+            "type": "string"
+          },
           "offset": {
             "default": 0,
             "description": "Number of matching concepts to skip before returning results.",
@@ -569,7 +579,7 @@
             "type": "integer"
           },
           "query": {
-            "description": "Optional all-term text query matched against concept metadata and content; maximum 16 terms.",
+            "description": "Optional text query applied together with the listing filters; maximum 16 terms after stop words. Write it as keywords in the catalog's languages (Italian and English word endings and accents are normalised) and include identifiers, codes, paths and SKUs verbatim, in quotes if you like: they match exactly against ids, paths, aliases and titles. Leave out question words; stop words and single letters are dropped.",
             "maxLength": 512,
             "type": "string"
           },
@@ -1122,7 +1132,7 @@
         "openWorldHint": false,
         "readOnlyHint": true
       },
-      "description": "Search OKF concepts and return ranked summaries using text and structured filters.",
+      "description": "Search OKF concepts with a text query and structured filters; returns ranked summaries with match confidence. Write it as keywords in the catalog's languages (Italian and English word endings and accents are normalised) and include identifiers, codes, paths and SKUs verbatim, in quotes if you like: they match exactly against ids, paths, aliases and titles. Leave out question words; stop words and single letters are dropped. Mode auto requires every term and falls back to any-term matching when nothing matches all of them. The response reports the mode that ran, queryTerms and droppedTerms, allTermsTotal (how many concepts match every term), and lowConfidence, true when the any-term fallback produced the page and its best result matched fewer than half of the terms: treat such results as weak and rephrase or narrow with filters. Each result carries coverage (share of query terms it matched) and relevance (score relative to the top result).",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -1142,7 +1152,7 @@
           },
           "detail": {
             "default": "compact",
-            "description": "Compact returns only URI, title, type, and description; full includes ranking, navigation metadata, and signals.",
+            "description": "Compact returns URI, title, type, description, coverage, and relevance; full adds score, snippet, matchedTerms, navigation metadata, and signals.",
             "enum": [
               "compact",
               "full"
@@ -1156,6 +1166,11 @@
               "type": "string"
             },
             "type": "array"
+          },
+          "freshnessPrior": {
+            "default": false,
+            "description": "Multiply scores by 0.5 for deprecated, 0.7 for stale, and 0.85 for draft concepts before ranking; off by default.",
+            "type": "boolean"
           },
           "frontmatter": {
             "additionalProperties": true,
@@ -1188,6 +1203,28 @@
             "minLength": 1,
             "type": "string"
           },
+          "minCoverage": {
+            "description": "Drop results that matched a smaller share of the query terms than this; off by default. Can leave total at 0.",
+            "maximum": 1,
+            "minimum": 0,
+            "type": "number"
+          },
+          "minRelevance": {
+            "description": "Drop results whose score relative to the top result is below this; off by default. Can leave total at 0.",
+            "maximum": 1,
+            "minimum": 0,
+            "type": "number"
+          },
+          "mode": {
+            "default": "auto",
+            "description": "auto requires every term and falls back to any-term matching when that returns nothing; all requires every term (the pre-0.10 behaviour); any ranks concepts matching at least one term. The response's mode field says which one ran.",
+            "enum": [
+              "auto",
+              "all",
+              "any"
+            ],
+            "type": "string"
+          },
           "offset": {
             "default": 0,
             "description": "Number of matching concepts to skip before returning results.",
@@ -1204,7 +1241,7 @@
             "type": "string"
           },
           "query": {
-            "description": "All-term text query matched against concept metadata and content; maximum 16 terms.",
+            "description": "Text query matched against concept metadata and content; maximum 16 terms after stop words. Write it as keywords in the catalog's languages (Italian and English word endings and accents are normalised) and include identifiers, codes, paths and SKUs verbatim, in quotes if you like: they match exactly against ids, paths, aliases and titles. Leave out question words; stop words and single letters are dropped.",
             "maxLength": 512,
             "type": "string"
           },
