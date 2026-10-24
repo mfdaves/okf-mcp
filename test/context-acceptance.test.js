@@ -70,6 +70,21 @@ test("the labelled section anchor is packed for at least 80% of dev queries on b
       assert.ok(row.sections >= 0 && row.sections <= 20, `${name} ${row.id}: section cap`);
       assert.equal(row.hitAt1 <= row.anchorHit, true);
     });
+    // The shipped preamble weight is the choice of this run's dev sweep: the best anchor MRR
+    // among the candidates whose anchor hit rate is not below the unweighted (1.0) one.
+    const sweep = result.preambleSweep;
+    assert.deepEqual(
+      sweep.map((row) => [row.weight, row.queries]),
+      [1, 0.7, 0.5].map((weight) => [weight, dev.queries]),
+    );
+    const unweighted = sweep.find((row) => row.weight === 1);
+    const chosen = sweep.find((row) => row.weight === DEFAULT_PREAMBLE_WEIGHT);
+    assert.ok(chosen.anchorHitRate >= unweighted.anchorHitRate, `${name}: anchor hit kept`);
+    sweep
+      .filter((row) => row.anchorHitRate >= unweighted.anchorHitRate)
+      .forEach((row) => {
+        assert.ok(chosen.anchorMrr >= row.anchorMrr, `${name}: weight ${row.weight} beats it`);
+      });
   });
 });
 
@@ -87,24 +102,8 @@ test("routine runs write to the ignored latest path and the committed report mee
     assert.ok(dev.anchorHitRate >= thresholds[name].target.sectionAnchorHitRate, name);
     assert.ok(dev.latency.p95Ms <= P95_BUDGET_MS, `${name}: committed p95 ${dev.latency.p95Ms}`);
   });
-  // The shipped preamble weight is the dev-sweep choice: best anchor MRR on both fixtures among
-  // the candidates whose anchor hit rate is not below the unweighted (1.0) one.
+  // The committed report is the record of the shipped weight; the rule is checked fresh above.
   assert.equal(committed.preambleWeight, DEFAULT_PREAMBLE_WEIGHT);
-  FIXTURES.forEach((name) => {
-    const sweep = committed.fixtures[name].preambleSweep;
-    assert.deepEqual(
-      sweep.map((row) => row.weight),
-      [1, 0.7, 0.5],
-    );
-    const unweighted = sweep.find((row) => row.weight === 1);
-    const chosen = sweep.find((row) => row.weight === DEFAULT_PREAMBLE_WEIGHT);
-    assert.ok(chosen.anchorHitRate >= unweighted.anchorHitRate, `${name}: anchor hit kept`);
-    sweep
-      .filter((row) => row.anchorHitRate >= unweighted.anchorHitRate)
-      .forEach((row) => {
-        assert.ok(chosen.anchorMrr >= row.anchorMrr, `${name}: weight ${row.weight} beats it`);
-      });
-  });
 });
 
 test("at 5,000 concepts the first call needs no warm-up and warm p95 stays within budget", (t) => {
