@@ -1,6 +1,6 @@
 # okf-mcp 1.0 master plan: a knowledge runtime for autonomous agents
 
-Status: revision 6, 2026-10-24, after WP7 and WP0 landed; embeddings re-sequenced around an OpenAI-compatible client. Owner: maintainer. Readers: the maintainer and the agents assigned to work packages.
+Status: revision 7, 2026-10-24: WP7, WP0, WP1, WP2, WP3b, WP4, WP3a and WP3c landed; milestone `v0.11.0-rc.1` cut (section 11a). Owner: maintainer. Readers: the maintainer and the agents assigned to work packages.
 
 ## 0. How to use this document
 
@@ -202,7 +202,9 @@ Sizes: S ≤ 1 day of agent work, M ≤ 3, L ≤ 6. All Must for 1.0 unless mark
 - Tests: property test, seeded: random sequences of create, update, delete, alias collision, and link breakage; `updateIndex` result deep-equals a fresh build after each step. Write-path benchmark with git commit on.
 - Acceptance: write batch ≤ 500 ms at 5k with git on; incremental ÷ full ≤ 0.3×; search p95 unchanged.
 
-### WP3a Sections and context, lexical-only (M)
+### WP3a Sections and context, lexical-only (M; done)
+
+- Done on branch `wp3a/context-2` (14 commits, merged as `c284c4b`): `src/context/{sections,score,assemble,cli-options}.js`, `get_context` tool and `context` CLI command, `npm run eval:context`, committed report. Sections of the top candidates are ranked on the fly (no corpus rebuilt on write; first call ≤ 40 ms and warm p95 20 ms at 5k); the budget counts the delivered payload (default 1,200 tokens, compact provenance); own-text evidence ranks before metadata within a concept, concept order primary, `conceptLift` 4, `preambleWeight` 0.5. One independent review pass; see section 11a for the atlas shortfall. The original specification follows for reference.
 
 - R-7, C-1, C-3 over the lexical index: section extraction from the existing CommonMark structure, anchors, deduplication, budget packing.
 - Tests: packing never exceeds `budgetTokens`; deterministic order; anchors stable across whitespace-only edits; sentinel test (S-3) extended to `get_context`.
@@ -216,7 +218,9 @@ Sizes: S ≤ 1 day of agent work, M ≤ 3, L ≤ 6. All Must for 1.0 unless mark
 - Tests, all offline: a fake OpenAI-compatible server on `node:http` returning deterministic hash-derived vectors, exercising batching at the input and token limits, `dimensions`, output order by `index`, 429 and 5xx retries with `Retry-After`, timeouts, key-from-env, refusal of a base URL that is not in project config, error masking (no input text in any error), and `usage` accounting; cache invalidation on content and embedder change; deletion mid-run; git-backed apply succeeds with a populated cache (the blocker found in review). A live smoke script (`scripts/embed-smoke.js`) runs only when `OKF_EMBED_SMOKE=1` and the key variable are set; never in CI.
 - Acceptance: all tests offline; `prepareEmbeddings` on the alpinaria fixture against the fake server issues the minimum number of requests for the configured batch size and re-embeds only changed sections after an edit.
 
-### WP3c Hybrid retrieval (M)
+### WP3c Hybrid retrieval (M; done)
+
+- Done on branch `wp3c/hybrid` (13 commits, merged as `90891a4`): `src/search/{dense,fusion,hybrid,embedding-config,embedding-cli}.js`, config wiring, startup lifecycle and post-apply embedding through one queue, `embedding_status`, harness `--embedder`/`--alpha-sweep`/`--units`, committed live report. One independent review pass; the six majors (dense-stage fallback, startup/apply queue, pagination-stable candidate depth of 200, lexical evidence for dense candidates, probe order, literal guard) are fixed. Defaults chosen by the pre-registered rule on the dev splits. The original specification follows for reference.
 
 - R-7 consumers, R-10, C-1 integration: `src/search/dense.js` (brute-force cosine over the cache), `src/search/fusion.js` (convex combination with min-max normalisation), config wiring in `src/project.js` (`embedder`, `cacheDir`, `fusion.alpha`), `search_concepts` and `get_context` options, `embedder.remote` and `embedder.degraded` in receipts, and `scripts/eval-search.js --embedder <config>` so the harness can score hybrid runs (the fake server is enough for plumbing; quality numbers need a real endpoint and are recorded with the model id).
 - Tests: lexical-only fallback when the embedder fails or is absent; fusion weight edge cases (0 and 1 reduce to lexical and dense); deterministic ordering; budget packing unchanged.
@@ -227,7 +231,9 @@ Sizes: S ≤ 1 day of agent work, M ≤ 3, L ≤ 6. All Must for 1.0 unless mark
 
 - `@mfdaves/okf-embed-onnx` as a separate package implementing the same interface (candidate models multilingual-e5-small and Arctic-Embed 2.0-M, int8; choose on the development set), loaded like a producer. For deployments where text may not leave the machine and no local OpenAI-compatible server is available. Acceptance: passes the core interface validator and the WP3c tests with the package swapped in; incremental embed ≤ 2 s per batch.
 
-### WP4 Write policy (M)
+### WP4 Write policy (M; done)
+
+- Done on branch `wp4/write-policy-2` (11 commits, merged as `6382a74`): `src/policy/write-policy.js`, `src/authoring/{policy-hook,proposal-policy}.js`, `src/catalog-text.js`, `writePolicy` in project config and `--policy` for `--root`, enforced on direct writes, proposal creation and acceptance over MCP and HTTP, opt-in for producers (`applyToProducers`), unknown actors judged as `unknown`, `defaultStatus` applied at acceptance, `test/content-boundary.test.js` (three server modes; found and fixed YAML error echo and undeclared-vocabulary echo), docs. Two independent review passes. The original specification follows for reference.
 
 - W-1, W-2 in `src/policy/`; policy schema documented in the reference bundle; errors carry rule ids.
 - Tests: policy matrix (actor pattern × type × path × required fields × batch cap); glob subset rejects regex and traversal; existing authoring tests unchanged.
@@ -310,12 +316,11 @@ Rules: thresholds are written down before the change that targets them; fixture 
 
 Decided 2026-10-24: the first usable version ships before the remaining work packages, so real use with the reference deployment drives what comes next. Review discipline from here: the maintainer's verification plus at most one independent review pass per branch; only correctness and security majors are fixed before merge; everything else is listed here and carried forward.
 
-Contents: WP7, WP0, WP1, WP2, WP3b, WP3a, WP4, WP3c (everything the plan calls 0.10 and 0.11). Steps after the last merge: version bump, `server.json`, README examples pinned to the new version, CHANGELOG entry, tag `v0.11.0-rc.1` on the `next` dist-tag.
+Contents: WP7, WP0, WP1, WP2, WP3b, WP3a, WP4, WP3c (everything the plan calls 0.10 and 0.11), merged as `90891a4` with 423 tests (one skipped by design). Final hybrid numbers at the shipped defaults (`embedUnits: concepts`, `tmm`, alpha 0.4, `text-embedding-3-small` 512): Recall@5 alpinaria 0.742 → 0.830 [0.791, 0.864] (held-out 0.869), atlas 0.760 → 0.882 [0.831, 0.929] (held-out 0.902); mixed-language 0.738 → 0.881; exact alpinaria 0.894, atlas 1.000; no category regresses beyond its CI; p95 33.7 ms at 5k × 4 units; all live runs together 346k tokens ≈ 0.007 USD. `get_context`: anchor hit alpinaria 1.000 dev / 0.750 held-out, atlas 0.791 dev / 0.733 held-out at 1,200 tokens compact (0.837 / 0.800 at 2,000). Released as `v0.11.0-rc.1` on the `next` dist-tag (publishing is a manual workflow run).
 
 Known issues carried into the milestone:
-- Synonym-category Recall@5 0.557 on alpinaria (target 0.70); section-unit embeddings and literal-term alpha are the planned follow-up (WP3c-2).
-- Atlas exact category 1.00 → 0.917 under hybrid fusion (8 queries); guard planned in WP3c's last round.
-- Atlas section-anchor hit may sit below 0.80 at the default budget lexically (labelled sections that share no token with the query); expected to recover with section embeddings.
+- Synonym-category Recall@5 0.542 on alpinaria (target 0.70; section units reach 0.594; embeddings alone reach 0.81 on dev synonyms, so fusion is the gap): per-query adaptive alpha is the follow-up (WP3c-2).
+- Atlas section-anchor hit 0.791 at the default budget (target 0.80): 4 of 9 misses are candidate-step misses, 3 share no token with the query, 2 do not fit the budget; the acceptance test records the value instead of relaxing the threshold.
 - Git-on write batch p95 ≈ 630–730 ms at 5k against a 500 ms budget (git preflight; WP6).
 - 20k stretch tier: search p95 and RSS above the stretch ceilings (index memory item, post-milestone).
 - Vector cache is machine-local; export/import and CI caching are WP6.
