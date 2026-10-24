@@ -1,10 +1,12 @@
 {
   "label": "src/context/assemble.js (lexical)",
-  "generatedAt": "2026-10-24T19:30:33.187Z",
+  "generatedAt": "2026-10-24T19:39:28.294Z",
   "node": "v24.17.0",
   "platform": "linux x64",
   "budgetTokens": 1200,
   "preambleWeight": 0.5,
+  "conceptLift": 4,
+  "provenance": "compact (default)",
   "estimator": "chars/4",
   "bootstrap": {
     "samples": 1000,
@@ -23,29 +25,29 @@
         "validForProject": true
       },
       "build": {
-        "okfIndexMs": 106.728838,
-        "searchIndexMs": 99.49667100000002,
-        "firstCallMs": 14.803821000000028
+        "okfIndexMs": 382.18070300000005,
+        "searchIndexMs": 304.65037600000005,
+        "firstCallMs": 43.480226000000016
       },
       "bySplit": {
         "dev": {
           "queries": 40,
           "anchorHitRate": 1,
-          "hitAt1": 0.675,
-          "anchorMrr": 0.80708,
-          "medianAnchorRank": 1,
+          "hitAt1": 0.475,
+          "anchorMrr": 0.6619400000000001,
+          "medianAnchorRank": 2,
           "conceptRecallAt5": 0.83125,
           "conceptCandidateRate": 1,
-          "meanUsedTokens": 559.925,
-          "meanSections": 11.8,
-          "maxUsedTokens": 1197,
+          "meanUsedTokens": 921.425,
+          "meanSections": 7.325,
+          "maxUsedTokens": 1199,
           "budgetExceeded": 0,
           "truncated": 0,
           "lowConfidence": 0,
           "latency": {
-            "p50Ms": 2.502,
-            "p95Ms": 3.809,
-            "maxMs": 4.631
+            "p50Ms": 7.41,
+            "p95Ms": 13.414,
+            "maxMs": 21.237
           },
           "ci": {
             "anchorHit": {
@@ -54,14 +56,14 @@
               "halfWidth": 0
             },
             "hitAt1": {
-              "low": 0.525,
-              "high": 0.825,
-              "halfWidth": 0.14999999999999997
+              "low": 0.325,
+              "high": 0.625,
+              "halfWidth": 0.15
             },
             "anchorRR": {
-              "low": 0.71833,
-              "high": 0.891665,
-              "halfWidth": 0.08666750000000001
+              "low": 0.5536025,
+              "high": 0.7604124999999999,
+              "halfWidth": 0.10340499999999997
             },
             "conceptRecallAt5": {
               "low": 0.7604166666666667,
@@ -69,14 +71,14 @@
               "halfWidth": 0.06770833333333326
             },
             "usedTokens": {
-              "low": 427.15,
-              "high": 693.125,
-              "halfWidth": 132.9875
+              "low": 820,
+              "high": 1017.8,
+              "halfWidth": 98.89999999999998
             },
             "sections": {
-              "low": 9.45,
-              "high": 14.025,
-              "halfWidth": 2.2875000000000005
+              "low": 6.475,
+              "high": 8.1,
+              "halfWidth": 0.8125
             }
           }
         },
@@ -84,20 +86,20 @@
           "queries": 12,
           "anchorHitRate": 0.75,
           "hitAt1": 0.5833333333333334,
-          "anchorMrr": 0.6388833333333334,
+          "anchorMrr": 0.6180583333333334,
           "medianAnchorRank": 1,
           "conceptRecallAt5": 0.6875,
           "conceptCandidateRate": 0.75,
-          "meanUsedTokens": 735.5833333333334,
-          "meanSections": 14.083333333333334,
+          "meanUsedTokens": 955.8333333333334,
+          "meanSections": 7.333333333333333,
           "maxUsedTokens": 1197,
           "budgetExceeded": 0,
           "truncated": 0,
           "lowConfidence": 1,
           "latency": {
-            "p50Ms": 2.705,
-            "p95Ms": 3.668,
-            "maxMs": 3.669
+            "p50Ms": 7.625,
+            "p95Ms": 10.093,
+            "maxMs": 12.65
           },
           "ci": {
             "anchorHit": {
@@ -106,14 +108,14 @@
               "halfWidth": 0.25
             },
             "hitAt1": {
-              "low": 0.25,
+              "low": 0.3333333333333333,
               "high": 0.8333333333333334,
-              "halfWidth": 0.2916666666666667
+              "halfWidth": 0.25
             },
             "anchorRR": {
-              "low": 0.36110833333333336,
-              "high": 0.8888833333333332,
-              "halfWidth": 0.26388749999999994
+              "low": 0.3680583333333334,
+              "high": 0.8541666666666666,
+              "halfWidth": 0.24305416666666663
             },
             "conceptRecallAt5": {
               "low": 0.46527777777777785,
@@ -121,35 +123,35 @@
               "halfWidth": 0.2118055555555555
             },
             "usedTokens": {
-              "low": 485.4166666666667,
-              "high": 972.75,
-              "halfWidth": 243.66666666666666
+              "low": 789.5833333333334,
+              "high": 1119.1666666666667,
+              "halfWidth": 164.79166666666669
             },
             "sections": {
-              "low": 10.25,
-              "high": 17.833333333333332,
-              "halfWidth": 3.791666666666666
+              "low": 6.083333333333333,
+              "high": 8.583333333333334,
+              "halfWidth": 1.2500000000000004
             }
           }
         },
         "all": {
           "queries": 52,
           "anchorHitRate": 0.9423076923076923,
-          "hitAt1": 0.6538461538461539,
-          "anchorMrr": 0.7682653846153846,
+          "hitAt1": 0.5,
+          "anchorMrr": 0.6518134615384615,
           "medianAnchorRank": 1,
           "conceptRecallAt5": 0.7980769230769231,
           "conceptCandidateRate": 0.9423076923076923,
-          "meanUsedTokens": 600.4615384615385,
-          "meanSections": 12.326923076923077,
-          "maxUsedTokens": 1197,
+          "meanUsedTokens": 929.3653846153846,
+          "meanSections": 7.326923076923077,
+          "maxUsedTokens": 1199,
           "budgetExceeded": 0,
           "truncated": 0,
           "lowConfidence": 1,
           "latency": {
-            "p50Ms": 2.705,
-            "p95Ms": 3.796,
-            "maxMs": 4.631
+            "p50Ms": 7.508,
+            "p95Ms": 12.65,
+            "maxMs": 21.237
           },
           "ci": {
             "anchorHit": {
@@ -158,14 +160,14 @@
               "halfWidth": 0.06730769230769229
             },
             "hitAt1": {
-              "low": 0.5192307692307693,
-              "high": 0.7884615384615384,
-              "halfWidth": 0.13461538461538458
+              "low": 0.36538461538461536,
+              "high": 0.6538461538461539,
+              "halfWidth": 0.14423076923076925
             },
             "anchorRR": {
-              "low": 0.6765980769230772,
-              "high": 0.858973076923077,
-              "halfWidth": 0.09118749999999992
+              "low": 0.5541615384615385,
+              "high": 0.7608961538461537,
+              "halfWidth": 0.10336730769230762
             },
             "conceptRecallAt5": {
               "low": 0.7211538461538461,
@@ -173,15 +175,56 @@
               "halfWidth": 0.07371794871794862
             },
             "usedTokens": {
-              "low": 480.5,
-              "high": 727.1346153846154,
-              "halfWidth": 123.31730769230768
+              "low": 845.1153846153846,
+              "high": 1014.0384615384615,
+              "halfWidth": 84.46153846153845
             },
             "sections": {
-              "low": 10.365384615384615,
-              "high": 14.365384615384615,
-              "halfWidth": 2
+              "low": 6.634615384615385,
+              "high": 8,
+              "halfWidth": 0.6826923076923075
             }
+          }
+        }
+      },
+      "secondary": {
+        "budgetTokens": 2000,
+        "bySplit": {
+          "dev": {
+            "queries": 40,
+            "anchorHitRate": 1,
+            "anchorHitCi": {
+              "low": 1,
+              "high": 1,
+              "halfWidth": 0
+            },
+            "anchorMrr": 0.6619400000000001,
+            "meanSections": 9.975,
+            "budgetExceeded": 0
+          },
+          "heldout": {
+            "queries": 12,
+            "anchorHitRate": 0.75,
+            "anchorHitCi": {
+              "low": 0.5,
+              "high": 1,
+              "halfWidth": 0.25
+            },
+            "anchorMrr": 0.6180583333333334,
+            "meanSections": 11.25,
+            "budgetExceeded": 0
+          },
+          "all": {
+            "queries": 52,
+            "anchorHitRate": 0.9423076923076923,
+            "anchorHitCi": {
+              "low": 0.8653846153846154,
+              "high": 1,
+              "halfWidth": 0.06730769230769229
+            },
+            "anchorMrr": 0.6518134615384615,
+            "meanSections": 10.26923076923077,
+            "budgetExceeded": 0
           }
         }
       },
@@ -190,22 +233,45 @@
           "weight": 1,
           "queries": 40,
           "anchorHitRate": 1,
-          "anchorMrr": 0.7219,
-          "hitAt1": 0.575
+          "anchorMrr": 0.5875075,
+          "hitAt1": 0.425
         },
         {
           "weight": 0.7,
           "queries": 40,
           "anchorHitRate": 1,
-          "anchorMrr": 0.8029125,
-          "hitAt1": 0.675
+          "anchorMrr": 0.6179125,
+          "hitAt1": 0.425
         },
         {
           "weight": 0.5,
           "queries": 40,
           "anchorHitRate": 1,
-          "anchorMrr": 0.80708,
-          "hitAt1": 0.675
+          "anchorMrr": 0.6619400000000001,
+          "hitAt1": 0.475
+        }
+      ],
+      "liftSweep": [
+        {
+          "lift": 0,
+          "queries": 40,
+          "anchorHitRate": 0.95,
+          "anchorMrr": 0.6119025,
+          "hitAt1": 0.475
+        },
+        {
+          "lift": 2,
+          "queries": 40,
+          "anchorHitRate": 0.95,
+          "anchorMrr": 0.6165475,
+          "hitAt1": 0.475
+        },
+        {
+          "lift": 4,
+          "queries": 40,
+          "anchorHitRate": 1,
+          "anchorMrr": 0.6619400000000001,
+          "hitAt1": 0.475
         }
       ],
       "misses": [
@@ -214,76 +280,79 @@
           "split": "heldout",
           "anchor": "okf://alpinaria/keyword-clusters/cura-manutenzione-scarponi#parole-chiave-principali",
           "top": "okf://alpinaria/landing-pages/it-guida-cura-scarponi#guida-cura-degli-scarponi-in-pelle-it",
-          "conceptCandidate": false
+          "conceptCandidate": false,
+          "cause": "concept not a candidate"
         },
         {
           "id": "Q186",
           "split": "heldout",
           "anchor": "okf://alpinaria/brand-voice/tone-of-voice-en#do-not",
           "top": "okf://alpinaria/policies/made-in-italy-claim#forbidden",
-          "conceptCandidate": false
+          "conceptCandidate": false,
+          "cause": "concept not a candidate"
         },
         {
           "id": "Q199",
           "split": "heldout",
           "anchor": "okf://alpinaria/products/trl-w-401-torrente-rapido-w#note-seo",
-          "top": "okf://alpinaria/products/trl-w-404-torrente-rapido-pro-w#seo-notes",
-          "conceptCandidate": false
+          "top": "okf://alpinaria/products/trl-w-404-torrente-rapido-pro-w#note-seo",
+          "conceptCandidate": false,
+          "cause": "concept not a candidate"
         }
       ],
       "perQuery": [
-        {"id":"Q01","split":"dev","lang":"en","category":"nl-task","anchor":"okf://alpinaria/landing-pages/en-womens-winter-hiking-boots#target-cluster","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":0.6666666666666666,"usedTokens":430,"sections":12,"totalSections":12,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":2.768,"top":["okf://alpinaria/landing-pages/en-womens-winter-hiking-boots#target-cluster","okf://alpinaria/landing-pages/en-womens-winter-hiking-boots#notes","okf://alpinaria/keyword-clusters/womens-winter-hiking-boots-transactional#target-page"]},
-        {"id":"Q04","split":"dev","lang":"it","category":"nl-task","anchor":"okf://alpinaria/policies/claim-impermeabile#consentito","anchorHit":1,"anchorRank":3,"hitAt1":0,"anchorRR":0.3333,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":1160,"sections":20,"totalSections":29,"budgetExceeded":false,"truncated":false,"mode":"any","lowConfidence":false,"ms":4.631,"top":["okf://alpinaria/product-lines/vetta#note","okf://alpinaria/policies/claim-impermeabile#perché","okf://alpinaria/policies/claim-impermeabile#consentito"]},
-        {"id":"Q11","split":"dev","lang":"it","category":"keyword","anchor":"okf://alpinaria/keyword-clusters/scarponi-trekking-donna-transazionale#parole-chiave-principali","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":0.75,"usedTokens":1129,"sections":20,"totalSections":32,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":3.809,"top":["okf://alpinaria/keyword-clusters/scarponi-trekking-donna-transazionale#parole-chiave-principali","okf://alpinaria/landing-pages/it-scarponi-da-trekking-donna#scarponi-da-trekking-donna-it","okf://alpinaria/landing-pages/it-scarponi-da-trekking-donna-old#scarponi-donna--vecchia-url-donnascarponi-deprecata"]},
-        {"id":"Q13","split":"dev","lang":"it","category":"keyword","anchor":"okf://alpinaria/keyword-clusters/calze-trekking-merino#parole-chiave-principali","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":0.6666666666666666,"usedTokens":1016,"sections":20,"totalSections":33,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":3.542,"top":["okf://alpinaria/keyword-clusters/calze-trekking-merino#parole-chiave-principali","okf://alpinaria/landing-pages/it-calze-merino#calze-merino-it","okf://alpinaria/products/sck-u-705-rifugio-calze-merino-heavy-u#note-seo"]},
-        {"id":"Q17","split":"heldout","lang":"it","category":"keyword","anchor":"okf://alpinaria/keyword-clusters/giacca-impermeabile-montagna#parole-chiave-principali","anchorHit":1,"anchorRank":3,"hitAt1":0,"anchorRR":0.3333,"conceptCandidate":1,"conceptRecallAt5":0.75,"usedTokens":1185,"sections":20,"totalSections":30,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":3.669,"top":["okf://alpinaria/products/jkt-u-310-vetta-guscio-u#note-seo","okf://alpinaria/seo-findings/query-mismatch-giacca-guscio#query-mismatch-gli-utenti-cercano-giacca-guscio-la-pagina-dice-hardshell","okf://alpinaria/keyword-clusters/giacca-impermeabile-montagna#parole-chiave-principali"]},
-        {"id":"Q18","split":"dev","lang":"en","category":"keyword","anchor":"okf://alpinaria/keyword-clusters/trail-running-shoes-eu#head-terms","anchorHit":1,"anchorRank":3,"hitAt1":0,"anchorRR":0.3333,"conceptCandidate":1,"conceptRecallAt5":0.8333333333333334,"usedTokens":742,"sections":20,"totalSections":34,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":2.888,"top":["okf://alpinaria/landing-pages/en-trail-running-shoes#trail-running-shoes-en","okf://alpinaria/landing-pages/it-scarpe-trail-running#scarpe-trail-running-it","okf://alpinaria/keyword-clusters/trail-running-shoes-eu#head-terms"]},
-        {"id":"Q22","split":"dev","lang":"mixed","category":"mixed-lang","anchor":"okf://alpinaria/policies/green-claims#consentito--allowed","anchorHit":1,"anchorRank":3,"hitAt1":0,"anchorRR":0.3333,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":602,"sections":9,"totalSections":9,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":2.065,"top":["okf://alpinaria/policies/green-claims#policy-claim-sostenibilità-e-materiali-riciclati--green-claims","okf://alpinaria/policies/green-claims#vietato--forbidden","okf://alpinaria/policies/green-claims#consentito--allowed"]},
-        {"id":"Q31","split":"dev","lang":"it","category":"morph","anchor":"okf://alpinaria/keyword-clusters/scarponi-trekking-donna-transazionale#parole-chiave-principali","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":0.6666666666666666,"usedTokens":1129,"sections":20,"totalSections":32,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":2.88,"top":["okf://alpinaria/keyword-clusters/scarponi-trekking-donna-transazionale#parole-chiave-principali","okf://alpinaria/landing-pages/it-scarponi-da-trekking-donna#scarponi-da-trekking-donna-it","okf://alpinaria/landing-pages/it-scarponi-da-trekking-donna-old#scarponi-donna--vecchia-url-donnascarponi-deprecata"]},
-        {"id":"Q37","split":"dev","lang":"it","category":"accent","anchor":"okf://alpinaria/keyword-clusters/membrana-impermeabile-info#parole-chiave-principali","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":0.6666666666666666,"usedTokens":1191,"sections":18,"totalSections":30,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":3.423,"top":["okf://alpinaria/keyword-clusters/membrana-impermeabile-info#parole-chiave-principali","okf://alpinaria/policies/claim-impermeabile#vietato","okf://alpinaria/policies/claim-impermeabile#perché"]},
-        {"id":"Q38","split":"dev","lang":"it","category":"accent","anchor":"okf://alpinaria/policies/green-claims#vietato--forbidden","anchorHit":1,"anchorRank":2,"hitAt1":0,"anchorRR":0.5,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":236,"sections":5,"totalSections":5,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":2.115,"top":["okf://alpinaria/policies/green-claims#policy-claim-sostenibilità-e-materiali-riciclati--green-claims","okf://alpinaria/policies/green-claims#vietato--forbidden","okf://alpinaria/policies/green-claims#base-normativa"]},
-        {"id":"Q39","split":"heldout","lang":"it","category":"accent","anchor":"okf://alpinaria/keyword-clusters/membrana-impermeabile-info#parole-chiave-principali","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":0.6666666666666666,"usedTokens":1185,"sections":15,"totalSections":16,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":3.668,"top":["okf://alpinaria/keyword-clusters/membrana-impermeabile-info#parole-chiave-principali","okf://alpinaria/keyword-clusters/membrana-impermeabile-info#membrana-impermeabile-e-traspirabilità--informazionale","okf://alpinaria/keyword-clusters/membrana-impermeabile-info#note"]},
-        {"id":"Q41","split":"dev","lang":"en","category":"synonym","anchor":"okf://alpinaria/keyword-clusters/hardshell-jacket#head-terms","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":0.3333333333333333,"usedTokens":520,"sections":20,"totalSections":38,"budgetExceeded":false,"truncated":false,"mode":"any","lowConfidence":false,"ms":2.927,"top":["okf://alpinaria/keyword-clusters/hardshell-jacket#head-terms","okf://alpinaria/keyword-clusters/hardshell-jacket#target-page","okf://alpinaria/keyword-clusters/hardshell-jacket#hardshell-jackets--commercial"]},
-        {"id":"Q51","split":"dev","lang":"it","category":"disambig","anchor":"okf://alpinaria/keyword-clusters/scarponi-trekking-informazionale#parole-chiave-principali","anchorHit":1,"anchorRank":3,"hitAt1":0,"anchorRR":0.3333,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":327,"sections":9,"totalSections":9,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":2.33,"top":["okf://alpinaria/landing-pages/it-guida-scelta-scarponi#guida-come-scegliere-gli-scarponi-da-trekking-it","okf://alpinaria/keyword-clusters/scarponi-trekking-informazionale#come-scegliere-gli-scarponi-da-trekking--informazionale","okf://alpinaria/keyword-clusters/scarponi-trekking-informazionale#parole-chiave-principali"]},
-        {"id":"Q53","split":"dev","lang":"en","category":"disambig","anchor":"okf://alpinaria/keyword-clusters/womens-winter-hiking-boots-transactional#head-terms","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":0.5,"usedTokens":290,"sections":6,"totalSections":6,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":2.502,"top":["okf://alpinaria/keyword-clusters/womens-winter-hiking-boots-transactional#head-terms","okf://alpinaria/audiences/eu-english-dolomites-visitors#english-speaking-eu-visitors-planning-a-dolomites-trip","okf://alpinaria/keyword-clusters/womens-winter-hiking-boots-transactional#target-page"]},
-        {"id":"Q73","split":"dev","lang":"it","category":"nl-task","anchor":"okf://alpinaria/landing-pages/it-calze-merino#note","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":0.5,"usedTokens":39,"sections":1,"totalSections":1,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":2.039,"top":["okf://alpinaria/landing-pages/it-calze-merino#note"]},
-        {"id":"Q92","split":"dev","lang":"en","category":"keyword","anchor":"okf://alpinaria/keyword-clusters/italian-hiking-boots-brand#head-terms","anchorHit":1,"anchorRank":4,"hitAt1":0,"anchorRR":0.25,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":1031,"sections":15,"totalSections":15,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":3.601,"top":["okf://alpinaria/content-briefs/en-italian-hiking-boots-brands-history#brief-montebelluna-and-the-italian-hiking-boot-tradition","okf://alpinaria/product-lines/rifugio#linea-rifugio","okf://alpinaria/keyword-clusters/alpinaria-brand#parole-chiave-principali"]},
-        {"id":"Q118","split":"dev","lang":"it","category":"morph","anchor":"okf://alpinaria/keyword-clusters/scarponcini-invernali-donna#parole-chiave-principali","anchorHit":1,"anchorRank":2,"hitAt1":0,"anchorRR":0.5,"conceptCandidate":1,"conceptRecallAt5":0.5,"usedTokens":1168,"sections":20,"totalSections":28,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":3.303,"top":["okf://alpinaria/landing-pages/it-scarponcini-invernali-donna#scarponcini-invernali-donna-it","okf://alpinaria/keyword-clusters/scarponcini-invernali-donna#parole-chiave-principali","okf://alpinaria/keyword-clusters/scarponcini-invernali-donna#pagina-di-destinazione"]},
-        {"id":"Q126","split":"dev","lang":"it","category":"accent","anchor":"okf://alpinaria/keyword-clusters/scarponi-trekking-donna-transazionale#note","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":171,"sections":5,"totalSections":5,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":1.977,"top":["okf://alpinaria/keyword-clusters/scarponi-trekking-donna-transazionale#note","okf://alpinaria/keyword-clusters/scarponi-trekking-donna-transazionale#parole-chiave-principali","okf://alpinaria/keyword-clusters/scarponi-trekking-donna-transazionale#pagina-di-destinazione"]},
-        {"id":"Q132","split":"dev","lang":"it","category":"synonym","anchor":"okf://alpinaria/keyword-clusters/scarpe-trekking-leggere#parole-chiave-principali","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":0.6666666666666666,"usedTokens":295,"sections":8,"totalSections":8,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":1.813,"top":["okf://alpinaria/keyword-clusters/scarpe-trekking-leggere#parole-chiave-principali","okf://alpinaria/product-lines/sentiero#linea-sentiero","okf://alpinaria/keyword-clusters/scarpe-trekking-leggere#pagina-di-destinazione"]},
-        {"id":"Q136","split":"heldout","lang":"it","category":"synonym","anchor":"okf://alpinaria/keyword-clusters/cura-manutenzione-scarponi#parole-chiave-principali","anchorHit":0,"anchorRank":null,"hitAt1":0,"anchorRR":0,"conceptCandidate":0,"conceptRecallAt5":0.5,"usedTokens":684,"sections":20,"totalSections":37,"budgetExceeded":false,"truncated":false,"mode":"any","lowConfidence":true,"ms":2.714,"top":["okf://alpinaria/landing-pages/it-guida-cura-scarponi#guida-cura-degli-scarponi-in-pelle-it","okf://alpinaria/content-briefs/guida-impermeabilizzare-scarponi#brief-come-impermeabilizzare-gli-scarponi-in-pelle-riscrittura-per-lo-snippet","okf://alpinaria/landing-pages/it-guida-cura-scarponi"]},
-        {"id":"Q148","split":"dev","lang":"en","category":"disambig","anchor":"okf://alpinaria/landing-pages/en-womens-winter-hiking-boots-draft-v2#notes","anchorHit":1,"anchorRank":2,"hitAt1":0,"anchorRR":0.5,"conceptCandidate":1,"conceptRecallAt5":0.5,"usedTokens":146,"sections":4,"totalSections":4,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":1.663,"top":["okf://alpinaria/landing-pages/en-womens-winter-hiking-boots-draft-v2#womens-winter-hiking-boots--v2-redesign-draft","okf://alpinaria/landing-pages/en-womens-winter-hiking-boots-draft-v2#notes","okf://alpinaria/landing-pages/en-womens-winter-hiking-boots-draft-v2#target-cluster"]},
-        {"id":"Q151","split":"dev","lang":"it","category":"disambig","anchor":"okf://alpinaria/keyword-clusters/scarponi-trekking-uomo-transazionale#parole-chiave-principali","anchorHit":1,"anchorRank":2,"hitAt1":0,"anchorRR":0.5,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":437,"sections":13,"totalSections":13,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":1.928,"top":["okf://alpinaria/keyword-clusters/scarponi-trekking-uomo-transazionale#scarponi-da-trekking-uomo--transazionale","okf://alpinaria/keyword-clusters/scarponi-trekking-uomo-transazionale#parole-chiave-principali","okf://alpinaria/keyword-clusters/scarponi-trekking-uomo-transazionale#pagina-di-destinazione"]},
-        {"id":"Q152","split":"dev","lang":"en","category":"disambig","anchor":"okf://alpinaria/keyword-clusters/boot-sizing-guide-en#head-terms","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":0.5,"usedTokens":277,"sections":7,"totalSections":7,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":2.19,"top":["okf://alpinaria/keyword-clusters/boot-sizing-guide-en#head-terms","okf://alpinaria/keyword-clusters/boot-sizing-guide-en#hiking-boot-sizing--informational","okf://alpinaria/content-briefs/en-how-to-choose-winter-hiking-boots#brief-how-to-choose-winter-hiking-boots"]},
-        {"id":"Q153","split":"dev","lang":"it","category":"disambig","anchor":"okf://alpinaria/keyword-clusters/misura-scarponi-trekking#parole-chiave-principali","anchorHit":1,"anchorRank":2,"hitAt1":0,"anchorRR":0.5,"conceptCandidate":1,"conceptRecallAt5":0.5,"usedTokens":144,"sections":5,"totalSections":5,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":3.063,"top":["okf://alpinaria/keyword-clusters/misura-scarponi-trekking#note","okf://alpinaria/keyword-clusters/misura-scarponi-trekking#parole-chiave-principali","okf://alpinaria/keyword-clusters/misura-scarponi-trekking#taglia-e-numero-degli-scarponi-da-trekking--informazionale"]},
-        {"id":"Q176","split":"dev","lang":"en","category":"nl-task","anchor":"okf://alpinaria/keyword-clusters/merino-hiking-socks#head-terms","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":97,"sections":5,"totalSections":5,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":3.486,"top":["okf://alpinaria/keyword-clusters/merino-hiking-socks#head-terms","okf://alpinaria/keyword-clusters/merino-hiking-socks#target-page","okf://alpinaria/keyword-clusters/merino-hiking-socks#merino-hiking-socks--transactional"]},
-        {"id":"Q177","split":"dev","lang":"it","category":"nl-task","anchor":"okf://alpinaria/keyword-clusters/pile-montagna#parole-chiave-principali","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":109,"sections":5,"totalSections":5,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":1.934,"top":["okf://alpinaria/keyword-clusters/pile-montagna#parole-chiave-principali","okf://alpinaria/keyword-clusters/pile-montagna#pagina-di-destinazione","okf://alpinaria/keyword-clusters/pile-montagna#pile-da-montagna--transazionale"]},
-        {"id":"Q178","split":"dev","lang":"en","category":"nl-task","anchor":"okf://alpinaria/keyword-clusters/dolomites-hiking-gear#target-page","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":743,"sections":20,"totalSections":36,"budgetExceeded":false,"truncated":false,"mode":"any","lowConfidence":false,"ms":3.944,"top":["okf://alpinaria/keyword-clusters/dolomites-hiking-gear#target-page","okf://alpinaria/keyword-clusters/dolomites-hiking-gear#head-terms","okf://alpinaria/landing-pages/en-dolomites-packing-guide#target-cluster"]},
-        {"id":"Q179","split":"dev","lang":"it","category":"nl-task","anchor":"okf://alpinaria/keyword-clusters/scarpe-trail-running#pagina-di-destinazione","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":569,"sections":20,"totalSections":43,"budgetExceeded":false,"truncated":false,"mode":"any","lowConfidence":false,"ms":3.539,"top":["okf://alpinaria/keyword-clusters/scarpe-trail-running#pagina-di-destinazione","okf://alpinaria/landing-pages/it-scarpe-trail-running#cluster-di-destinazione","okf://alpinaria/landing-pages/it-scarpe-trail-running#scarpe-trail-running-it"]},
-        {"id":"Q180","split":"dev","lang":"en","category":"nl-task","anchor":"okf://alpinaria/policies/made-in-italy-claim#forbidden","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":220,"sections":5,"totalSections":5,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":2.133,"top":["okf://alpinaria/policies/made-in-italy-claim#forbidden","okf://alpinaria/policies/made-in-italy-claim#policy-claim-made-in-italy","okf://alpinaria/policies/made-in-italy-claim#allowed"]},
-        {"id":"Q181","split":"dev","lang":"it","category":"nl-task","anchor":"okf://alpinaria/policies/claim-impermeabile#vietato","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":425,"sections":7,"totalSections":7,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":1.875,"top":["okf://alpinaria/policies/claim-impermeabile#vietato","okf://alpinaria/policies/claim-impermeabile","okf://alpinaria/decisions/naming-impermeabile-vs-idrorepellente#decisione-quando-scrivere-impermeabile-e-quando-idrorepellente"]},
-        {"id":"Q182","split":"dev","lang":"en","category":"nl-task","anchor":"okf://alpinaria/policies/medical-health-claims#allowed","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":1025,"sections":20,"totalSections":32,"budgetExceeded":false,"truncated":false,"mode":"any","lowConfidence":false,"ms":3.125,"top":["okf://alpinaria/policies/medical-health-claims#allowed","okf://alpinaria/brand-voice/tone-of-voice-en#do-not","okf://alpinaria/policies/medical-health-claims#policy-claim-medical-and-health-claims"]},
-        {"id":"Q183","split":"dev","lang":"it","category":"nl-task","anchor":"okf://alpinaria/policies/green-claims#base-normativa","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":0.5,"usedTokens":236,"sections":5,"totalSections":5,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":1.813,"top":["okf://alpinaria/policies/green-claims#base-normativa","okf://alpinaria/policies/green-claims#policy-claim-sostenibilità-e-materiali-riciclati--green-claims","okf://alpinaria/policies/green-claims#vietato--forbidden"]},
-        {"id":"Q184","split":"dev","lang":"it","category":"nl-task","anchor":"okf://alpinaria/policies/price-promo-claims#ambito","anchorHit":1,"anchorRank":2,"hitAt1":0,"anchorRR":0.5,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":194,"sections":4,"totalSections":4,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":1.688,"top":["okf://alpinaria/policies/price-promo-claims#regole","okf://alpinaria/policies/price-promo-claims#ambito","okf://alpinaria/policies/price-promo-claims"]},
-        {"id":"Q185","split":"dev","lang":"it","category":"nl-task","anchor":"okf://alpinaria/brand-voice/tono-di-voce-it#da-evitare","anchorHit":1,"anchorRank":5,"hitAt1":0,"anchorRR":0.2,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":912,"sections":20,"totalSections":29,"budgetExceeded":false,"truncated":false,"mode":"any","lowConfidence":false,"ms":3.127,"top":["okf://alpinaria/experiments/category-intro-copy-length#esperimento-testo-introduttivo-da-300-parole-contro-80-nelle-categorie","okf://alpinaria/experiments/hreflang-x-default-en#experiment-x-default-pointing-to-english-instead-of-italian","okf://alpinaria/technical-issues/hreflang-return-tags-en#hreflang-return-tags-missing-on-italian-pages"]},
-        {"id":"Q186","split":"heldout","lang":"en","category":"nl-task","anchor":"okf://alpinaria/brand-voice/tone-of-voice-en#do-not","anchorHit":0,"anchorRank":null,"hitAt1":0,"anchorRR":0,"conceptCandidate":0,"conceptRecallAt5":0,"usedTokens":213,"sections":4,"totalSections":4,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":1.6,"top":["okf://alpinaria/policies/made-in-italy-claim#forbidden","okf://alpinaria/policies/made-in-italy-claim#notes","okf://alpinaria/policies/made-in-italy-claim"]},
-        {"id":"Q187","split":"dev","lang":"it","category":"keyword","anchor":"okf://alpinaria/brand-voice/tono-di-voce-it#lessico-da-usare","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":0.5,"usedTokens":184,"sections":3,"totalSections":3,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":1.68,"top":["okf://alpinaria/brand-voice/tono-di-voce-it#lessico-da-usare","okf://alpinaria/brand-voice/tono-di-voce-it#tono-di-voce-alpinaria-italiano","okf://alpinaria/brand-voice/tono-di-voce-it"]},
-        {"id":"Q188","split":"dev","lang":"en","category":"nl-task","anchor":"okf://alpinaria/product-lines/nevaio#modelli--models","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":1197,"sections":17,"totalSections":35,"budgetExceeded":false,"truncated":false,"mode":"any","lowConfidence":false,"ms":3.022,"top":["okf://alpinaria/product-lines/nevaio#modelli--models","okf://alpinaria/product-lines/nevaio#linea-nevaio","okf://alpinaria/product-lines/nevaio#note"]},
-        {"id":"Q189","split":"dev","lang":"it","category":"nl-task","anchor":"okf://alpinaria/product-lines/cresta#modelli--models","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":1155,"sections":20,"totalSections":40,"budgetExceeded":false,"truncated":false,"mode":"any","lowConfidence":false,"ms":3.209,"top":["okf://alpinaria/product-lines/cresta#modelli--models","okf://alpinaria/product-lines/cresta#linea-cresta","okf://alpinaria/product-lines/cresta#note"]},
-        {"id":"Q190","split":"heldout","lang":"it","category":"nl-task","anchor":"okf://alpinaria/product-lines/vetta#note","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":984,"sections":17,"totalSections":17,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":2.181,"top":["okf://alpinaria/product-lines/vetta#note","okf://alpinaria/products/jkt-u-340-vetta-alpina-u#vetta-alpina-u","okf://alpinaria/products/jkt-u-310-vetta-guscio-u#vetta-guscio-u"]},
-        {"id":"Q191","split":"heldout","lang":"en","category":"nl-task","anchor":"okf://alpinaria/product-lines/sentiero#note","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":1195,"sections":20,"totalSections":27,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":2.705,"top":["okf://alpinaria/product-lines/sentiero#note","okf://alpinaria/policies/made-in-italy-claim#allowed","okf://alpinaria/policies/made-in-italy-claim#policy-claim-made-in-italy"]},
-        {"id":"Q192","split":"dev","lang":"it","category":"nl-task","anchor":"okf://alpinaria/landing-pages/it-scarponi-da-trekking-donna#note","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":1058,"sections":20,"totalSections":30,"budgetExceeded":false,"truncated":false,"mode":"any","lowConfidence":false,"ms":3.796,"top":["okf://alpinaria/landing-pages/it-scarponi-da-trekking-donna#note","okf://alpinaria/landing-pages/it-guida-cura-scarponi#note","okf://alpinaria/seo-findings/cannibalizzazione-scarponi-donna#cannibalizzazione-scarponi-donna-tra-categoria-e-vecchia-url"]},
-        {"id":"Q193","split":"dev","lang":"en","category":"nl-task","anchor":"okf://alpinaria/landing-pages/en-womens-winter-hiking-boots#notes","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":161,"sections":4,"totalSections":4,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":1.93,"top":["okf://alpinaria/landing-pages/en-womens-winter-hiking-boots#notes","okf://alpinaria/landing-pages/en-womens-winter-hiking-boots#womens-winter-hiking-boots-en","okf://alpinaria/landing-pages/en-womens-winter-hiking-boots#target-cluster"]},
-        {"id":"Q194","split":"heldout","lang":"it","category":"nl-task","anchor":"okf://alpinaria/landing-pages/it-scarponi-da-trekking-uomo#note","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":1197,"sections":19,"totalSections":30,"budgetExceeded":false,"truncated":false,"mode":"any","lowConfidence":false,"ms":3.232,"top":["okf://alpinaria/landing-pages/it-scarponi-da-trekking-uomo#note","okf://alpinaria/content-briefs/guida-scarponi-invernali-donna#brief-guida-agli-scarponi-invernali-da-donna","okf://alpinaria/landing-pages/it-scarponi-da-trekking-donna#note"]},
-        {"id":"Q195","split":"dev","lang":"en","category":"nl-task","anchor":"okf://alpinaria/landing-pages/en-mens-hiking-boots#notes","anchorHit":1,"anchorRank":2,"hitAt1":0,"anchorRR":0.5,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":908,"sections":20,"totalSections":36,"budgetExceeded":false,"truncated":false,"mode":"any","lowConfidence":false,"ms":3.251,"top":["okf://alpinaria/landing-pages/en-mens-hiking-boots#mens-hiking-boots-en","okf://alpinaria/landing-pages/en-mens-hiking-boots#notes","okf://alpinaria/policies/made-in-italy-claim#forbidden"]},
-        {"id":"Q196","split":"heldout","lang":"it","category":"nl-task","anchor":"okf://alpinaria/landing-pages/it-guida-scelta-scarponi#note","anchorHit":1,"anchorRank":3,"hitAt1":0,"anchorRR":0.3333,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":1072,"sections":20,"totalSections":36,"budgetExceeded":false,"truncated":false,"mode":"any","lowConfidence":false,"ms":3.184,"top":["okf://alpinaria/keyword-clusters/scarponi-trekking-informazionale#pagina-di-destinazione","okf://alpinaria/content-briefs/guida-scarponi-invernali-donna#brief-guida-agli-scarponi-invernali-da-donna","okf://alpinaria/landing-pages/it-guida-scelta-scarponi#note"]},
-        {"id":"Q197","split":"heldout","lang":"en","category":"nl-task","anchor":"okf://alpinaria/landing-pages/en-lightweight-hiking-shoes#notes","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":0.3333333333333333,"usedTokens":663,"sections":20,"totalSections":36,"budgetExceeded":false,"truncated":false,"mode":"any","lowConfidence":false,"ms":3.378,"top":["okf://alpinaria/landing-pages/en-lightweight-hiking-shoes#notes","okf://alpinaria/seo-findings/mobile-menu-crawl-depth#english-category-pages-sit-at-crawl-depth-5","okf://alpinaria/landing-pages/en-lightweight-hiking-shoes#lightweight-hiking-shoes-en"]},
-        {"id":"Q198","split":"heldout","lang":"it","category":"nl-task","anchor":"okf://alpinaria/keyword-clusters/alpinaria-brand#note","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":111,"sections":5,"totalSections":5,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":1.792,"top":["okf://alpinaria/keyword-clusters/alpinaria-brand#note","okf://alpinaria/keyword-clusters/alpinaria-brand#alpinaria--navigazionale-brand","okf://alpinaria/keyword-clusters/alpinaria-brand#pagina-di-destinazione"]},
-        {"id":"Q199","split":"heldout","lang":"it","category":"nl-task","anchor":"okf://alpinaria/products/trl-w-401-torrente-rapido-w#note-seo","anchorHit":0,"anchorRank":null,"hitAt1":0,"anchorRR":0,"conceptCandidate":0,"conceptRecallAt5":0,"usedTokens":230,"sections":4,"totalSections":4,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":2.537,"top":["okf://alpinaria/products/trl-w-404-torrente-rapido-pro-w#seo-notes","okf://alpinaria/products/trl-w-404-torrente-rapido-pro-w#note-seo","okf://alpinaria/products/trl-w-404-torrente-rapido-pro-w#torrente-rapido-pro-w"]},
-        {"id":"Q200","split":"dev","lang":"en","category":"nl-task","anchor":"okf://alpinaria/products/trk-m-042-dolomiti-aquastop-m#seo-notes","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":492,"sections":10,"totalSections":10,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":2.361,"top":["okf://alpinaria/products/trk-m-042-dolomiti-aquastop-m#seo-notes","okf://alpinaria/products/trk-w-063-dolomiti-alta-w#seo-notes","okf://alpinaria/products/trk-w-055-dolomiti-lite-w#seo-notes"]},
-        {"id":"Q201","split":"dev","lang":"mixed","category":"mixed-lang","anchor":"okf://alpinaria/keyword-clusters/approach-shoes#head-terms","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":102,"sections":5,"totalSections":5,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":1.978,"top":["okf://alpinaria/keyword-clusters/approach-shoes#head-terms","okf://alpinaria/keyword-clusters/approach-shoes#target-page","okf://alpinaria/keyword-clusters/approach-shoes#approach-shoes--commercial"]},
-        {"id":"Q202","split":"dev","lang":"it","category":"nl-task","anchor":"okf://alpinaria/keyword-clusters/saldi-scarponi#note","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":130,"sections":5,"totalSections":5,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":1.754,"top":["okf://alpinaria/keyword-clusters/saldi-scarponi#note","okf://alpinaria/keyword-clusters/saldi-scarponi#parole-chiave-principali","okf://alpinaria/keyword-clusters/saldi-scarponi#pagina-di-destinazione"]},
-        {"id":"Q203","split":"heldout","lang":"en","category":"nl-task","anchor":"okf://alpinaria/keyword-clusters/mens-hiking-boots-waterproof#notes","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":108,"sections":5,"totalSections":5,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":1.628,"top":["okf://alpinaria/keyword-clusters/mens-hiking-boots-waterproof#notes","okf://alpinaria/keyword-clusters/mens-hiking-boots-waterproof#head-terms","okf://alpinaria/keyword-clusters/mens-hiking-boots-waterproof#target-page"]}
+        {"id":"Q01","split":"dev","lang":"en","category":"nl-task","anchor":"okf://alpinaria/landing-pages/en-womens-winter-hiking-boots#target-cluster","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":0.6666666666666666,"usedTokens":1160,"sections":9,"totalSections":12,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":6.864,"top":["okf://alpinaria/landing-pages/en-womens-winter-hiking-boots#target-cluster","okf://alpinaria/keyword-clusters/womens-winter-hiking-boots-transactional#target-page","okf://alpinaria/landing-pages/en-womens-winter-hiking-boots#notes"]},
+        {"id":"Q04","split":"dev","lang":"it","category":"nl-task","anchor":"okf://alpinaria/policies/claim-impermeabile#consentito","anchorHit":1,"anchorRank":3,"hitAt1":0,"anchorRR":0.3333,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":1133,"sections":8,"totalSections":29,"budgetExceeded":false,"truncated":false,"mode":"any","lowConfidence":false,"ms":9.795,"top":["okf://alpinaria/policies/claim-impermeabile#policy-claim-impermeabilità","okf://alpinaria/policies/claim-impermeabile#perché","okf://alpinaria/policies/claim-impermeabile#consentito"]},
+        {"id":"Q11","split":"dev","lang":"it","category":"keyword","anchor":"okf://alpinaria/keyword-clusters/scarponi-trekking-donna-transazionale#parole-chiave-principali","anchorHit":1,"anchorRank":3,"hitAt1":0,"anchorRR":0.3333,"conceptCandidate":1,"conceptRecallAt5":0.75,"usedTokens":1199,"sections":9,"totalSections":32,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":8.702,"top":["okf://alpinaria/landing-pages/it-scarponi-da-trekking-donna#scarponi-da-trekking-donna-it","okf://alpinaria/landing-pages/it-scarponi-da-trekking-donna#cluster-di-destinazione","okf://alpinaria/keyword-clusters/scarponi-trekking-donna-transazionale#parole-chiave-principali"]},
+        {"id":"Q13","split":"dev","lang":"it","category":"keyword","anchor":"okf://alpinaria/keyword-clusters/calze-trekking-merino#parole-chiave-principali","anchorHit":1,"anchorRank":6,"hitAt1":0,"anchorRR":0.1667,"conceptCandidate":1,"conceptRecallAt5":0.6666666666666666,"usedTokens":1181,"sections":10,"totalSections":33,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":7.735,"top":["okf://alpinaria/landing-pages/it-calze-merino#calze-merino-it","okf://alpinaria/landing-pages/it-calze-merino#cluster-di-destinazione","okf://alpinaria/products/sck-u-701-rifugio-calze-merino-u#seo-notes"]},
+        {"id":"Q17","split":"heldout","lang":"it","category":"keyword","anchor":"okf://alpinaria/keyword-clusters/giacca-impermeabile-montagna#parole-chiave-principali","anchorHit":1,"anchorRank":6,"hitAt1":0,"anchorRR":0.1667,"conceptCandidate":1,"conceptRecallAt5":0.75,"usedTokens":1150,"sections":8,"totalSections":30,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":7.279,"top":["okf://alpinaria/seo-findings/query-mismatch-giacca-guscio#query-mismatch-gli-utenti-cercano-giacca-guscio-la-pagina-dice-hardshell","okf://alpinaria/products/jkt-u-310-vetta-guscio-u#note-seo","okf://alpinaria/products/jkt-m-320-vetta-guscio-pro-m#note-seo"]},
+        {"id":"Q18","split":"dev","lang":"en","category":"keyword","anchor":"okf://alpinaria/keyword-clusters/trail-running-shoes-eu#head-terms","anchorHit":1,"anchorRank":9,"hitAt1":0,"anchorRR":0.1111,"conceptCandidate":1,"conceptRecallAt5":0.8333333333333334,"usedTokens":1187,"sections":11,"totalSections":34,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":6.755,"top":["okf://alpinaria/landing-pages/it-scarpe-trail-running#scarpe-trail-running-it","okf://alpinaria/landing-pages/it-scarpe-trail-running#cluster-di-destinazione","okf://alpinaria/landing-pages/en-trail-running-shoes#trail-running-shoes-en"]},
+        {"id":"Q22","split":"dev","lang":"mixed","category":"mixed-lang","anchor":"okf://alpinaria/policies/green-claims#consentito--allowed","anchorHit":1,"anchorRank":6,"hitAt1":0,"anchorRR":0.1667,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":1108,"sections":7,"totalSections":9,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":5.808,"top":["okf://alpinaria/policies/green-claims#policy-claim-sostenibilità-e-materiali-riciclati--green-claims","okf://alpinaria/policies/green-claims","okf://alpinaria/audiences/eco-conscious-buyers#eco-conscious-buyers"]},
+        {"id":"Q31","split":"dev","lang":"it","category":"morph","anchor":"okf://alpinaria/keyword-clusters/scarponi-trekking-donna-transazionale#parole-chiave-principali","anchorHit":1,"anchorRank":3,"hitAt1":0,"anchorRR":0.3333,"conceptCandidate":1,"conceptRecallAt5":0.6666666666666666,"usedTokens":1199,"sections":9,"totalSections":32,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":7.247,"top":["okf://alpinaria/landing-pages/it-scarponi-da-trekking-donna#scarponi-da-trekking-donna-it","okf://alpinaria/landing-pages/it-scarponi-da-trekking-donna#cluster-di-destinazione","okf://alpinaria/keyword-clusters/scarponi-trekking-donna-transazionale#parole-chiave-principali"]},
+        {"id":"Q37","split":"dev","lang":"it","category":"accent","anchor":"okf://alpinaria/keyword-clusters/membrana-impermeabile-info#parole-chiave-principali","anchorHit":1,"anchorRank":2,"hitAt1":0,"anchorRR":0.5,"conceptCandidate":1,"conceptRecallAt5":0.6666666666666666,"usedTokens":1155,"sections":9,"totalSections":30,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":7.804,"top":["okf://alpinaria/policies/claim-impermeabile#vietato","okf://alpinaria/keyword-clusters/membrana-impermeabile-info#parole-chiave-principali","okf://alpinaria/policies/claim-impermeabile#perché"]},
+        {"id":"Q38","split":"dev","lang":"it","category":"accent","anchor":"okf://alpinaria/policies/green-claims#vietato--forbidden","anchorHit":1,"anchorRank":4,"hitAt1":0,"anchorRR":0.25,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":682,"sections":5,"totalSections":5,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":7.508,"top":["okf://alpinaria/policies/green-claims#policy-claim-sostenibilità-e-materiali-riciclati--green-claims","okf://alpinaria/policies/green-claims#base-normativa","okf://alpinaria/policies/green-claims"]},
+        {"id":"Q39","split":"heldout","lang":"it","category":"accent","anchor":"okf://alpinaria/keyword-clusters/membrana-impermeabile-info#parole-chiave-principali","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":0.6666666666666666,"usedTokens":1187,"sections":9,"totalSections":16,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":12.65,"top":["okf://alpinaria/keyword-clusters/membrana-impermeabile-info#parole-chiave-principali","okf://alpinaria/keyword-clusters/membrana-impermeabile-info#membrana-impermeabile-e-traspirabilità--informazionale","okf://alpinaria/keyword-clusters/membrana-impermeabile-info#note"]},
+        {"id":"Q41","split":"dev","lang":"en","category":"synonym","anchor":"okf://alpinaria/keyword-clusters/hardshell-jacket#head-terms","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":0.3333333333333333,"usedTokens":1132,"sections":11,"totalSections":38,"budgetExceeded":false,"truncated":false,"mode":"any","lowConfidence":false,"ms":7.41,"top":["okf://alpinaria/keyword-clusters/hardshell-jacket#head-terms","okf://alpinaria/keyword-clusters/hardshell-jacket#target-page","okf://alpinaria/keyword-clusters/hardshell-jacket#hardshell-jackets--commercial"]},
+        {"id":"Q51","split":"dev","lang":"it","category":"disambig","anchor":"okf://alpinaria/keyword-clusters/scarponi-trekking-informazionale#parole-chiave-principali","anchorHit":1,"anchorRank":2,"hitAt1":0,"anchorRR":0.5,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":1181,"sections":9,"totalSections":9,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":8.482,"top":["okf://alpinaria/landing-pages/it-guida-scelta-scarponi#guida-come-scegliere-gli-scarponi-da-trekking-it","okf://alpinaria/keyword-clusters/scarponi-trekking-informazionale#parole-chiave-principali","okf://alpinaria/keyword-clusters/scarponi-trekking-informazionale#come-scegliere-gli-scarponi-da-trekking--informazionale"]},
+        {"id":"Q53","split":"dev","lang":"en","category":"disambig","anchor":"okf://alpinaria/keyword-clusters/womens-winter-hiking-boots-transactional#head-terms","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":0.5,"usedTokens":876,"sections":6,"totalSections":6,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":7.322,"top":["okf://alpinaria/keyword-clusters/womens-winter-hiking-boots-transactional#head-terms","okf://alpinaria/keyword-clusters/womens-winter-hiking-boots-transactional#target-page","okf://alpinaria/keyword-clusters/womens-winter-hiking-boots-transactional#womens-winter-hiking-boots--transactional"]},
+        {"id":"Q73","split":"dev","lang":"it","category":"nl-task","anchor":"okf://alpinaria/landing-pages/it-calze-merino#note","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":0.5,"usedTokens":109,"sections":1,"totalSections":1,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":4.647,"top":["okf://alpinaria/landing-pages/it-calze-merino#note"]},
+        {"id":"Q92","split":"dev","lang":"en","category":"keyword","anchor":"okf://alpinaria/keyword-clusters/italian-hiking-boots-brand#head-terms","anchorHit":1,"anchorRank":5,"hitAt1":0,"anchorRR":0.2,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":1131,"sections":8,"totalSections":15,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":7.603,"top":["okf://alpinaria/content-briefs/en-italian-hiking-boots-brands-history#brief-montebelluna-and-the-italian-hiking-boot-tradition","okf://alpinaria/seo-findings/en-brand-queries-dolomites#english-visitors-search-for-italian-hiking-boot-brands","okf://alpinaria/content-briefs/en-italian-hiking-boots-brands-history"]},
+        {"id":"Q118","split":"dev","lang":"it","category":"morph","anchor":"okf://alpinaria/keyword-clusters/scarponcini-invernali-donna#parole-chiave-principali","anchorHit":1,"anchorRank":3,"hitAt1":0,"anchorRR":0.3333,"conceptCandidate":1,"conceptRecallAt5":0.5,"usedTokens":1174,"sections":10,"totalSections":28,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":7.525,"top":["okf://alpinaria/landing-pages/it-scarponcini-invernali-donna#scarponcini-invernali-donna-it","okf://alpinaria/landing-pages/it-scarponcini-invernali-donna#cluster-di-destinazione","okf://alpinaria/keyword-clusters/scarponcini-invernali-donna#parole-chiave-principali"]},
+        {"id":"Q126","split":"dev","lang":"it","category":"accent","anchor":"okf://alpinaria/keyword-clusters/scarponi-trekking-donna-transazionale#note","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":647,"sections":5,"totalSections":5,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":4.795,"top":["okf://alpinaria/keyword-clusters/scarponi-trekking-donna-transazionale#note","okf://alpinaria/keyword-clusters/scarponi-trekking-donna-transazionale#parole-chiave-principali","okf://alpinaria/keyword-clusters/scarponi-trekking-donna-transazionale"]},
+        {"id":"Q132","split":"dev","lang":"it","category":"synonym","anchor":"okf://alpinaria/keyword-clusters/scarpe-trekking-leggere#parole-chiave-principali","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":0.6666666666666666,"usedTokens":939,"sections":8,"totalSections":8,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":4.868,"top":["okf://alpinaria/keyword-clusters/scarpe-trekking-leggere#parole-chiave-principali","okf://alpinaria/product-lines/sentiero#linea-sentiero","okf://alpinaria/keyword-clusters/scarpe-trekking-leggere#pagina-di-destinazione"]},
+        {"id":"Q136","split":"heldout","lang":"it","category":"synonym","anchor":"okf://alpinaria/keyword-clusters/cura-manutenzione-scarponi#parole-chiave-principali","anchorHit":0,"anchorRank":null,"hitAt1":0,"anchorRR":0,"conceptCandidate":0,"conceptRecallAt5":0.5,"usedTokens":1191,"sections":10,"totalSections":37,"budgetExceeded":false,"truncated":false,"mode":"any","lowConfidence":true,"ms":7.625,"top":["okf://alpinaria/landing-pages/it-guida-cura-scarponi#guida-cura-degli-scarponi-in-pelle-it","okf://alpinaria/landing-pages/it-guida-cura-scarponi","okf://alpinaria/landing-pages/it-scarpe-da-avvicinamento#scarpe-da-avvicinamento-it"]},
+        {"id":"Q148","split":"dev","lang":"en","category":"disambig","anchor":"okf://alpinaria/landing-pages/en-womens-winter-hiking-boots-draft-v2#notes","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":0.5,"usedTokens":531,"sections":4,"totalSections":4,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":5.405,"top":["okf://alpinaria/landing-pages/en-womens-winter-hiking-boots-draft-v2#notes","okf://alpinaria/landing-pages/en-womens-winter-hiking-boots-draft-v2#womens-winter-hiking-boots--v2-redesign-draft","okf://alpinaria/landing-pages/en-womens-winter-hiking-boots-draft-v2"]},
+        {"id":"Q151","split":"dev","lang":"it","category":"disambig","anchor":"okf://alpinaria/keyword-clusters/scarponi-trekking-uomo-transazionale#parole-chiave-principali","anchorHit":1,"anchorRank":4,"hitAt1":0,"anchorRR":0.25,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":1180,"sections":10,"totalSections":13,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":6.646,"top":["okf://alpinaria/landing-pages/it-scarponi-da-trekking-uomo#cluster-di-destinazione","okf://alpinaria/keyword-clusters/scarponi-trekking-uomo-transazionale#scarponi-da-trekking-uomo--transazionale","okf://alpinaria/keyword-clusters/scarponi-trekking-uomo-transazionale"]},
+        {"id":"Q152","split":"dev","lang":"en","category":"disambig","anchor":"okf://alpinaria/keyword-clusters/boot-sizing-guide-en#head-terms","anchorHit":1,"anchorRank":3,"hitAt1":0,"anchorRR":0.3333,"conceptCandidate":1,"conceptRecallAt5":0.5,"usedTokens":876,"sections":7,"totalSections":7,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":11.905,"top":["okf://alpinaria/keyword-clusters/boot-sizing-guide-en#hiking-boot-sizing--informational","okf://alpinaria/keyword-clusters/boot-sizing-guide-en","okf://alpinaria/keyword-clusters/boot-sizing-guide-en#head-terms"]},
+        {"id":"Q153","split":"dev","lang":"it","category":"disambig","anchor":"okf://alpinaria/keyword-clusters/misura-scarponi-trekking#parole-chiave-principali","anchorHit":1,"anchorRank":2,"hitAt1":0,"anchorRR":0.5,"conceptCandidate":1,"conceptRecallAt5":0.5,"usedTokens":616,"sections":5,"totalSections":5,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":13.854,"top":["okf://alpinaria/keyword-clusters/misura-scarponi-trekking#note","okf://alpinaria/keyword-clusters/misura-scarponi-trekking#parole-chiave-principali","okf://alpinaria/keyword-clusters/misura-scarponi-trekking"]},
+        {"id":"Q176","split":"dev","lang":"en","category":"nl-task","anchor":"okf://alpinaria/keyword-clusters/merino-hiking-socks#head-terms","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":504,"sections":5,"totalSections":5,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":6.259,"top":["okf://alpinaria/keyword-clusters/merino-hiking-socks#head-terms","okf://alpinaria/keyword-clusters/merino-hiking-socks","okf://alpinaria/keyword-clusters/merino-hiking-socks#target-page"]},
+        {"id":"Q177","split":"dev","lang":"it","category":"nl-task","anchor":"okf://alpinaria/keyword-clusters/pile-montagna#parole-chiave-principali","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":508,"sections":5,"totalSections":5,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":5.716,"top":["okf://alpinaria/keyword-clusters/pile-montagna#parole-chiave-principali","okf://alpinaria/keyword-clusters/pile-montagna","okf://alpinaria/keyword-clusters/pile-montagna#pagina-di-destinazione"]},
+        {"id":"Q178","split":"dev","lang":"en","category":"nl-task","anchor":"okf://alpinaria/keyword-clusters/dolomites-hiking-gear#target-page","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":1162,"sections":10,"totalSections":36,"budgetExceeded":false,"truncated":false,"mode":"any","lowConfidence":false,"ms":11.17,"top":["okf://alpinaria/keyword-clusters/dolomites-hiking-gear#target-page","okf://alpinaria/landing-pages/en-dolomites-packing-guide#guide-what-to-pack-for-the-dolomites-en","okf://alpinaria/landing-pages/en-dolomites-packing-guide#target-cluster"]},
+        {"id":"Q179","split":"dev","lang":"it","category":"nl-task","anchor":"okf://alpinaria/keyword-clusters/scarpe-trail-running#pagina-di-destinazione","anchorHit":1,"anchorRank":2,"hitAt1":0,"anchorRR":0.5,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":1195,"sections":11,"totalSections":43,"budgetExceeded":false,"truncated":false,"mode":"any","lowConfidence":false,"ms":10.756,"top":["okf://alpinaria/landing-pages/it-scarpe-trail-running#cluster-di-destinazione","okf://alpinaria/keyword-clusters/scarpe-trail-running#pagina-di-destinazione","okf://alpinaria/landing-pages/it-scarpe-trail-running#scarpe-trail-running-it"]},
+        {"id":"Q180","split":"dev","lang":"en","category":"nl-task","anchor":"okf://alpinaria/policies/made-in-italy-claim#forbidden","anchorHit":1,"anchorRank":2,"hitAt1":0,"anchorRR":0.5,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":602,"sections":5,"totalSections":5,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":6.247,"top":["okf://alpinaria/policies/made-in-italy-claim#policy-claim-made-in-italy","okf://alpinaria/policies/made-in-italy-claim#forbidden","okf://alpinaria/policies/made-in-italy-claim"]},
+        {"id":"Q181","split":"dev","lang":"it","category":"nl-task","anchor":"okf://alpinaria/policies/claim-impermeabile#vietato","anchorHit":1,"anchorRank":3,"hitAt1":0,"anchorRR":0.3333,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":1029,"sections":7,"totalSections":7,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":7.916,"top":["okf://alpinaria/policies/claim-impermeabile#policy-claim-impermeabilità","okf://alpinaria/policies/claim-impermeabile","okf://alpinaria/policies/claim-impermeabile#vietato"]},
+        {"id":"Q182","split":"dev","lang":"en","category":"nl-task","anchor":"okf://alpinaria/policies/medical-health-claims#allowed","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":1180,"sections":9,"totalSections":32,"budgetExceeded":false,"truncated":false,"mode":"any","lowConfidence":false,"ms":8.962,"top":["okf://alpinaria/policies/medical-health-claims#allowed","okf://alpinaria/policies/medical-health-claims#policy-claim-medical-and-health-claims","okf://alpinaria/policies/medical-health-claims"]},
+        {"id":"Q183","split":"dev","lang":"it","category":"nl-task","anchor":"okf://alpinaria/policies/green-claims#base-normativa","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":0.5,"usedTokens":682,"sections":5,"totalSections":5,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":5.426,"top":["okf://alpinaria/policies/green-claims#base-normativa","okf://alpinaria/policies/green-claims#policy-claim-sostenibilità-e-materiali-riciclati--green-claims","okf://alpinaria/policies/green-claims"]},
+        {"id":"Q184","split":"dev","lang":"it","category":"nl-task","anchor":"okf://alpinaria/policies/price-promo-claims#ambito","anchorHit":1,"anchorRank":2,"hitAt1":0,"anchorRR":0.5,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":517,"sections":4,"totalSections":4,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":4.807,"top":["okf://alpinaria/policies/price-promo-claims#regole","okf://alpinaria/policies/price-promo-claims#ambito","okf://alpinaria/policies/price-promo-claims"]},
+        {"id":"Q185","split":"dev","lang":"it","category":"nl-task","anchor":"okf://alpinaria/brand-voice/tono-di-voce-it#da-evitare","anchorHit":1,"anchorRank":2,"hitAt1":0,"anchorRR":0.5,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":1190,"sections":8,"totalSections":29,"budgetExceeded":false,"truncated":false,"mode":"any","lowConfidence":false,"ms":10.066,"top":["okf://alpinaria/experiments/category-intro-copy-length#esperimento-testo-introduttivo-da-300-parole-contro-80-nelle-categorie","okf://alpinaria/brand-voice/tono-di-voce-it#da-evitare","okf://alpinaria/brand-voice/tono-di-voce-it#lessico-da-usare"]},
+        {"id":"Q186","split":"heldout","lang":"en","category":"nl-task","anchor":"okf://alpinaria/brand-voice/tone-of-voice-en#do-not","anchorHit":0,"anchorRank":null,"hitAt1":0,"anchorRR":0,"conceptCandidate":0,"conceptRecallAt5":0,"usedTokens":511,"sections":4,"totalSections":4,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":6.598,"top":["okf://alpinaria/policies/made-in-italy-claim#forbidden","okf://alpinaria/policies/made-in-italy-claim#notes","okf://alpinaria/policies/made-in-italy-claim"]},
+        {"id":"Q187","split":"dev","lang":"it","category":"keyword","anchor":"okf://alpinaria/brand-voice/tono-di-voce-it#lessico-da-usare","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":0.5,"usedTokens":426,"sections":3,"totalSections":3,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":6.462,"top":["okf://alpinaria/brand-voice/tono-di-voce-it#lessico-da-usare","okf://alpinaria/brand-voice/tono-di-voce-it#tono-di-voce-alpinaria-italiano","okf://alpinaria/brand-voice/tono-di-voce-it"]},
+        {"id":"Q188","split":"dev","lang":"en","category":"nl-task","anchor":"okf://alpinaria/product-lines/nevaio#modelli--models","anchorHit":1,"anchorRank":3,"hitAt1":0,"anchorRR":0.3333,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":1194,"sections":9,"totalSections":35,"budgetExceeded":false,"truncated":false,"mode":"any","lowConfidence":false,"ms":9.695,"top":["okf://alpinaria/product-lines/nevaio#linea-nevaio","okf://alpinaria/product-lines/nevaio","okf://alpinaria/product-lines/nevaio#modelli--models"]},
+        {"id":"Q189","split":"dev","lang":"it","category":"nl-task","anchor":"okf://alpinaria/product-lines/cresta#modelli--models","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":1199,"sections":10,"totalSections":40,"budgetExceeded":false,"truncated":false,"mode":"any","lowConfidence":false,"ms":13.414,"top":["okf://alpinaria/product-lines/cresta#modelli--models","okf://alpinaria/product-lines/cresta","okf://alpinaria/product-lines/cresta#linea-cresta"]},
+        {"id":"Q190","split":"heldout","lang":"it","category":"nl-task","anchor":"okf://alpinaria/product-lines/vetta#note","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":1178,"sections":8,"totalSections":17,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":7.508,"top":["okf://alpinaria/product-lines/vetta#note","okf://alpinaria/products/jkt-u-340-vetta-alpina-u#vetta-alpina-u","okf://alpinaria/products/jkt-u-310-vetta-guscio-u#vetta-guscio-u"]},
+        {"id":"Q191","split":"heldout","lang":"en","category":"nl-task","anchor":"okf://alpinaria/product-lines/sentiero#note","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":1197,"sections":9,"totalSections":27,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":9.278,"top":["okf://alpinaria/product-lines/sentiero#note","okf://alpinaria/policies/made-in-italy-claim#allowed","okf://alpinaria/product-lines/sentiero#modelli--models"]},
+        {"id":"Q192","split":"dev","lang":"it","category":"nl-task","anchor":"okf://alpinaria/landing-pages/it-scarponi-da-trekking-donna#note","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":1166,"sections":8,"totalSections":30,"budgetExceeded":false,"truncated":false,"mode":"any","lowConfidence":false,"ms":12.41,"top":["okf://alpinaria/landing-pages/it-scarponi-da-trekking-donna#note","okf://alpinaria/landing-pages/it-scarponi-da-trekking-donna","okf://alpinaria/landing-pages/it-scarponi-da-trekking-donna#scarponi-da-trekking-donna-it"]},
+        {"id":"Q193","split":"dev","lang":"en","category":"nl-task","anchor":"okf://alpinaria/landing-pages/en-womens-winter-hiking-boots#notes","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":504,"sections":4,"totalSections":4,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":6.185,"top":["okf://alpinaria/landing-pages/en-womens-winter-hiking-boots#notes","okf://alpinaria/landing-pages/en-womens-winter-hiking-boots#womens-winter-hiking-boots-en","okf://alpinaria/landing-pages/en-womens-winter-hiking-boots#target-cluster"]},
+        {"id":"Q194","split":"heldout","lang":"it","category":"nl-task","anchor":"okf://alpinaria/landing-pages/it-scarponi-da-trekking-uomo#note","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":1131,"sections":8,"totalSections":30,"budgetExceeded":false,"truncated":false,"mode":"any","lowConfidence":false,"ms":10.093,"top":["okf://alpinaria/landing-pages/it-scarponi-da-trekking-uomo#note","okf://alpinaria/landing-pages/it-scarponi-da-trekking-uomo#scarponi-da-trekking-uomo-it","okf://alpinaria/landing-pages/it-scarponi-da-trekking-uomo#cluster-di-destinazione"]},
+        {"id":"Q195","split":"dev","lang":"en","category":"nl-task","anchor":"okf://alpinaria/landing-pages/en-mens-hiking-boots#notes","anchorHit":1,"anchorRank":2,"hitAt1":0,"anchorRR":0.5,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":1184,"sections":10,"totalSections":36,"budgetExceeded":false,"truncated":false,"mode":"any","lowConfidence":false,"ms":21.237,"top":["okf://alpinaria/landing-pages/en-mens-hiking-boots#mens-hiking-boots-en","okf://alpinaria/landing-pages/en-mens-hiking-boots#notes","okf://alpinaria/landing-pages/en-mens-hiking-boots#target-cluster"]},
+        {"id":"Q196","split":"heldout","lang":"it","category":"nl-task","anchor":"okf://alpinaria/landing-pages/it-guida-scelta-scarponi#note","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":1121,"sections":7,"totalSections":36,"budgetExceeded":false,"truncated":false,"mode":"any","lowConfidence":false,"ms":9.353,"top":["okf://alpinaria/landing-pages/it-guida-scelta-scarponi#note","okf://alpinaria/landing-pages/it-guida-scelta-scarponi#guida-come-scegliere-gli-scarponi-da-trekking-it","okf://alpinaria/experiments/faq-schema-guida-scarponi#esperimento-faq-schema-sulla-guida-alla-scelta-degli-scarponi"]},
+        {"id":"Q197","split":"heldout","lang":"en","category":"nl-task","anchor":"okf://alpinaria/landing-pages/en-lightweight-hiking-shoes#notes","anchorHit":1,"anchorRank":4,"hitAt1":0,"anchorRR":0.25,"conceptCandidate":1,"conceptRecallAt5":0.3333333333333333,"usedTokens":1180,"sections":11,"totalSections":36,"budgetExceeded":false,"truncated":false,"mode":"any","lowConfidence":false,"ms":9.277,"top":["okf://alpinaria/landing-pages/en-lightweight-hiking-shoes#lightweight-hiking-shoes-en","okf://alpinaria/landing-pages/en-lightweight-hiking-shoes#target-cluster","okf://alpinaria/keyword-clusters/lightweight-hiking-shoes#target-page"]},
+        {"id":"Q198","split":"heldout","lang":"it","category":"nl-task","anchor":"okf://alpinaria/keyword-clusters/alpinaria-brand#note","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":516,"sections":5,"totalSections":5,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":4.404,"top":["okf://alpinaria/keyword-clusters/alpinaria-brand#note","okf://alpinaria/keyword-clusters/alpinaria-brand#alpinaria--navigazionale-brand","okf://alpinaria/keyword-clusters/alpinaria-brand"]},
+        {"id":"Q199","split":"heldout","lang":"it","category":"nl-task","anchor":"okf://alpinaria/products/trl-w-401-torrente-rapido-w#note-seo","anchorHit":0,"anchorRank":null,"hitAt1":0,"anchorRR":0,"conceptCandidate":0,"conceptRecallAt5":0,"usedTokens":553,"sections":4,"totalSections":4,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":8.107,"top":["okf://alpinaria/products/trl-w-404-torrente-rapido-pro-w#note-seo","okf://alpinaria/products/trl-w-404-torrente-rapido-pro-w#seo-notes","okf://alpinaria/products/trl-w-404-torrente-rapido-pro-w#torrente-rapido-pro-w"]},
+        {"id":"Q200","split":"dev","lang":"en","category":"nl-task","anchor":"okf://alpinaria/products/trk-m-042-dolomiti-aquastop-m#seo-notes","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":1166,"sections":9,"totalSections":10,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":8.629,"top":["okf://alpinaria/products/trk-m-042-dolomiti-aquastop-m#seo-notes","okf://alpinaria/products/trk-w-063-dolomiti-alta-w#seo-notes","okf://alpinaria/products/trk-m-042-dolomiti-aquastop-m#dolomiti-aquastop-m"]},
+        {"id":"Q201","split":"dev","lang":"mixed","category":"mixed-lang","anchor":"okf://alpinaria/keyword-clusters/approach-shoes#head-terms","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":482,"sections":5,"totalSections":5,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":4.941,"top":["okf://alpinaria/keyword-clusters/approach-shoes#head-terms","okf://alpinaria/keyword-clusters/approach-shoes","okf://alpinaria/keyword-clusters/approach-shoes#target-page"]},
+        {"id":"Q202","split":"dev","lang":"it","category":"nl-task","anchor":"okf://alpinaria/keyword-clusters/saldi-scarponi#note","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":571,"sections":5,"totalSections":5,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":4.465,"top":["okf://alpinaria/keyword-clusters/saldi-scarponi#note","okf://alpinaria/keyword-clusters/saldi-scarponi#parole-chiave-principali","okf://alpinaria/keyword-clusters/saldi-scarponi"]},
+        {"id":"Q203","split":"heldout","lang":"en","category":"nl-task","anchor":"okf://alpinaria/keyword-clusters/mens-hiking-boots-waterproof#notes","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":555,"sections":5,"totalSections":5,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":4.905,"top":["okf://alpinaria/keyword-clusters/mens-hiking-boots-waterproof#notes","okf://alpinaria/keyword-clusters/mens-hiking-boots-waterproof#head-terms","okf://alpinaria/keyword-clusters/mens-hiking-boots-waterproof#mens-waterproof-hiking-boots--transactional"]}
       ]
     },
     "atlas": {
@@ -297,45 +366,45 @@
         "validForProject": true
       },
       "build": {
-        "okfIndexMs": 47.66706399999998,
-        "searchIndexMs": 57.58963999999992,
-        "firstCallMs": 4.461845999999923
+        "okfIndexMs": 174.88819599999988,
+        "searchIndexMs": 201.82751699999972,
+        "firstCallMs": 10.217136999999639
       },
       "bySplit": {
         "dev": {
           "queries": 43,
-          "anchorHitRate": 0.8604651162790697,
-          "hitAt1": 0.4883720930232558,
-          "anchorMrr": 0.5571186046511628,
-          "medianAnchorRank": 1,
+          "anchorHitRate": 0.7906976744186046,
+          "hitAt1": 0.27906976744186046,
+          "anchorMrr": 0.45929999999999993,
+          "medianAnchorRank": 2,
           "conceptRecallAt5": 0.7383720930232558,
           "conceptCandidateRate": 0.9069767441860465,
-          "meanUsedTokens": 467.95348837209303,
-          "meanSections": 11.651162790697674,
-          "maxUsedTokens": 1085,
+          "meanUsedTokens": 940.5813953488372,
+          "meanSections": 7.6976744186046515,
+          "maxUsedTokens": 1197,
           "budgetExceeded": 0,
           "truncated": 0,
           "lowConfidence": 1,
           "latency": {
-            "p50Ms": 3.176,
-            "p95Ms": 4.734,
-            "maxMs": 5.498
+            "p50Ms": 8.644,
+            "p95Ms": 12.496,
+            "maxMs": 14.851
           },
           "ci": {
             "anchorHit": {
-              "low": 0.7441860465116279,
-              "high": 0.9534883720930233,
-              "halfWidth": 0.1046511627906977
+              "low": 0.6744186046511628,
+              "high": 0.9069767441860465,
+              "halfWidth": 0.11627906976744184
             },
             "hitAt1": {
-              "low": 0.3488372093023256,
-              "high": 0.6511627906976745,
-              "halfWidth": 0.15116279069767444
+              "low": 0.16279069767441862,
+              "high": 0.4186046511627907,
+              "halfWidth": 0.12790697674418605
             },
             "anchorRR": {
-              "low": 0.42625348837209315,
-              "high": 0.6932418604651163,
-              "halfWidth": 0.13349418604651156
+              "low": 0.3536790697674418,
+              "high": 0.5794534883720931,
+              "halfWidth": 0.11288720930232565
             },
             "conceptRecallAt5": {
               "low": 0.6414728682170543,
@@ -343,51 +412,51 @@
               "halfWidth": 0.09496124031007752
             },
             "usedTokens": {
-              "low": 391.5348837209302,
-              "high": 545.2325581395348,
-              "halfWidth": 76.8488372093023
+              "low": 855.1627906976744,
+              "high": 1014.6046511627907,
+              "halfWidth": 79.72093023255815
             },
             "sections": {
-              "low": 9.790697674418604,
-              "high": 13.534883720930232,
-              "halfWidth": 1.8720930232558137
+              "low": 6.953488372093023,
+              "high": 8.348837209302326,
+              "halfWidth": 0.6976744186046515
             }
           }
         },
         "heldout": {
           "queries": 15,
-          "anchorHitRate": 0.8,
-          "hitAt1": 0.4666666666666667,
-          "anchorMrr": 0.5535999999999999,
-          "medianAnchorRank": 1,
+          "anchorHitRate": 0.7333333333333333,
+          "hitAt1": 0.3333333333333333,
+          "anchorMrr": 0.5111066666666667,
+          "medianAnchorRank": 2,
           "conceptRecallAt5": 0.801111111111111,
           "conceptCandidateRate": 0.8666666666666667,
-          "meanUsedTokens": 374.46666666666664,
-          "meanSections": 10.4,
-          "maxUsedTokens": 789,
+          "meanUsedTokens": 868.4666666666667,
+          "meanSections": 7.466666666666667,
+          "maxUsedTokens": 1188,
           "budgetExceeded": 0,
           "truncated": 0,
           "lowConfidence": 0,
           "latency": {
-            "p50Ms": 3.004,
-            "p95Ms": 4.457,
-            "maxMs": 5.01
+            "p50Ms": 8.085,
+            "p95Ms": 10.337,
+            "maxMs": 11.393
           },
           "ci": {
             "anchorHit": {
-              "low": 0.6,
-              "high": 1,
-              "halfWidth": 0.2
+              "low": 0.4666666666666667,
+              "high": 0.9333333333333333,
+              "halfWidth": 0.23333333333333334
             },
             "hitAt1": {
-              "low": 0.2,
-              "high": 0.6666666666666666,
-              "halfWidth": 0.2333333333333333
+              "low": 0.13333333333333333,
+              "high": 0.5333333333333333,
+              "halfWidth": 0.2
             },
             "anchorRR": {
-              "low": 0.31814666666666663,
-              "high": 0.7666666666666667,
-              "halfWidth": 0.22426000000000004
+              "low": 0.31109999999999993,
+              "high": 0.6888866666666668,
+              "halfWidth": 0.1888933333333334
             },
             "conceptRecallAt5": {
               "low": 0.6111111111111112,
@@ -395,51 +464,51 @@
               "halfWidth": 0.16666666666666669
             },
             "usedTokens": {
-              "low": 262.73333333333335,
-              "high": 498.53333333333336,
-              "halfWidth": 117.9
+              "low": 730.9333333333333,
+              "high": 1008.3333333333334,
+              "halfWidth": 138.70000000000005
             },
             "sections": {
-              "low": 7.4,
-              "high": 13.666666666666666,
-              "halfWidth": 3.133333333333333
+              "low": 6.466666666666667,
+              "high": 8.533333333333333,
+              "halfWidth": 1.0333333333333332
             }
           }
         },
         "all": {
           "queries": 58,
-          "anchorHitRate": 0.8448275862068966,
-          "hitAt1": 0.4827586206896552,
-          "anchorMrr": 0.5562086206896552,
-          "medianAnchorRank": 1,
+          "anchorHitRate": 0.7758620689655172,
+          "hitAt1": 0.29310344827586204,
+          "anchorMrr": 0.472698275862069,
+          "medianAnchorRank": 2,
           "conceptRecallAt5": 0.7545977011494254,
           "conceptCandidateRate": 0.896551724137931,
-          "meanUsedTokens": 443.7758620689655,
-          "meanSections": 11.327586206896552,
-          "maxUsedTokens": 1085,
+          "meanUsedTokens": 921.9310344827586,
+          "meanSections": 7.637931034482759,
+          "maxUsedTokens": 1197,
           "budgetExceeded": 0,
           "truncated": 0,
           "lowConfidence": 1,
           "latency": {
-            "p50Ms": 3.158,
-            "p95Ms": 4.749,
-            "maxMs": 5.498
+            "p50Ms": 8.446,
+            "p95Ms": 12.496,
+            "maxMs": 14.851
           },
           "ci": {
             "anchorHit": {
-              "low": 0.7413793103448276,
-              "high": 0.9310344827586207,
-              "halfWidth": 0.09482758620689652
+              "low": 0.6551724137931034,
+              "high": 0.8793103448275862,
+              "halfWidth": 0.11206896551724138
             },
             "hitAt1": {
-              "low": 0.3448275862068966,
-              "high": 0.603448275862069,
-              "halfWidth": 0.1293103448275862
+              "low": 0.1724137931034483,
+              "high": 0.39655172413793105,
+              "halfWidth": 0.11206896551724138
             },
             "anchorRR": {
-              "low": 0.43449137931034487,
-              "high": 0.664396551724138,
-              "halfWidth": 0.11495258620689658
+              "low": 0.3757137931034483,
+              "high": 0.5696810344827586,
+              "halfWidth": 0.09698362068965516
             },
             "conceptRecallAt5": {
               "low": 0.6629310344827586,
@@ -447,15 +516,56 @@
               "halfWidth": 0.08750000000000002
             },
             "usedTokens": {
-              "low": 376.41379310344826,
-              "high": 513.5689655172414,
-              "halfWidth": 68.57758620689657
+              "low": 847.4310344827586,
+              "high": 995.6551724137931,
+              "halfWidth": 74.11206896551727
             },
             "sections": {
-              "low": 9.724137931034482,
-              "high": 13.137931034482758,
-              "halfWidth": 1.706896551724138
+              "low": 7.0344827586206895,
+              "high": 8.206896551724139,
+              "halfWidth": 0.5862068965517246
             }
+          }
+        }
+      },
+      "secondary": {
+        "budgetTokens": 2000,
+        "bySplit": {
+          "dev": {
+            "queries": 43,
+            "anchorHitRate": 0.8372093023255814,
+            "anchorHitCi": {
+              "low": 0.7209302325581395,
+              "high": 0.9534883720930233,
+              "halfWidth": 0.1162790697674419
+            },
+            "anchorMrr": 0.4624023255813953,
+            "meanSections": 10.511627906976743,
+            "budgetExceeded": 0
+          },
+          "heldout": {
+            "queries": 15,
+            "anchorHitRate": 0.8,
+            "anchorHitCi": {
+              "low": 0.6,
+              "high": 1,
+              "halfWidth": 0.2
+            },
+            "anchorMrr": 0.5177733333333333,
+            "meanSections": 9.733333333333333,
+            "budgetExceeded": 0
+          },
+          "all": {
+            "queries": 58,
+            "anchorHitRate": 0.8275862068965517,
+            "anchorHitCi": {
+              "low": 0.7241379310344828,
+              "high": 0.9137931034482759,
+              "halfWidth": 0.09482758620689657
+            },
+            "anchorMrr": 0.4767224137931035,
+            "meanSections": 10.310344827586206,
+            "budgetExceeded": 0
           }
         }
       },
@@ -463,23 +573,46 @@
         {
           "weight": 1,
           "queries": 43,
-          "anchorHitRate": 0.8372093023255814,
-          "anchorMrr": 0.5477558139534885,
-          "hitAt1": 0.4883720930232558
+          "anchorHitRate": 0.7906976744186046,
+          "anchorMrr": 0.4108790697674419,
+          "hitAt1": 0.20930232558139536
         },
         {
           "weight": 0.7,
           "queries": 43,
-          "anchorHitRate": 0.8604651162790697,
-          "anchorMrr": 0.556260465116279,
-          "hitAt1": 0.4883720930232558
+          "anchorHitRate": 0.7906976744186046,
+          "anchorMrr": 0.4432441860465116,
+          "hitAt1": 0.2558139534883721
         },
         {
           "weight": 0.5,
           "queries": 43,
-          "anchorHitRate": 0.8604651162790697,
-          "anchorMrr": 0.5571186046511628,
-          "hitAt1": 0.4883720930232558
+          "anchorHitRate": 0.7906976744186046,
+          "anchorMrr": 0.45929999999999993,
+          "hitAt1": 0.27906976744186046
+        }
+      ],
+      "liftSweep": [
+        {
+          "lift": 0,
+          "queries": 43,
+          "anchorHitRate": 0.7674418604651163,
+          "anchorMrr": 0.45990930232558136,
+          "hitAt1": 0.27906976744186046
+        },
+        {
+          "lift": 2,
+          "queries": 43,
+          "anchorHitRate": 0.7906976744186046,
+          "anchorMrr": 0.4647837209302324,
+          "hitAt1": 0.27906976744186046
+        },
+        {
+          "lift": 4,
+          "queries": 43,
+          "anchorHitRate": 0.7906976744186046,
+          "anchorMrr": 0.45929999999999993,
+          "hitAt1": 0.27906976744186046
         }
       ],
       "misses": [
@@ -488,124 +621,165 @@
           "split": "heldout",
           "anchor": "okf://atlas/incidents/inc-2026-001-validator-outage-bologna#causa-radice",
           "top": "okf://atlas/services/validator-gateway#operational-notes",
-          "conceptCandidate": false
+          "conceptCandidate": false,
+          "cause": "concept not a candidate"
+        },
+        {
+          "id": "A02",
+          "split": "dev",
+          "anchor": "okf://atlas/decisions/adr-010-offline-validation-window#decision",
+          "top": "okf://atlas/runbooks/validator-offline-queue-drain#drenaggio-ordinato-delle-code-offline-dei-validatori",
+          "conceptCandidate": true,
+          "cause": "ranked below the budget"
         },
         {
           "id": "A03",
           "split": "dev",
           "anchor": "okf://atlas/decisions/adr-019-data-retention-validations#decisione",
           "top": "okf://atlas/questions/q-006-postgres-partitioning-validations#question",
-          "conceptCandidate": false
+          "conceptCandidate": false,
+          "cause": "concept not a candidate"
+        },
+        {
+          "id": "A04",
+          "split": "dev",
+          "anchor": "okf://atlas/teams/team-pagamenti#lead-and-on-call",
+          "top": "okf://atlas/runbooks/escalation-reperibilita-2025#passi",
+          "conceptCandidate": true,
+          "cause": "no shared token with the query"
         },
         {
           "id": "A07",
           "split": "dev",
           "anchor": "okf://atlas/decisions/adr-018-nexi-primary-psp#decision",
           "top": "okf://atlas/runbooks/rotate-psp-credentials#when-to-use",
-          "conceptCandidate": false
+          "conceptCandidate": false,
+          "cause": "concept not a candidate"
         },
         {
-          "id": "A09",
+          "id": "A22",
           "split": "dev",
-          "anchor": "okf://atlas/incidents/inc-2026-013-spid-login-down#causa-radice",
-          "top": "okf://atlas/services/identity-service#operational-notes",
-          "conceptCandidate": true
+          "anchor": "okf://atlas/runbooks/wallet-balance-reconciliation#steps",
+          "top": "okf://atlas/incidents/inc-2026-007-pagopa-timeout#risoluzione",
+          "conceptCandidate": true,
+          "cause": "ranked below the budget"
         },
         {
           "id": "A45",
           "split": "dev",
           "anchor": "okf://atlas/runbooks/feature-flag-kill-switch#steps",
           "top": "okf://atlas/runbooks/fare-table-hotfix#hotfix-di-una-tabella-tariffaria",
-          "conceptCandidate": false
+          "conceptCandidate": false,
+          "cause": "concept not a candidate"
         },
         {
           "id": "A46",
           "split": "heldout",
           "anchor": "okf://atlas/incidents/inc-2026-023-avl-feed-stale#root-cause",
-          "top": "okf://atlas/contracts/gtfs-feed-manifest-v1#gtfsfeedmanifest-v1",
-          "conceptCandidate": true
+          "top": "okf://atlas/incidents/inc-2026-023-avl-feed-stale",
+          "conceptCandidate": true,
+          "cause": "no evidence"
+        },
+        {
+          "id": "A47",
+          "split": "dev",
+          "anchor": "okf://atlas/questions/q-007-on-call-compensation#orientamento-attuale",
+          "top": "okf://atlas/services/reporting-warehouse#operational-notes",
+          "conceptCandidate": true,
+          "cause": "no shared token with the query"
         },
         {
           "id": "A51",
           "split": "dev",
           "anchor": "okf://atlas/runbooks/on-call-escalation#steps",
           "top": "okf://atlas/runbooks/escalation-reperibilita-2025#escalation-della-reperibilità-versione-2025-superata",
-          "conceptCandidate": false
-        },
-        {
-          "id": "A57",
-          "split": "dev",
-          "anchor": "okf://atlas/postmortems/pm-2026-001-validator-outage#sintesi",
-          "top": "okf://atlas/postmortems/pm-2026-001-validator-outage#post-mortem-inc-2026-001-certificato-intermedio-scaduto-sul-broker-mqtt",
-          "conceptCandidate": true
+          "conceptCandidate": false,
+          "cause": "concept not a candidate"
         },
         {
           "id": "A92",
           "split": "heldout",
           "anchor": "okf://atlas/dependencies/redis#where-it-is-used",
-          "top": "okf://atlas/services/trip-planner#dependencies",
-          "conceptCandidate": false
+          "top": "okf://atlas/services/realtime-predictions#dependencies",
+          "conceptCandidate": false,
+          "cause": "concept not a candidate"
+        },
+        {
+          "id": "A94",
+          "split": "dev",
+          "anchor": "okf://atlas/services/inspector-app-backend#dipendenze",
+          "top": "okf://atlas/slos/inspector-backend-sync-latency#slo-latenza-di-verifica-e-sincronizzazione-dei-controllori",
+          "conceptCandidate": true,
+          "cause": "no shared token with the query"
+        },
+        {
+          "id": "A96",
+          "split": "heldout",
+          "anchor": "okf://atlas/runbooks/postgres-failover#prerequisites",
+          "top": "okf://atlas/runbooks/postgres-failover#postgresql-failover-and-post-failover-checks",
+          "conceptCandidate": true,
+          "cause": "no shared token with the query"
         }
       ],
       "perQuery": [
-        {"id":"A01","split":"heldout","lang":"en","category":"nl-task","anchor":"okf://atlas/incidents/inc-2026-001-validator-outage-bologna#causa-radice","anchorHit":0,"anchorRank":null,"hitAt1":0,"anchorRR":0,"conceptCandidate":0,"conceptRecallAt5":0.25,"usedTokens":280,"sections":6,"totalSections":6,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":3.004,"top":["okf://atlas/services/validator-gateway#operational-notes","okf://atlas/services/validator-gateway#ownership-and-runtime","okf://atlas/services/validator-gateway#validator-gateway"]},
-        {"id":"A02","split":"dev","lang":"it","category":"nl-task","anchor":"okf://atlas/decisions/adr-010-offline-validation-window#decision","anchorHit":1,"anchorRank":14,"hitAt1":0,"anchorRR":0.0714,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":895,"sections":20,"totalSections":58,"budgetExceeded":false,"truncated":false,"mode":"any","lowConfidence":false,"ms":4.615,"top":["okf://atlas/runbooks/validator-offline-queue-drain#escalation","okf://atlas/teams/team-biglietti#team-biglietti-ticketing","okf://atlas/decisions/adr-010-offline-validation-window#related"]},
-        {"id":"A03","split":"dev","lang":"en","category":"nl-task","anchor":"okf://atlas/decisions/adr-019-data-retention-validations#decisione","anchorHit":0,"anchorRank":null,"hitAt1":0,"anchorRR":0,"conceptCandidate":0,"conceptRecallAt5":0,"usedTokens":183,"sections":6,"totalSections":6,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":3.959,"top":["okf://atlas/questions/q-006-postgres-partitioning-validations#question","okf://atlas/questions/q-006-postgres-partitioning-validations#current-leaning","okf://atlas/questions/q-006-postgres-partitioning-validations#related"]},
-        {"id":"A04","split":"dev","lang":"it","category":"nl-task","anchor":"okf://atlas/teams/team-pagamenti#lead-and-on-call","anchorHit":1,"anchorRank":19,"hitAt1":0,"anchorRR":0.0526,"conceptCandidate":1,"conceptRecallAt5":0.5,"usedTokens":726,"sections":20,"totalSections":36,"budgetExceeded":false,"truncated":false,"mode":"any","lowConfidence":true,"ms":4.734,"top":["okf://atlas/runbooks/pagopa-reconciliation#escalation","okf://atlas/runbooks/avl-feed-restart#passi","okf://atlas/runbooks/avl-feed-restart#escalation"]},
-        {"id":"A05","split":"dev","lang":"en","category":"nl-task","anchor":"okf://atlas/incidents/inc-2026-027-subscription-renewal-duplicate#root-cause","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":0.3333333333333333,"usedTokens":298,"sections":7,"totalSections":7,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":2.877,"top":["okf://atlas/incidents/inc-2026-027-subscription-renewal-duplicate#root-cause","okf://atlas/incidents/inc-2026-027-subscription-renewal-duplicate#inc-2026-027-620-subscriptions-renewed-and-charged-twice","okf://atlas/incidents/inc-2026-027-subscription-renewal-duplicate#resolution"]},
-        {"id":"A07","split":"dev","lang":"en","category":"nl-task","anchor":"okf://atlas/decisions/adr-018-nexi-primary-psp#decision","anchorHit":0,"anchorRank":null,"hitAt1":0,"anchorRR":0,"conceptCandidate":0,"conceptRecallAt5":0,"usedTokens":322,"sections":7,"totalSections":7,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":2.8,"top":["okf://atlas/runbooks/rotate-psp-credentials#when-to-use","okf://atlas/runbooks/rotate-psp-credentials#rotate-psp-credentials-nexi-xpay-and-fallback","okf://atlas/runbooks/rotate-psp-credentials"]},
-        {"id":"A09","split":"dev","lang":"it","category":"nl-task","anchor":"okf://atlas/incidents/inc-2026-013-spid-login-down#causa-radice","anchorHit":0,"anchorRank":null,"hitAt1":0,"anchorRR":0,"conceptCandidate":1,"conceptRecallAt5":0.6666666666666666,"usedTokens":829,"sections":20,"totalSections":49,"budgetExceeded":false,"truncated":false,"mode":"any","lowConfidence":false,"ms":3.993,"top":["okf://atlas/services/identity-service#operational-notes","okf://atlas/decisions/adr-004-keycloak-for-spid-cie#conseguenze","okf://atlas/incidents/inc-2026-013-spid-login-down#inc-2026-013-login-spid-non-funzionante-per-2-ore"]},
-        {"id":"A10","split":"dev","lang":"en","category":"nl-task","anchor":"okf://atlas/decisions/adr-014-emv-contactless-tokenization#decision","anchorHit":1,"anchorRank":3,"hitAt1":0,"anchorRR":0.3333,"conceptCandidate":1,"conceptRecallAt5":0.5,"usedTokens":179,"sections":6,"totalSections":6,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":2.608,"top":["okf://atlas/decisions/adr-014-emv-contactless-tokenization#context","okf://atlas/decisions/adr-014-emv-contactless-tokenization","okf://atlas/decisions/adr-014-emv-contactless-tokenization#decision"]},
-        {"id":"A14","split":"heldout","lang":"en","category":"keyword","anchor":"okf://atlas/decisions/adr-005-raptor-trip-planner#decision","anchorHit":1,"anchorRank":2,"hitAt1":0,"anchorRR":0.5,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":301,"sections":7,"totalSections":7,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":3.385,"top":["okf://atlas/decisions/adr-005-raptor-trip-planner#adr-005-in-house-raptor-trip-planner-instead-of-opentripplanner","okf://atlas/decisions/adr-005-raptor-trip-planner#decision","okf://atlas/decisions/adr-005-raptor-trip-planner#related"]},
-        {"id":"A16","split":"dev","lang":"en","category":"keyword","anchor":"okf://atlas/decisions/adr-012-outbox-pattern#decision","anchorHit":1,"anchorRank":3,"hitAt1":0,"anchorRR":0.3333,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":339,"sections":8,"totalSections":8,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":2.935,"top":["okf://atlas/decisions/adr-012-outbox-pattern#adr-012-transactional-outbox-for-events-emitted-from-database-transactions","okf://atlas/decisions/adr-012-outbox-pattern#related","okf://atlas/decisions/adr-012-outbox-pattern#decision"]},
-        {"id":"A17","split":"dev","lang":"en","category":"keyword","anchor":"okf://atlas/runbooks/feature-flag-kill-switch#steps","anchorHit":1,"anchorRank":13,"hitAt1":0,"anchorRR":0.0769,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":624,"sections":16,"totalSections":16,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":3.626,"top":["okf://atlas/runbooks/feature-flag-kill-switch#use-a-kill-switch-flag","okf://atlas/runbooks/feature-flag-kill-switch#rollback","okf://atlas/runbooks/feature-flag-kill-switch#prerequisites"]},
-        {"id":"A20","split":"heldout","lang":"en","category":"keyword","anchor":"okf://atlas/incidents/inc-2026-018-clickhouse-disk-full#root-cause","anchorHit":1,"anchorRank":7,"hitAt1":0,"anchorRR":0.1429,"conceptCandidate":1,"conceptRecallAt5":0.6,"usedTokens":582,"sections":11,"totalSections":11,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":3.339,"top":["okf://atlas/dependencies/clickhouse#upgrade-notes","okf://atlas/runbooks/clickhouse-disk-cleanup#steps","okf://atlas/incidents/inc-2026-018-clickhouse-disk-full#resolution"]},
-        {"id":"A22","split":"dev","lang":"mixed","category":"mixed-lang","anchor":"okf://atlas/runbooks/wallet-balance-reconciliation#steps","anchorHit":1,"anchorRank":17,"hitAt1":0,"anchorRR":0.0588,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":1085,"sections":20,"totalSections":54,"budgetExceeded":false,"truncated":false,"mode":"any","lowConfidence":false,"ms":4.529,"top":["okf://atlas/runbooks/pagopa-reconciliation#rollback","okf://atlas/runbooks/pagopa-reconciliation#riconciliazione-manuale-degli-avvisi-pagopa","okf://atlas/runbooks/wallet-balance-reconciliation#nightly-wallet-balance-reconciliation"]},
-        {"id":"A25","split":"dev","lang":"mixed","category":"mixed-lang","anchor":"okf://atlas/decisions/adr-017-retire-legacy-sbe#decisione","anchorHit":1,"anchorRank":8,"hitAt1":0,"anchorRR":0.125,"conceptCandidate":1,"conceptRecallAt5":0.6666666666666666,"usedTokens":658,"sections":20,"totalSections":26,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":3.712,"top":["okf://atlas/decisions/adr-017-retire-legacy-sbe#adr-017-dismissione-del-legacy-sbe-entro-marzo-2027","okf://atlas/runbooks/legacy-sbe-restart#quando-usarlo","okf://atlas/incidents/inc-2025-041-legacy-sbe-crash#azioni-successive"]},
-        {"id":"A30","split":"dev","lang":"en","category":"exact","anchor":"okf://atlas/runbooks/notification-rate-limit#steps","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":98,"sections":1,"totalSections":1,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":2.789,"top":["okf://atlas/runbooks/notification-rate-limit#steps"]},
-        {"id":"A31","split":"dev","lang":"it","category":"exact","anchor":"okf://atlas/incidents/inc-2025-041-legacy-sbe-crash#timeline","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":32,"sections":1,"totalSections":1,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":2.739,"top":["okf://atlas/incidents/inc-2025-041-legacy-sbe-crash#timeline"]},
-        {"id":"A34","split":"dev","lang":"en","category":"morph","anchor":"okf://atlas/runbooks/rotate-psp-credentials#steps","anchorHit":1,"anchorRank":10,"hitAt1":0,"anchorRR":0.1,"conceptCandidate":1,"conceptRecallAt5":0.5,"usedTokens":529,"sections":12,"totalSections":12,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":3.256,"top":["okf://atlas/runbooks/rotate-psp-credentials#rotate-psp-credentials-nexi-xpay-and-fallback","okf://atlas/decisions/adr-018-nexi-primary-psp#related","okf://atlas/decisions/adr-018-nexi-primary-psp#consequences"]},
-        {"id":"A36","split":"dev","lang":"en","category":"morph","anchor":"okf://atlas/runbooks/certificate-renewal#steps","anchorHit":1,"anchorRank":6,"hitAt1":0,"anchorRR":0.1667,"conceptCandidate":1,"conceptRecallAt5":0.3333333333333333,"usedTokens":605,"sections":9,"totalSections":9,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":3.176,"top":["okf://atlas/runbooks/certificate-renewal#certificate-renewal-cert-manager-fleet-ca-chain-and-non-managed-hostnames","okf://atlas/runbooks/certificate-renewal#when-to-use","okf://atlas/runbooks/certificate-renewal#rollback"]},
-        {"id":"A37","split":"dev","lang":"en","category":"morph","anchor":"okf://atlas/services/validation-ledger#operational-notes","anchorHit":1,"anchorRank":4,"hitAt1":0,"anchorRR":0.25,"conceptCandidate":1,"conceptRecallAt5":0.5,"usedTokens":602,"sections":15,"totalSections":15,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":3.824,"top":["okf://atlas/dependencies/postgresql-16#where-it-is-used","okf://atlas/runbooks/replay-kafka-topic#when-to-use","okf://atlas/services/validation-ledger#validation-ledger"]},
-        {"id":"A38","split":"heldout","lang":"it","category":"morph","anchor":"okf://atlas/incidents/inc-2026-025-inspector-app-sync#impatto","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":618,"sections":12,"totalSections":12,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":3.179,"top":["okf://atlas/incidents/inc-2026-025-inspector-app-sync#impatto","okf://atlas/incidents/inc-2026-025-inspector-app-sync#azioni-successive","okf://atlas/runbooks/pagopa-reconciliation#escalation"]},
-        {"id":"A42","split":"dev","lang":"it","category":"accent","anchor":"okf://atlas/decisions/adr-017-retire-legacy-sbe#decisione","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":487,"sections":12,"totalSections":12,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":2.775,"top":["okf://atlas/decisions/adr-017-retire-legacy-sbe#decisione","okf://atlas/services/legacy-sbe#legacy-sbe-sistema-di-bigliettazione-elettronica","okf://atlas/decisions/adr-017-retire-legacy-sbe"]},
-        {"id":"A43","split":"dev","lang":"it","category":"accent","anchor":"okf://atlas/services/pagopa-adapter#proprietà-e-runtime","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":405,"sections":8,"totalSections":8,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":2.928,"top":["okf://atlas/services/pagopa-adapter#proprietà-e-runtime","okf://atlas/services/inspector-app-backend#proprietà-e-runtime","okf://atlas/services/pagopa-adapter#interfacce"]},
-        {"id":"A45","split":"dev","lang":"it","category":"synonym","anchor":"okf://atlas/runbooks/feature-flag-kill-switch#steps","anchorHit":0,"anchorRank":null,"hitAt1":0,"anchorRR":0,"conceptCandidate":0,"conceptRecallAt5":0,"usedTokens":619,"sections":20,"totalSections":49,"budgetExceeded":false,"truncated":false,"mode":"any","lowConfidence":false,"ms":5.498,"top":["okf://atlas/runbooks/fare-table-hotfix#hotfix-di-una-tabella-tariffaria","okf://atlas/decisions/adr-017-retire-legacy-sbe#conseguenze","okf://atlas/questions/q-010-legacy-sbe-data-archive#questione-aperta-archiviazione-dei-dati-storici-del-legacy-sbe"]},
-        {"id":"A46","split":"heldout","lang":"en","category":"synonym","anchor":"okf://atlas/incidents/inc-2026-023-avl-feed-stale#root-cause","anchorHit":0,"anchorRank":null,"hitAt1":0,"anchorRR":0,"conceptCandidate":1,"conceptRecallAt5":0.6666666666666666,"usedTokens":665,"sections":20,"totalSections":28,"budgetExceeded":false,"truncated":false,"mode":"any","lowConfidence":false,"ms":4.457,"top":["okf://atlas/contracts/gtfs-feed-manifest-v1#gtfsfeedmanifest-v1","okf://atlas/incidents/inc-2026-022-refund-queue-stuck#inc-2026-022-refund-approvals-stuck-for-6-days","okf://atlas/incidents/inc-2026-022-refund-queue-stuck#follow-ups"]},
-        {"id":"A47","split":"dev","lang":"en","category":"synonym","anchor":"okf://atlas/questions/q-007-on-call-compensation#orientamento-attuale","anchorHit":1,"anchorRank":14,"hitAt1":0,"anchorRR":0.0714,"conceptCandidate":1,"conceptRecallAt5":0.5,"usedTokens":813,"sections":20,"totalSections":54,"budgetExceeded":false,"truncated":false,"mode":"any","lowConfidence":false,"ms":4.131,"top":["okf://atlas/runbooks/wallet-balance-reconciliation#escalation","okf://standards/standards/on-call-policy#on-call-policy","okf://atlas/decisions/adr-006-clickhouse-warehouse#context"]},
-        {"id":"A49","split":"dev","lang":"en","category":"synonym","anchor":"okf://atlas/incidents/inc-2026-029-storefront-ddos#root-cause","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":0.6666666666666666,"usedTokens":397,"sections":7,"totalSections":7,"budgetExceeded":false,"truncated":false,"mode":"any","lowConfidence":false,"ms":3.474,"top":["okf://atlas/incidents/inc-2026-029-storefront-ddos#root-cause","okf://atlas/postmortems/pm-2026-029-storefront-ddos#lessons","okf://atlas/runbooks/on-call-escalation#when-to-use"]},
-        {"id":"A50","split":"dev","lang":"en","category":"freshness","anchor":"okf://atlas/decisions/adr-015-polyrepo-per-team#decision","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":534,"sections":15,"totalSections":15,"budgetExceeded":false,"truncated":false,"mode":"any","lowConfidence":false,"ms":2.841,"top":["okf://atlas/decisions/adr-015-polyrepo-per-team#decision","okf://atlas/decisions/adr-015-polyrepo-per-team#related","okf://atlas/decisions/adr-007-monorepo#related"]},
-        {"id":"A51","split":"dev","lang":"en","category":"freshness","anchor":"okf://atlas/runbooks/on-call-escalation#steps","anchorHit":0,"anchorRank":null,"hitAt1":0,"anchorRR":0,"conceptCandidate":0,"conceptRecallAt5":0.25,"usedTokens":505,"sections":20,"totalSections":41,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":3.977,"top":["okf://atlas/runbooks/escalation-reperibilita-2025#escalation-della-reperibilità-versione-2025-superata","okf://atlas/runbooks/escalation-reperibilita-2025#escalation","okf://atlas/runbooks/escalation-reperibilita-2025#quando-usarlo"]},
-        {"id":"A54","split":"dev","lang":"en","category":"disambig","anchor":"okf://atlas/contracts/ticket-validated-v1#notes","anchorHit":1,"anchorRank":8,"hitAt1":0,"anchorRR":0.125,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":460,"sections":14,"totalSections":14,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":3.039,"top":["okf://atlas/contracts/ticket-validated-v1#ticketvalidated-v1-deprecated","okf://atlas/contracts/ticket-validated-v2#notes","okf://atlas/contracts/ticket-validated-v1"]},
-        {"id":"A55","split":"dev","lang":"en","category":"disambig","anchor":"okf://atlas/runbooks/escalation-reperibilita-2025#quando-usarlo","anchorHit":1,"anchorRank":8,"hitAt1":0,"anchorRR":0.125,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":694,"sections":20,"totalSections":64,"budgetExceeded":false,"truncated":false,"mode":"any","lowConfidence":false,"ms":4.318,"top":["okf://atlas/runbooks/escalation-reperibilita-2025#escalation-della-reperibilità-versione-2025-superata","okf://atlas/runbooks/schema-registry-rollback#steps","okf://atlas/runbooks/schema-registry-rollback#rollback"]},
-        {"id":"A57","split":"dev","lang":"it","category":"disambig","anchor":"okf://atlas/postmortems/pm-2026-001-validator-outage#sintesi","anchorHit":0,"anchorRank":null,"hitAt1":0,"anchorRR":0,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":780,"sections":20,"totalSections":39,"budgetExceeded":false,"truncated":false,"mode":"any","lowConfidence":false,"ms":4.891,"top":["okf://atlas/postmortems/pm-2026-001-validator-outage#post-mortem-inc-2026-001-certificato-intermedio-scaduto-sul-broker-mqtt","okf://atlas/incidents/inc-2026-001-validator-outage-bologna#azioni-successive","okf://atlas/runbooks/validator-offline-queue-drain#drenaggio-ordinato-delle-code-offline-dei-validatori"]},
-        {"id":"A73","split":"dev","lang":"en","category":"nl-task","anchor":"okf://atlas/decisions/adr-012-outbox-pattern#consequences","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":202,"sections":6,"totalSections":6,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":3.672,"top":["okf://atlas/decisions/adr-012-outbox-pattern#consequences","okf://atlas/decisions/adr-012-outbox-pattern#decision","okf://atlas/decisions/adr-012-outbox-pattern#adr-012-transactional-outbox-for-events-emitted-from-database-transactions"]},
-        {"id":"A74","split":"dev","lang":"it","category":"nl-task","anchor":"okf://atlas/decisions/adr-009-pagopa-direct-integration#conseguenze","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":221,"sections":6,"totalSections":6,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":3.158,"top":["okf://atlas/decisions/adr-009-pagopa-direct-integration#conseguenze","okf://atlas/decisions/adr-009-pagopa-direct-integration#adr-009-integrazione-diretta-con-il-nodo-pagopa","okf://atlas/decisions/adr-009-pagopa-direct-integration#decisione"]},
-        {"id":"A75","split":"dev","lang":"en","category":"nl-task","anchor":"okf://atlas/postmortems/pm-2026-004-wallet-double-charge#what-went-well","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":0.5,"usedTokens":311,"sections":7,"totalSections":7,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":3.139,"top":["okf://atlas/postmortems/pm-2026-004-wallet-double-charge#what-went-well","okf://atlas/postmortems/pm-2026-004-wallet-double-charge#post-mortem-inc-2026-004-non-idempotent-wallet-command-handler","okf://atlas/postmortems/pm-2026-004-wallet-double-charge#lessons"]},
-        {"id":"A76","split":"dev","lang":"en","category":"nl-task","anchor":"okf://atlas/postmortems/pm-2026-011-kafka-lag#action-items","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":0.5,"usedTokens":307,"sections":7,"totalSections":7,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":2.908,"top":["okf://atlas/postmortems/pm-2026-011-kafka-lag#action-items","okf://atlas/postmortems/pm-2026-011-kafka-lag#post-mortem-inc-2026-011-topic-retention-drift-filled-a-broker","okf://atlas/postmortems/pm-2026-011-kafka-lag"]},
-        {"id":"A77","split":"heldout","lang":"it","category":"nl-task","anchor":"okf://atlas/postmortems/pm-2026-007-pagopa-timeout#lezione","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":296,"sections":7,"totalSections":7,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":2.807,"top":["okf://atlas/postmortems/pm-2026-007-pagopa-timeout#lezione","okf://atlas/postmortems/pm-2026-007-pagopa-timeout#post-mortem-inc-2026-007-dipendenza-dalle-sole-ricevute-push-di-pagopa","okf://atlas/postmortems/pm-2026-007-pagopa-timeout"]},
-        {"id":"A78","split":"dev","lang":"en","category":"nl-task","anchor":"okf://atlas/runbooks/schema-registry-rollback#steps","anchorHit":1,"anchorRank":2,"hitAt1":0,"anchorRR":0.5,"conceptCandidate":1,"conceptRecallAt5":0.5,"usedTokens":261,"sections":6,"totalSections":6,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":2.965,"top":["okf://atlas/runbooks/schema-registry-rollback#roll-back-a-schema-registry-change","okf://atlas/runbooks/schema-registry-rollback#steps","okf://atlas/runbooks/schema-registry-rollback#when-to-use"]},
-        {"id":"A79","split":"dev","lang":"en","category":"nl-task","anchor":"okf://atlas/runbooks/fare-table-hotfix#rollback","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":333,"sections":7,"totalSections":7,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":3.389,"top":["okf://atlas/runbooks/fare-table-hotfix#rollback","okf://atlas/runbooks/fare-table-hotfix#hotfix-di-una-tabella-tariffaria","okf://atlas/runbooks/fare-table-hotfix#escalation"]},
-        {"id":"A80","split":"dev","lang":"en","category":"nl-task","anchor":"okf://atlas/runbooks/validator-offline-queue-drain#escalation","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":904,"sections":20,"totalSections":65,"budgetExceeded":false,"truncated":false,"mode":"any","lowConfidence":false,"ms":4.749,"top":["okf://atlas/runbooks/validator-offline-queue-drain#escalation","okf://atlas/runbooks/refund-queue-unstick#escalation","okf://atlas/runbooks/on-call-escalation#escalation"]},
-        {"id":"A81","split":"dev","lang":"it","category":"nl-task","anchor":"okf://atlas/runbooks/pagopa-reconciliation#prerequisiti","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":325,"sections":7,"totalSections":7,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":2.727,"top":["okf://atlas/runbooks/pagopa-reconciliation#prerequisiti","okf://atlas/runbooks/pagopa-reconciliation#rollback","okf://atlas/runbooks/pagopa-reconciliation#passi"]},
-        {"id":"A82","split":"dev","lang":"en","category":"nl-task","anchor":"okf://atlas/runbooks/replay-kafka-topic#when-to-use","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":835,"sections":17,"totalSections":17,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":3.419,"top":["okf://atlas/runbooks/replay-kafka-topic#when-to-use","okf://atlas/runbooks/clickhouse-disk-cleanup#when-to-use","okf://atlas/runbooks/replay-kafka-topic#replay-a-kafka-topic-into-a-consumer"]},
-        {"id":"A83","split":"heldout","lang":"en","category":"nl-task","anchor":"okf://atlas/contracts/fare-computed-v1#fields","anchorHit":1,"anchorRank":9,"hitAt1":0,"anchorRR":0.1111,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":789,"sections":20,"totalSections":53,"budgetExceeded":false,"truncated":false,"mode":"any","lowConfidence":false,"ms":5.01,"top":["okf://atlas/contracts/ticket-validated-v2#personal-data","okf://atlas/contracts/ticket-validated-v1#fields","okf://atlas/contracts/ticket-validated-v2#compatibility"]},
-        {"id":"A84","split":"heldout","lang":"en","category":"nl-task","anchor":"okf://atlas/contracts/account-created-v1#personal-data","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":146,"sections":7,"totalSections":7,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":2.765,"top":["okf://atlas/contracts/account-created-v1#personal-data","okf://atlas/contracts/account-created-v1#accountcreated-v1","okf://atlas/contracts/account-created-v1"]},
-        {"id":"A85","split":"dev","lang":"it","category":"nl-task","anchor":"okf://atlas/contracts/inspection-result-v1#conservazione","anchorHit":1,"anchorRank":2,"hitAt1":0,"anchorRR":0.5,"conceptCandidate":1,"conceptRecallAt5":0.5,"usedTokens":74,"sections":3,"totalSections":3,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":2.662,"top":["okf://atlas/contracts/inspection-result-v1#inspectionresult-v1","okf://atlas/contracts/inspection-result-v1#conservazione","okf://atlas/contracts/inspection-result-v1"]},
-        {"id":"A86","split":"heldout","lang":"en","category":"nl-task","anchor":"okf://atlas/slos/trip-planner-latency#alerting","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":129,"sections":6,"totalSections":6,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":2.575,"top":["okf://atlas/slos/trip-planner-latency#alerting","okf://atlas/slos/trip-planner-latency#slo-trip-planner-latency","okf://atlas/slos/trip-planner-latency#sli"]},
-        {"id":"A87","split":"dev","lang":"en","category":"nl-task","anchor":"okf://atlas/slos/identity-service-login-availability#sli","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":164,"sections":6,"totalSections":6,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":2.422,"top":["okf://atlas/slos/identity-service-login-availability#sli","okf://atlas/slos/identity-service-login-availability#slo-login-availability-spid-cie-password","okf://atlas/slos/identity-service-login-availability#error-budget"]},
-        {"id":"A88","split":"dev","lang":"it","category":"nl-task","anchor":"okf://atlas/slos/inspector-backend-sync-latency#obiettivo","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":219,"sections":6,"totalSections":6,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":2.649,"top":["okf://atlas/slos/inspector-backend-sync-latency#obiettivo","okf://atlas/slos/inspector-backend-sync-latency#slo-latenza-di-verifica-e-sincronizzazione-dei-controllori","okf://atlas/slos/inspector-backend-sync-latency"]},
-        {"id":"A89","split":"heldout","lang":"en","category":"nl-task","anchor":"okf://atlas/questions/q-001-multi-region-active-active#options","anchorHit":1,"anchorRank":2,"hitAt1":0,"anchorRR":0.5,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":220,"sections":6,"totalSections":6,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":2.696,"top":["okf://atlas/questions/q-001-multi-region-active-active#current-leaning","okf://atlas/questions/q-001-multi-region-active-active#options","okf://atlas/questions/q-001-multi-region-active-active#owner-and-due-date"]},
-        {"id":"A90","split":"heldout","lang":"it","category":"nl-task","anchor":"okf://atlas/questions/q-002-wallet-emoney-licence#orientamento-attuale","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":198,"sections":4,"totalSections":4,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":2.763,"top":["okf://atlas/questions/q-002-wallet-emoney-licence#orientamento-attuale","okf://atlas/questions/q-002-wallet-emoney-licence#questione-aperta-il-credito-prepagato-richiede-una-licenza-di-moneta-elettronica","okf://atlas/questions/q-002-wallet-emoney-licence#opzioni"]},
-        {"id":"A91","split":"heldout","lang":"en","category":"nl-task","anchor":"okf://atlas/dependencies/keycloak#support-end","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":130,"sections":5,"totalSections":5,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":2.774,"top":["okf://atlas/dependencies/keycloak#support-end","okf://atlas/dependencies/keycloak#keycloak-25","okf://atlas/dependencies/keycloak"]},
-        {"id":"A92","split":"heldout","lang":"en","category":"nl-task","anchor":"okf://atlas/dependencies/redis#where-it-is-used","anchorHit":0,"anchorRank":null,"hitAt1":0,"anchorRR":0,"conceptCandidate":0,"conceptRecallAt5":0,"usedTokens":484,"sections":20,"totalSections":41,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":3.85,"top":["okf://atlas/services/trip-planner#dependencies","okf://atlas/services/mobile-bff#dependencies","okf://atlas/services/realtime-predictions#dependencies"]},
-        {"id":"A93","split":"dev","lang":"en","category":"nl-task","anchor":"okf://atlas/services/notification-hub#interfaces","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":0.3333333333333333,"usedTokens":381,"sections":8,"totalSections":8,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":3.085,"top":["okf://atlas/services/notification-hub#interfaces","okf://atlas/services/consent-manager#interfacce","okf://atlas/services/notification-hub#operational-notes"]},
-        {"id":"A94","split":"dev","lang":"it","category":"nl-task","anchor":"okf://atlas/services/inspector-app-backend#dipendenze","anchorHit":1,"anchorRank":15,"hitAt1":0,"anchorRR":0.0667,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":818,"sections":20,"totalSections":29,"budgetExceeded":false,"truncated":false,"mode":"any","lowConfidence":false,"ms":4.508,"top":["okf://atlas/slos/inspector-backend-sync-latency#slo-latenza-di-verifica-e-sincronizzazione-dei-controllori","okf://atlas/contracts/inspection-result-v1#dati-personali","okf://atlas/questions/q-008-cie-mobile-login#orientamento-attuale"]},
-        {"id":"A95","split":"dev","lang":"en","category":"nl-task","anchor":"okf://atlas/runbooks/refund-queue-unstick#escalation","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":785,"sections":20,"totalSections":47,"budgetExceeded":false,"truncated":false,"mode":"any","lowConfidence":false,"ms":4.548,"top":["okf://atlas/runbooks/refund-queue-unstick#escalation","okf://atlas/services/refund-service#refund-service","okf://atlas/runbooks/refund-queue-unstick#unstick-the-refund-approval-queue"]},
-        {"id":"A96","split":"heldout","lang":"it","category":"nl-task","anchor":"okf://atlas/runbooks/postgres-failover#prerequisites","anchorHit":1,"anchorRank":20,"hitAt1":0,"anchorRR":0.05,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":662,"sections":20,"totalSections":31,"budgetExceeded":false,"truncated":false,"mode":"any","lowConfidence":false,"ms":4.173,"top":["okf://atlas/runbooks/escalation-reperibilita-2025#prerequisiti","okf://atlas/runbooks/postgres-failover#postgresql-failover-and-post-failover-checks","okf://atlas/decisions/adr-003-postgres-over-cockroach#related"]},
-        {"id":"A97","split":"heldout","lang":"en","category":"nl-task","anchor":"okf://atlas/dependencies/clickhouse#upgrade-notes","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":0.5,"usedTokens":117,"sections":5,"totalSections":5,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":2.656,"top":["okf://atlas/dependencies/clickhouse#upgrade-notes","okf://atlas/dependencies/clickhouse#where-it-is-used","okf://atlas/dependencies/clickhouse#clickhouse-24"]},
-        {"id":"A98","split":"dev","lang":"en","category":"nl-task","anchor":"okf://atlas/slos/fare-engine-latency-p99#alerting","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":134,"sections":6,"totalSections":6,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":3.106,"top":["okf://atlas/slos/fare-engine-latency-p99#alerting","okf://atlas/slos/fare-engine-latency-p99#slo-fare-engine-quote-latency","okf://atlas/slos/fare-engine-latency-p99#sli"]},
-        {"id":"A99","split":"dev","lang":"en","category":"nl-task","anchor":"okf://atlas/dependencies/kubernetes-eks#support-end","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":150,"sections":5,"totalSections":5,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":3.14,"top":["okf://atlas/dependencies/kubernetes-eks#support-end","okf://atlas/dependencies/kubernetes-eks#kubernetes-managed-eks","okf://atlas/dependencies/kubernetes-eks#where-it-is-used"]}
+        {"id":"A01","split":"heldout","lang":"en","category":"nl-task","anchor":"okf://atlas/incidents/inc-2026-001-validator-outage-bologna#causa-radice","anchorHit":0,"anchorRank":null,"hitAt1":0,"anchorRR":0,"conceptCandidate":0,"conceptRecallAt5":0.25,"usedTokens":709,"sections":6,"totalSections":6,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":6.923,"top":["okf://atlas/services/validator-gateway#operational-notes","okf://atlas/services/validator-gateway#ownership-and-runtime","okf://atlas/services/validator-gateway#validator-gateway"]},
+        {"id":"A02","split":"dev","lang":"it","category":"nl-task","anchor":"okf://atlas/decisions/adr-010-offline-validation-window#decision","anchorHit":0,"anchorRank":null,"hitAt1":0,"anchorRR":0,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":1179,"sections":9,"totalSections":58,"budgetExceeded":false,"truncated":false,"mode":"any","lowConfidence":false,"ms":14.851,"top":["okf://atlas/runbooks/validator-offline-queue-drain#drenaggio-ordinato-delle-code-offline-dei-validatori","okf://atlas/runbooks/validator-offline-queue-drain#escalation","okf://atlas/runbooks/validator-offline-queue-drain#quando-usarlo"]},
+        {"id":"A03","split":"dev","lang":"en","category":"nl-task","anchor":"okf://atlas/decisions/adr-019-data-retention-validations#decisione","anchorHit":0,"anchorRank":null,"hitAt1":0,"anchorRR":0,"conceptCandidate":0,"conceptRecallAt5":0,"usedTokens":719,"sections":6,"totalSections":6,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":6.672,"top":["okf://atlas/questions/q-006-postgres-partitioning-validations#question","okf://atlas/questions/q-006-postgres-partitioning-validations#related","okf://atlas/questions/q-006-postgres-partitioning-validations#current-leaning"]},
+        {"id":"A04","split":"dev","lang":"it","category":"nl-task","anchor":"okf://atlas/teams/team-pagamenti#lead-and-on-call","anchorHit":0,"anchorRank":null,"hitAt1":0,"anchorRR":0,"conceptCandidate":1,"conceptRecallAt5":0.5,"usedTokens":1180,"sections":11,"totalSections":36,"budgetExceeded":false,"truncated":false,"mode":"any","lowConfidence":true,"ms":10.25,"top":["okf://atlas/runbooks/escalation-reperibilita-2025#passi","okf://atlas/runbooks/pagopa-reconciliation#escalation","okf://atlas/runbooks/escalation-reperibilita-2025#escalation-della-reperibilità-versione-2025-superata"]},
+        {"id":"A05","split":"dev","lang":"en","category":"nl-task","anchor":"okf://atlas/incidents/inc-2026-027-subscription-renewal-duplicate#root-cause","anchorHit":1,"anchorRank":2,"hitAt1":0,"anchorRR":0.5,"conceptCandidate":1,"conceptRecallAt5":0.3333333333333333,"usedTokens":968,"sections":7,"totalSections":7,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":6.987,"top":["okf://atlas/incidents/inc-2026-027-subscription-renewal-duplicate#resolution","okf://atlas/incidents/inc-2026-027-subscription-renewal-duplicate#root-cause","okf://atlas/incidents/inc-2026-027-subscription-renewal-duplicate#inc-2026-027-620-subscriptions-renewed-and-charged-twice"]},
+        {"id":"A07","split":"dev","lang":"en","category":"nl-task","anchor":"okf://atlas/decisions/adr-018-nexi-primary-psp#decision","anchorHit":0,"anchorRank":null,"hitAt1":0,"anchorRR":0,"conceptCandidate":0,"conceptRecallAt5":0,"usedTokens":886,"sections":7,"totalSections":7,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":7.636,"top":["okf://atlas/runbooks/rotate-psp-credentials#when-to-use","okf://atlas/runbooks/rotate-psp-credentials#rotate-psp-credentials-nexi-xpay-and-fallback","okf://atlas/runbooks/rotate-psp-credentials"]},
+        {"id":"A09","split":"dev","lang":"it","category":"nl-task","anchor":"okf://atlas/incidents/inc-2026-013-spid-login-down#causa-radice","anchorHit":1,"anchorRank":8,"hitAt1":0,"anchorRR":0.125,"conceptCandidate":1,"conceptRecallAt5":0.6666666666666666,"usedTokens":1192,"sections":9,"totalSections":49,"budgetExceeded":false,"truncated":false,"mode":"any","lowConfidence":false,"ms":11.643,"top":["okf://atlas/incidents/inc-2026-013-spid-login-down#inc-2026-013-login-spid-non-funzionante-per-2-ore","okf://atlas/incidents/inc-2026-013-spid-login-down#impatto","okf://atlas/decisions/adr-004-keycloak-for-spid-cie#conseguenze"]},
+        {"id":"A10","split":"dev","lang":"en","category":"nl-task","anchor":"okf://atlas/decisions/adr-014-emv-contactless-tokenization#decision","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":0.5,"usedTokens":729,"sections":6,"totalSections":6,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":8.048,"top":["okf://atlas/decisions/adr-014-emv-contactless-tokenization#decision","okf://atlas/decisions/adr-014-emv-contactless-tokenization#context","okf://atlas/decisions/adr-014-emv-contactless-tokenization"]},
+        {"id":"A14","split":"heldout","lang":"en","category":"keyword","anchor":"okf://atlas/decisions/adr-005-raptor-trip-planner#decision","anchorHit":1,"anchorRank":2,"hitAt1":0,"anchorRR":0.5,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":904,"sections":7,"totalSections":7,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":7.705,"top":["okf://atlas/decisions/adr-005-raptor-trip-planner#adr-005-in-house-raptor-trip-planner-instead-of-opentripplanner","okf://atlas/decisions/adr-005-raptor-trip-planner#decision","okf://atlas/decisions/adr-005-raptor-trip-planner"]},
+        {"id":"A16","split":"dev","lang":"en","category":"keyword","anchor":"okf://atlas/decisions/adr-012-outbox-pattern#decision","anchorHit":1,"anchorRank":3,"hitAt1":0,"anchorRR":0.3333,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":1031,"sections":8,"totalSections":8,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":8.319,"top":["okf://atlas/decisions/adr-012-outbox-pattern#adr-012-transactional-outbox-for-events-emitted-from-database-transactions","okf://atlas/contracts/payment-authorized-v1#notes","okf://atlas/decisions/adr-012-outbox-pattern#decision"]},
+        {"id":"A17","split":"dev","lang":"en","category":"keyword","anchor":"okf://atlas/runbooks/feature-flag-kill-switch#steps","anchorHit":1,"anchorRank":6,"hitAt1":0,"anchorRR":0.1667,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":1150,"sections":10,"totalSections":16,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":8.871,"top":["okf://atlas/runbooks/feature-flag-kill-switch#use-a-kill-switch-flag","okf://atlas/runbooks/feature-flag-kill-switch#rollback","okf://atlas/decisions/adr-016-feature-flags-unleash#related"]},
+        {"id":"A20","split":"heldout","lang":"en","category":"keyword","anchor":"okf://atlas/incidents/inc-2026-018-clickhouse-disk-full#root-cause","anchorHit":1,"anchorRank":3,"hitAt1":0,"anchorRR":0.3333,"conceptCandidate":1,"conceptRecallAt5":0.6,"usedTokens":1171,"sections":9,"totalSections":11,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":10.337,"top":["okf://atlas/incidents/inc-2026-018-clickhouse-disk-full#resolution","okf://atlas/incidents/inc-2026-018-clickhouse-disk-full#follow-ups","okf://atlas/incidents/inc-2026-018-clickhouse-disk-full#root-cause"]},
+        {"id":"A22","split":"dev","lang":"mixed","category":"mixed-lang","anchor":"okf://atlas/runbooks/wallet-balance-reconciliation#steps","anchorHit":0,"anchorRank":null,"hitAt1":0,"anchorRR":0,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":1139,"sections":9,"totalSections":54,"budgetExceeded":false,"truncated":false,"mode":"any","lowConfidence":false,"ms":11.49,"top":["okf://atlas/incidents/inc-2026-007-pagopa-timeout#risoluzione","okf://atlas/runbooks/pagopa-reconciliation#rollback","okf://atlas/runbooks/pagopa-reconciliation#riconciliazione-manuale-degli-avvisi-pagopa"]},
+        {"id":"A25","split":"dev","lang":"mixed","category":"mixed-lang","anchor":"okf://atlas/decisions/adr-017-retire-legacy-sbe#decisione","anchorHit":1,"anchorRank":6,"hitAt1":0,"anchorRR":0.1667,"conceptCandidate":1,"conceptRecallAt5":0.6666666666666666,"usedTokens":1153,"sections":9,"totalSections":26,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":8.93,"top":["okf://atlas/decisions/adr-017-retire-legacy-sbe#adr-017-dismissione-del-legacy-sbe-entro-marzo-2027","okf://atlas/decisions/adr-017-retire-legacy-sbe","okf://atlas/runbooks/legacy-sbe-restart#quando-usarlo"]},
+        {"id":"A30","split":"dev","lang":"en","category":"exact","anchor":"okf://atlas/runbooks/notification-rate-limit#steps","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":176,"sections":1,"totalSections":1,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":8.45,"top":["okf://atlas/runbooks/notification-rate-limit#steps"]},
+        {"id":"A31","split":"dev","lang":"it","category":"exact","anchor":"okf://atlas/incidents/inc-2025-041-legacy-sbe-crash#timeline","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":120,"sections":1,"totalSections":1,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":8.712,"top":["okf://atlas/incidents/inc-2025-041-legacy-sbe-crash#timeline"]},
+        {"id":"A34","split":"dev","lang":"en","category":"morph","anchor":"okf://atlas/runbooks/rotate-psp-credentials#steps","anchorHit":1,"anchorRank":8,"hitAt1":0,"anchorRR":0.125,"conceptCandidate":1,"conceptRecallAt5":0.5,"usedTokens":1160,"sections":9,"totalSections":12,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":8.993,"top":["okf://atlas/runbooks/rotate-psp-credentials#rotate-psp-credentials-nexi-xpay-and-fallback","okf://atlas/decisions/adr-018-nexi-primary-psp#related","okf://atlas/decisions/adr-018-nexi-primary-psp#consequences"]},
+        {"id":"A36","split":"dev","lang":"en","category":"morph","anchor":"okf://atlas/runbooks/certificate-renewal#steps","anchorHit":1,"anchorRank":4,"hitAt1":0,"anchorRR":0.25,"conceptCandidate":1,"conceptRecallAt5":0.3333333333333333,"usedTokens":1193,"sections":8,"totalSections":9,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":7.832,"top":["okf://atlas/runbooks/certificate-renewal#certificate-renewal-cert-manager-fleet-ca-chain-and-non-managed-hostnames","okf://atlas/runbooks/certificate-renewal#when-to-use","okf://atlas/runbooks/certificate-renewal"]},
+        {"id":"A37","split":"dev","lang":"en","category":"morph","anchor":"okf://atlas/services/validation-ledger#operational-notes","anchorHit":1,"anchorRank":4,"hitAt1":0,"anchorRR":0.25,"conceptCandidate":1,"conceptRecallAt5":0.5,"usedTokens":1117,"sections":10,"totalSections":15,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":6.774,"top":["okf://atlas/services/validation-ledger#validation-ledger","okf://atlas/runbooks/replay-kafka-topic#when-to-use","okf://atlas/dependencies/postgresql-16#where-it-is-used"]},
+        {"id":"A38","split":"heldout","lang":"it","category":"morph","anchor":"okf://atlas/incidents/inc-2026-025-inspector-app-sync#impatto","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":1166,"sections":9,"totalSections":12,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":8.572,"top":["okf://atlas/incidents/inc-2026-025-inspector-app-sync#impatto","okf://atlas/incidents/inc-2026-025-inspector-app-sync#azioni-successive","okf://atlas/incidents/inc-2026-025-inspector-app-sync#timeline"]},
+        {"id":"A42","split":"dev","lang":"it","category":"accent","anchor":"okf://atlas/decisions/adr-017-retire-legacy-sbe#decisione","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":1104,"sections":9,"totalSections":12,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":8.112,"top":["okf://atlas/decisions/adr-017-retire-legacy-sbe#decisione","okf://atlas/services/legacy-sbe#legacy-sbe-sistema-di-bigliettazione-elettronica","okf://atlas/services/legacy-sbe#note-operative"]},
+        {"id":"A43","split":"dev","lang":"it","category":"accent","anchor":"okf://atlas/services/pagopa-adapter#proprietà-e-runtime","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":976,"sections":8,"totalSections":8,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":8.667,"top":["okf://atlas/services/pagopa-adapter#proprietà-e-runtime","okf://atlas/services/inspector-app-backend#proprietà-e-runtime","okf://atlas/services/pagopa-adapter#pagopa-adapter"]},
+        {"id":"A45","split":"dev","lang":"it","category":"synonym","anchor":"okf://atlas/runbooks/feature-flag-kill-switch#steps","anchorHit":0,"anchorRank":null,"hitAt1":0,"anchorRR":0,"conceptCandidate":0,"conceptRecallAt5":0,"usedTokens":1128,"sections":9,"totalSections":49,"budgetExceeded":false,"truncated":false,"mode":"any","lowConfidence":false,"ms":11.996,"top":["okf://atlas/runbooks/fare-table-hotfix#hotfix-di-una-tabella-tariffaria","okf://atlas/runbooks/escalation-reperibilita-2025#escalation-della-reperibilità-versione-2025-superata","okf://atlas/runbooks/fare-table-hotfix"]},
+        {"id":"A46","split":"heldout","lang":"en","category":"synonym","anchor":"okf://atlas/incidents/inc-2026-023-avl-feed-stale#root-cause","anchorHit":0,"anchorRank":null,"hitAt1":0,"anchorRR":0,"conceptCandidate":1,"conceptRecallAt5":0.6666666666666666,"usedTokens":1159,"sections":10,"totalSections":28,"budgetExceeded":false,"truncated":false,"mode":"any","lowConfidence":false,"ms":11.393,"top":["okf://atlas/incidents/inc-2026-023-avl-feed-stale","okf://atlas/incidents/inc-2026-023-avl-feed-stale#inc-2026-023-vehicle-positions-frozen-for-50-minutes","okf://atlas/contracts/vehicle-position-v1#fields"]},
+        {"id":"A47","split":"dev","lang":"en","category":"synonym","anchor":"okf://atlas/questions/q-007-on-call-compensation#orientamento-attuale","anchorHit":0,"anchorRank":null,"hitAt1":0,"anchorRR":0,"conceptCandidate":1,"conceptRecallAt5":0.5,"usedTokens":1140,"sections":9,"totalSections":54,"budgetExceeded":false,"truncated":false,"mode":"any","lowConfidence":false,"ms":13.444,"top":["okf://atlas/services/reporting-warehouse#operational-notes","okf://atlas/runbooks/wallet-balance-reconciliation#escalation","okf://atlas/services/reporting-warehouse#reporting-warehouse"]},
+        {"id":"A49","split":"dev","lang":"en","category":"synonym","anchor":"okf://atlas/incidents/inc-2026-029-storefront-ddos#root-cause","anchorHit":1,"anchorRank":4,"hitAt1":0,"anchorRR":0.25,"conceptCandidate":1,"conceptRecallAt5":0.6666666666666666,"usedTokens":990,"sections":7,"totalSections":7,"budgetExceeded":false,"truncated":false,"mode":"any","lowConfidence":false,"ms":10.116,"top":["okf://atlas/postmortems/pm-2026-029-storefront-ddos#lessons","okf://atlas/postmortems/pm-2026-029-storefront-ddos#contributing-factors","okf://atlas/postmortems/pm-2026-029-storefront-ddos#what-went-well"]},
+        {"id":"A50","split":"dev","lang":"en","category":"freshness","anchor":"okf://atlas/decisions/adr-015-polyrepo-per-team#decision","anchorHit":1,"anchorRank":2,"hitAt1":0,"anchorRR":0.5,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":1132,"sections":11,"totalSections":15,"budgetExceeded":false,"truncated":false,"mode":"any","lowConfidence":false,"ms":9.868,"top":["okf://atlas/decisions/adr-007-monorepo#related","okf://atlas/decisions/adr-015-polyrepo-per-team#decision","okf://atlas/decisions/adr-015-polyrepo-per-team#related"]},
+        {"id":"A51","split":"dev","lang":"en","category":"freshness","anchor":"okf://atlas/runbooks/on-call-escalation#steps","anchorHit":0,"anchorRank":null,"hitAt1":0,"anchorRR":0,"conceptCandidate":0,"conceptRecallAt5":0.25,"usedTokens":1168,"sections":11,"totalSections":41,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":9.894,"top":["okf://atlas/runbooks/escalation-reperibilita-2025#escalation-della-reperibilità-versione-2025-superata","okf://atlas/runbooks/escalation-reperibilita-2025#escalation","okf://atlas/runbooks/escalation-reperibilita-2025#quando-usarlo"]},
+        {"id":"A54","split":"dev","lang":"en","category":"disambig","anchor":"okf://atlas/contracts/ticket-validated-v1#notes","anchorHit":1,"anchorRank":3,"hitAt1":0,"anchorRR":0.3333,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":1135,"sections":11,"totalSections":14,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":8.226,"top":["okf://atlas/contracts/ticket-validated-v1#ticketvalidated-v1-deprecated","okf://atlas/contracts/ticket-validated-v1","okf://atlas/contracts/ticket-validated-v1#notes"]},
+        {"id":"A55","split":"dev","lang":"en","category":"disambig","anchor":"okf://atlas/runbooks/escalation-reperibilita-2025#quando-usarlo","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":1173,"sections":10,"totalSections":64,"budgetExceeded":false,"truncated":false,"mode":"any","lowConfidence":false,"ms":11.944,"top":["okf://atlas/runbooks/escalation-reperibilita-2025#quando-usarlo","okf://atlas/runbooks/escalation-reperibilita-2025#escalation-della-reperibilità-versione-2025-superata","okf://atlas/runbooks/escalation-reperibilita-2025#escalation"]},
+        {"id":"A57","split":"dev","lang":"it","category":"disambig","anchor":"okf://atlas/postmortems/pm-2026-001-validator-outage#sintesi","anchorHit":1,"anchorRank":4,"hitAt1":0,"anchorRR":0.25,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":1137,"sections":8,"totalSections":70,"budgetExceeded":false,"truncated":false,"mode":"any","lowConfidence":false,"ms":12.496,"top":["okf://atlas/postmortems/pm-2026-001-validator-outage#post-mortem-inc-2026-001-certificato-intermedio-scaduto-sul-broker-mqtt","okf://atlas/postmortems/pm-2026-001-validator-outage","okf://atlas/postmortems/pm-2026-001-validator-outage#cosa-ha-funzionato"]},
+        {"id":"A73","split":"dev","lang":"en","category":"nl-task","anchor":"okf://atlas/decisions/adr-012-outbox-pattern#consequences","anchorHit":1,"anchorRank":2,"hitAt1":0,"anchorRR":0.5,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":744,"sections":6,"totalSections":6,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":8.341,"top":["okf://atlas/decisions/adr-012-outbox-pattern#decision","okf://atlas/decisions/adr-012-outbox-pattern#consequences","okf://atlas/decisions/adr-012-outbox-pattern#adr-012-transactional-outbox-for-events-emitted-from-database-transactions"]},
+        {"id":"A74","split":"dev","lang":"it","category":"nl-task","anchor":"okf://atlas/decisions/adr-009-pagopa-direct-integration#conseguenze","anchorHit":1,"anchorRank":3,"hitAt1":0,"anchorRR":0.3333,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":744,"sections":6,"totalSections":6,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":8.181,"top":["okf://atlas/decisions/adr-009-pagopa-direct-integration#adr-009-integrazione-diretta-con-il-nodo-pagopa","okf://atlas/decisions/adr-009-pagopa-direct-integration#decisione","okf://atlas/decisions/adr-009-pagopa-direct-integration#conseguenze"]},
+        {"id":"A75","split":"dev","lang":"en","category":"nl-task","anchor":"okf://atlas/postmortems/pm-2026-004-wallet-double-charge#what-went-well","anchorHit":1,"anchorRank":2,"hitAt1":0,"anchorRR":0.5,"conceptCandidate":1,"conceptRecallAt5":0.5,"usedTokens":973,"sections":7,"totalSections":7,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":7.884,"top":["okf://atlas/postmortems/pm-2026-004-wallet-double-charge#post-mortem-inc-2026-004-non-idempotent-wallet-command-handler","okf://atlas/postmortems/pm-2026-004-wallet-double-charge#what-went-well","okf://atlas/postmortems/pm-2026-004-wallet-double-charge"]},
+        {"id":"A76","split":"dev","lang":"en","category":"nl-task","anchor":"okf://atlas/postmortems/pm-2026-011-kafka-lag#action-items","anchorHit":1,"anchorRank":2,"hitAt1":0,"anchorRR":0.5,"conceptCandidate":1,"conceptRecallAt5":0.5,"usedTokens":930,"sections":7,"totalSections":7,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":8.644,"top":["okf://atlas/postmortems/pm-2026-011-kafka-lag#post-mortem-inc-2026-011-topic-retention-drift-filled-a-broker","okf://atlas/postmortems/pm-2026-011-kafka-lag#action-items","okf://atlas/postmortems/pm-2026-011-kafka-lag"]},
+        {"id":"A77","split":"heldout","lang":"it","category":"nl-task","anchor":"okf://atlas/postmortems/pm-2026-007-pagopa-timeout#lezione","anchorHit":1,"anchorRank":2,"hitAt1":0,"anchorRR":0.5,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":954,"sections":7,"totalSections":7,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":7.35,"top":["okf://atlas/postmortems/pm-2026-007-pagopa-timeout#post-mortem-inc-2026-007-dipendenza-dalle-sole-ricevute-push-di-pagopa","okf://atlas/postmortems/pm-2026-007-pagopa-timeout#lezione","okf://atlas/postmortems/pm-2026-007-pagopa-timeout"]},
+        {"id":"A78","split":"dev","lang":"en","category":"nl-task","anchor":"okf://atlas/runbooks/schema-registry-rollback#steps","anchorHit":1,"anchorRank":3,"hitAt1":0,"anchorRR":0.3333,"conceptCandidate":1,"conceptRecallAt5":0.5,"usedTokens":729,"sections":6,"totalSections":6,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":8.734,"top":["okf://atlas/runbooks/schema-registry-rollback#roll-back-a-schema-registry-change","okf://atlas/runbooks/schema-registry-rollback#prerequisites","okf://atlas/runbooks/schema-registry-rollback#steps"]},
+        {"id":"A79","split":"dev","lang":"en","category":"nl-task","anchor":"okf://atlas/runbooks/fare-table-hotfix#rollback","anchorHit":1,"anchorRank":2,"hitAt1":0,"anchorRR":0.5,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":848,"sections":7,"totalSections":7,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":7.958,"top":["okf://atlas/runbooks/fare-table-hotfix#hotfix-di-una-tabella-tariffaria","okf://atlas/runbooks/fare-table-hotfix#rollback","okf://atlas/runbooks/fare-table-hotfix#prerequisiti"]},
+        {"id":"A80","split":"dev","lang":"en","category":"nl-task","anchor":"okf://atlas/runbooks/validator-offline-queue-drain#escalation","anchorHit":1,"anchorRank":2,"hitAt1":0,"anchorRR":0.5,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":1153,"sections":9,"totalSections":65,"budgetExceeded":false,"truncated":false,"mode":"any","lowConfidence":false,"ms":12.987,"top":["okf://atlas/runbooks/scale-validator-gateway#scale-the-validator-gateway-for-events-and-queue-drains","okf://atlas/runbooks/validator-offline-queue-drain#escalation","okf://atlas/runbooks/scale-validator-gateway#escalation"]},
+        {"id":"A81","split":"dev","lang":"it","category":"nl-task","anchor":"okf://atlas/runbooks/pagopa-reconciliation#prerequisiti","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":879,"sections":7,"totalSections":7,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":7.928,"top":["okf://atlas/runbooks/pagopa-reconciliation#prerequisiti","okf://atlas/runbooks/pagopa-reconciliation#riconciliazione-manuale-degli-avvisi-pagopa","okf://atlas/runbooks/pagopa-reconciliation#rollback"]},
+        {"id":"A82","split":"dev","lang":"en","category":"nl-task","anchor":"okf://atlas/runbooks/replay-kafka-topic#when-to-use","anchorHit":1,"anchorRank":3,"hitAt1":0,"anchorRR":0.3333,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":1197,"sections":10,"totalSections":17,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":7.004,"top":["okf://atlas/runbooks/clickhouse-disk-cleanup#rollback","okf://atlas/runbooks/replay-kafka-topic#replay-a-kafka-topic-into-a-consumer","okf://atlas/runbooks/replay-kafka-topic#when-to-use"]},
+        {"id":"A83","split":"heldout","lang":"en","category":"nl-task","anchor":"okf://atlas/contracts/fare-computed-v1#fields","anchorHit":1,"anchorRank":3,"hitAt1":0,"anchorRR":0.3333,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":1188,"sections":11,"totalSections":53,"budgetExceeded":false,"truncated":false,"mode":"any","lowConfidence":false,"ms":10.04,"top":["okf://atlas/contracts/fare-computed-v1#farecomputed-v1","okf://atlas/questions/q-005-ticket-validated-v3-schema#open-question-ticketvalidated-v3-with-cap-and-fare-context","okf://atlas/contracts/fare-computed-v1#fields"]},
+        {"id":"A84","split":"heldout","lang":"en","category":"nl-task","anchor":"okf://atlas/contracts/account-created-v1#personal-data","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":642,"sections":7,"totalSections":7,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":7.665,"top":["okf://atlas/contracts/account-created-v1#personal-data","okf://atlas/contracts/account-created-v1#accountcreated-v1","okf://atlas/contracts/account-created-v1"]},
+        {"id":"A85","split":"dev","lang":"it","category":"nl-task","anchor":"okf://atlas/contracts/inspection-result-v1#conservazione","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":0.5,"usedTokens":293,"sections":3,"totalSections":3,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":5.282,"top":["okf://atlas/contracts/inspection-result-v1#conservazione","okf://atlas/contracts/inspection-result-v1#inspectionresult-v1","okf://atlas/contracts/inspection-result-v1"]},
+        {"id":"A86","split":"heldout","lang":"en","category":"nl-task","anchor":"okf://atlas/slos/trip-planner-latency#alerting","anchorHit":1,"anchorRank":2,"hitAt1":0,"anchorRR":0.5,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":549,"sections":6,"totalSections":6,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":7.062,"top":["okf://atlas/slos/trip-planner-latency#slo-trip-planner-latency","okf://atlas/slos/trip-planner-latency#alerting","okf://atlas/slos/trip-planner-latency"]},
+        {"id":"A87","split":"dev","lang":"en","category":"nl-task","anchor":"okf://atlas/slos/identity-service-login-availability#sli","anchorHit":1,"anchorRank":2,"hitAt1":0,"anchorRR":0.5,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":668,"sections":6,"totalSections":6,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":7.327,"top":["okf://atlas/slos/identity-service-login-availability#slo-login-availability-spid-cie-password","okf://atlas/slos/identity-service-login-availability#sli","okf://atlas/slos/identity-service-login-availability"]},
+        {"id":"A88","split":"dev","lang":"it","category":"nl-task","anchor":"okf://atlas/slos/inspector-backend-sync-latency#obiettivo","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":735,"sections":6,"totalSections":6,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":7.41,"top":["okf://atlas/slos/inspector-backend-sync-latency#obiettivo","okf://atlas/slos/inspector-backend-sync-latency#slo-latenza-di-verifica-e-sincronizzazione-dei-controllori","okf://atlas/slos/inspector-backend-sync-latency"]},
+        {"id":"A89","split":"heldout","lang":"en","category":"nl-task","anchor":"okf://atlas/questions/q-001-multi-region-active-active#options","anchorHit":1,"anchorRank":2,"hitAt1":0,"anchorRR":0.5,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":778,"sections":6,"totalSections":6,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":8.324,"top":["okf://atlas/questions/q-001-multi-region-active-active#current-leaning","okf://atlas/questions/q-001-multi-region-active-active#options","okf://atlas/questions/q-001-multi-region-active-active#open-question-do-we-need-a-second-region-active-active"]},
+        {"id":"A90","split":"heldout","lang":"it","category":"nl-task","anchor":"okf://atlas/questions/q-002-wallet-emoney-licence#orientamento-attuale","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":604,"sections":4,"totalSections":4,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":8.085,"top":["okf://atlas/questions/q-002-wallet-emoney-licence#orientamento-attuale","okf://atlas/questions/q-002-wallet-emoney-licence#questione-aperta-il-credito-prepagato-richiede-una-licenza-di-moneta-elettronica","okf://atlas/questions/q-002-wallet-emoney-licence#opzioni"]},
+        {"id":"A91","split":"heldout","lang":"en","category":"nl-task","anchor":"okf://atlas/dependencies/keycloak#support-end","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":455,"sections":5,"totalSections":5,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":7.061,"top":["okf://atlas/dependencies/keycloak#support-end","okf://atlas/dependencies/keycloak#keycloak-25","okf://atlas/dependencies/keycloak"]},
+        {"id":"A92","split":"heldout","lang":"en","category":"nl-task","anchor":"okf://atlas/dependencies/redis#where-it-is-used","anchorHit":0,"anchorRank":null,"hitAt1":0,"anchorRR":0,"conceptCandidate":0,"conceptRecallAt5":0,"usedTokens":1160,"sections":11,"totalSections":41,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":10.001,"top":["okf://atlas/services/realtime-predictions#dependencies","okf://atlas/services/mobile-bff#dependencies","okf://atlas/services/validator-gateway#dependencies"]},
+        {"id":"A93","split":"dev","lang":"en","category":"nl-task","anchor":"okf://atlas/services/notification-hub#interfaces","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":0.3333333333333333,"usedTokens":948,"sections":8,"totalSections":8,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":7.821,"top":["okf://atlas/services/notification-hub#interfaces","okf://atlas/services/notification-hub#operational-notes","okf://atlas/services/notification-hub#notification-hub"]},
+        {"id":"A94","split":"dev","lang":"it","category":"nl-task","anchor":"okf://atlas/services/inspector-app-backend#dipendenze","anchorHit":0,"anchorRank":null,"hitAt1":0,"anchorRR":0,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":1150,"sections":9,"totalSections":29,"budgetExceeded":false,"truncated":false,"mode":"any","lowConfidence":false,"ms":11.51,"top":["okf://atlas/slos/inspector-backend-sync-latency#slo-latenza-di-verifica-e-sincronizzazione-dei-controllori","okf://atlas/services/inspector-app-backend#inspector-app-backend","okf://atlas/services/inspector-app-backend"]},
+        {"id":"A95","split":"dev","lang":"en","category":"nl-task","anchor":"okf://atlas/runbooks/refund-queue-unstick#escalation","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":1195,"sections":10,"totalSections":47,"budgetExceeded":false,"truncated":false,"mode":"any","lowConfidence":false,"ms":10.831,"top":["okf://atlas/runbooks/refund-queue-unstick#escalation","okf://atlas/runbooks/refund-queue-unstick#unstick-the-refund-approval-queue","okf://atlas/runbooks/refund-queue-unstick#when-to-use"]},
+        {"id":"A96","split":"heldout","lang":"it","category":"nl-task","anchor":"okf://atlas/runbooks/postgres-failover#prerequisites","anchorHit":0,"anchorRank":null,"hitAt1":0,"anchorRR":0,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":1138,"sections":9,"totalSections":31,"budgetExceeded":false,"truncated":false,"mode":"any","lowConfidence":false,"ms":10.043,"top":["okf://atlas/runbooks/postgres-failover#postgresql-failover-and-post-failover-checks","okf://atlas/decisions/adr-003-postgres-over-cockroach#related","okf://atlas/runbooks/postgres-failover"]},
+        {"id":"A97","split":"heldout","lang":"en","category":"nl-task","anchor":"okf://atlas/dependencies/clickhouse#upgrade-notes","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":0.5,"usedTokens":450,"sections":5,"totalSections":5,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":7.431,"top":["okf://atlas/dependencies/clickhouse#upgrade-notes","okf://atlas/dependencies/clickhouse#where-it-is-used","okf://atlas/dependencies/clickhouse#clickhouse-24"]},
+        {"id":"A98","split":"dev","lang":"en","category":"nl-task","anchor":"okf://atlas/slos/fare-engine-latency-p99#alerting","anchorHit":1,"anchorRank":2,"hitAt1":0,"anchorRR":0.5,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":571,"sections":6,"totalSections":6,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":8.446,"top":["okf://atlas/slos/fare-engine-latency-p99#slo-fare-engine-quote-latency","okf://atlas/slos/fare-engine-latency-p99#alerting","okf://atlas/slos/fare-engine-latency-p99"]},
+        {"id":"A99","split":"dev","lang":"en","category":"nl-task","anchor":"okf://atlas/dependencies/kubernetes-eks#support-end","anchorHit":1,"anchorRank":1,"hitAt1":1,"anchorRR":1,"conceptCandidate":1,"conceptRecallAt5":1,"usedTokens":513,"sections":5,"totalSections":5,"budgetExceeded":false,"truncated":false,"mode":"all","lowConfidence":false,"ms":8.768,"top":["okf://atlas/dependencies/kubernetes-eks#support-end","okf://atlas/dependencies/kubernetes-eks#kubernetes-managed-eks","okf://atlas/dependencies/kubernetes-eks"]}
       ]
     }
   }
