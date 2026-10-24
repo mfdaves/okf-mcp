@@ -450,7 +450,7 @@ test("only one of two reclaimers wins a stale lock and both writers get through"
   const renames = [];
   for (const cache of [first, second]) {
     cache.renameFile = (from, to) => {
-      renames.push(path.basename(to));
+      if (to.includes(".stale.")) renames.push(path.basename(to));
       fs.renameSync(from, to);
     };
   }
@@ -483,8 +483,81 @@ test("a late release leaves a successor's lock in place", async (t) => {
   writeLock(dir, JSON.stringify({ token: "successor", pid: 1, createdAt: ago(0) }));
   await pending;
   assert.equal(readLockFile(dir).token, "successor", "the successor's lock survived");
+  assert.deepEqual(
+    dataFiles(dir).filter((name) => name.startsWith("lock.release.")),
+    [],
+    "the release put the successor's lock back and left no copy",
+  );
   assert.equal(manifestOf(dir).count, 2);
   fs.unlinkSync(path.join(dir, "lock"));
+});
+
+test("release never unlinks a successor installed after its token was checked", async (t) => {
+  const dir = path.join(tempDir(t, "okf-vector-cache-"), "cache");
+  const cache = open(dir);
+  await cache.putMany([entry("a", [1, 1, 1, 1])]);
+  assert.deepEqual(
+    dataFiles(dir).filter((name) => name.startsWith("lock")),
+    [],
+    "a normal release removes the lock and leaves no copy",
+  );
+
+  // A successor takes the slot after the release has checked the token and
+  // right before the unlink: only the moved-aside copy may be unlinked.
+  let injected = 0;
+  cache.removeFile = (target) => {
+    if (path.basename(target).startsWith("lock") && injected === 0) {
+      injected += 1;
+      writeLock(dir, JSON.stringify({ token: "successor", pid: 1, createdAt: ago(0) }));
+    }
+    fs.unlinkSync(target);
+  };
+  await cache.putMany([entry("b", [2, 2, 2, 2])]);
+  assert.equal(injected, 1);
+  assert.equal(readLockFile(dir).token, "successor", "the successor's lock survived intact");
+  assert.deepEqual(
+    dataFiles(dir).filter((name) => name.startsWith("lock.")),
+    [],
+    "our own lock is gone",
+  );
+  assert.equal(manifestOf(dir).count, 2);
+});
+
+test("a late release whose restoring link loses the slot leaves the copy for collection", async (t) => {
+  const dir = path.join(tempDir(t, "okf-vector-cache-"), "cache");
+  const cache = open(dir);
+  await cache.putMany([entry("a", [1, 1, 1, 1])]);
+
+  // Our lock is reclaimed by a successor before the release renames it; a
+  // third writer takes the slot before the restoring link.
+  cache.renameFile = (from, to) => {
+    if (to.includes(".release.")) {
+      writeLock(dir, JSON.stringify({ token: "successor", pid: 1, createdAt: ago(0) }));
+    }
+    fs.renameSync(from, to);
+  };
+  cache.linkFile = () => {
+    writeLock(dir, JSON.stringify({ token: "third", pid: 3, createdAt: ago(0) }));
+    const error = new Error("file exists");
+    error.code = "EEXIST";
+    throw error;
+  };
+  await cache.putMany([entry("b", [2, 2, 2, 2])]);
+  assert.equal(readLockFile(dir).token, "third", "the third writer's lock is untouched");
+  const parked = dataFiles(dir).filter((name) => name.startsWith("lock.release."));
+  assert.equal(parked.length, 1, "the displaced lock waits for collection");
+  assert.equal(JSON.parse(fs.readFileSync(path.join(dir, parked[0]), "utf8")).token, "successor");
+
+  delete cache.renameFile;
+  delete cache.linkFile;
+  fs.unlinkSync(path.join(dir, "lock"));
+  ageFile(path.join(dir, parked[0]), 16 * MINUTES);
+  await cache.putMany([entry("c", [3, 3, 3, 3])]);
+  assert.deepEqual(
+    dataFiles(dir).filter((name) => name.startsWith("lock")),
+    [],
+    "the old copy is collected by age",
+  );
 });
 
 test("a failed reclaim respects the deadline instead of spinning", async (t) => {
@@ -1004,6 +1077,90 @@ test("garbage collection after a swap unlinks nothing", { skip: POSIX_ONLY }, as
   assert.equal(fs.existsSync(path.join(old, first.files.vectors)), true);
   assert.equal(JSON.parse(fs.readFileSync(path.join(old, "manifest.json"), "utf8")).count, 2);
   assert.deepEqual(fs.readdirSync(elsewhere), []);
+});
+
+// A cache under base/parent/cache whose parent is later re-pointed into a
+// bundle root that already holds a "cache" directory, so a write that follows
+// the path instead of the opened location would land inside the root.
+async function swappableCache(t) {
+  const base = tempDir(t, "okf-vector-cache-");
+  const root = path.join(base, "bundle");
+  fs.mkdirSync(path.join(root, "cache"), { recursive: true });
+  const dir = path.join(base, "parent", "cache");
+  const cache = open(dir, { root });
+  await cache.putMany([entry("a", [1, 1, 1, 1])]);
+  const swap = () => {
+    fs.renameSync(path.join(base, "parent"), path.join(base, "parent-old"));
+    fs.symlinkSync(root, path.join(base, "parent"));
+  };
+  return { cache, root, old: path.join(base, "parent-old", "cache"), swap };
+}
+
+test("a directory swapped between the temporary write and the rename renames nothing", {
+  skip: POSIX_ONLY,
+}, async (t) => {
+  const { cache, root, old, swap } = await swappableCache(t);
+  // The swap lands inside writeAtomic, after the temporary file is written
+  // and synced and right before the check that precedes the rename.
+  let writing = false;
+  let swapped = false;
+  cache.writeFile = (target, content) => {
+    writing = true;
+    try {
+      return VectorCache.prototype.writeFile.call(cache, target, content);
+    } finally {
+      writing = false;
+    }
+  };
+  cache.verifyLocation = () => {
+    if (writing && !swapped) {
+      swapped = true;
+      swap();
+    }
+    return VectorCache.prototype.verifyLocation.call(cache);
+  };
+  await assert.rejects(
+    cache.putMany([entry("b", [2, 2, 2, 2])]),
+    (error) => error.code === "invalid_cache_dir",
+  );
+  assert.equal(swapped, true);
+  assert.deepEqual(fs.readdirSync(path.join(root, "cache")), [], "nothing at the new target");
+  const names = fs.readdirSync(old);
+  assert.equal(
+    names.filter((name) => name.endsWith(".tmp")).length,
+    1,
+    "the temporary file stays put",
+  );
+  assert.equal(
+    names.filter((name) => /^units\.[^.]+\.json$/.test(name)).length,
+    1,
+    "nothing renamed",
+  );
+  assert.equal(names.includes("lock"), true, "the release could not verify and left the lock");
+  assert.equal(JSON.parse(fs.readFileSync(path.join(old, "manifest.json"), "utf8")).count, 1);
+});
+
+test("a directory swapped right before the lock is created places no lock", {
+  skip: POSIX_ONLY,
+}, async (t) => {
+  const { cache, root, old, swap } = await swappableCache(t);
+  const created = [];
+  cache.ensureWritableDirectory = () => {
+    VectorCache.prototype.ensureWritableDirectory.call(cache);
+    swap();
+  };
+  cache.createFile = (target, content) => {
+    created.push(target);
+    return VectorCache.prototype.createFile.call(cache, target, content);
+  };
+  await assert.rejects(
+    cache.putMany([entry("b", [2, 2, 2, 2])]),
+    (error) => error.code === "invalid_cache_dir",
+  );
+  assert.deepEqual(created, [], "the O_EXCL creation was never attempted");
+  assert.deepEqual(fs.readdirSync(path.join(root, "cache")), [], "no lock at the new target");
+  assert.equal(fs.existsSync(path.join(old, "lock")), false);
+  assert.equal(JSON.parse(fs.readFileSync(path.join(old, "manifest.json"), "utf8")).count, 1);
 });
 
 test("never forgets a retired generation younger than the grace period", async (t) => {

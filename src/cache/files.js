@@ -51,10 +51,16 @@ function syncDirectory(dir, options) {
 
 // Creates a file without following links, writes and syncs it, then renames
 // it over the target (rename replaces a link without following it) and syncs
-// the directory entry.
-function writeAtomic(target, content) {
+// the directory entry. options.verify (the store's location check) runs
+// immediately before the rename and before the temporary file is cleaned up;
+// when it fails, nothing is renamed and the temporary file is left where it
+// was written, for garbage collection by age, instead of being unlinked by a
+// path that may now lead somewhere else.
+function writeAtomic(target, content, options) {
+  const verify = options?.verify || (() => {});
   const temporary = `${target}.${process.pid}.${crypto.randomBytes(6).toString("hex")}.tmp`;
   let fd = null;
+  let renamed = false;
   try {
     fd = fs.openSync(
       temporary,
@@ -65,11 +71,23 @@ function writeAtomic(target, content) {
     fs.fsyncSync(fd);
     fs.closeSync(fd);
     fd = null;
+    verify();
     fs.renameSync(temporary, target);
+    renamed = true;
     syncDirectory(path.dirname(target));
   } finally {
     if (fd !== null) fs.closeSync(fd);
-    if (fs.existsSync(temporary)) fs.unlinkSync(temporary);
+    if (!renamed) removeTemporary(temporary, verify);
+  }
+}
+
+// Best effort: never masks the error that made the write fail.
+function removeTemporary(temporary, verify) {
+  try {
+    verify();
+    fs.unlinkSync(temporary);
+  } catch {
+    // Left in place; collected by age.
   }
 }
 

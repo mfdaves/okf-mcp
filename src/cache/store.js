@@ -31,9 +31,11 @@
 // reports why.
 //
 // The directory is re-verified (real path unchanged since open, not a link,
-// outside the root) before the lock is attempted, after it is held, and
-// before each group of writes, renames and unlinks; Node has no openat, so
-// this narrows the window on every platform and cannot close it entirely.
+// outside the root) by every mutation: its creation (ancestors checked), each
+// O_EXCL attempt at the lock, each write (again right before the temporary
+// file is renamed into place and before it is cleaned up), rename, link and
+// unlink. Node has no openat, so this narrows the window between the check
+// and the system call on every platform and cannot close it entirely.
 // Writes of one store instance are serialised; across processes the lock
 // serialises them, and a crashed writer blocks others until lockStaleMs.
 
@@ -42,10 +44,11 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 
-const { mtimeBefore, readRegularFile, writeAtomic } = require("./files");
+const { createExclusive, mtimeBefore, readRegularFile, writeAtomic } = require("./files");
 const {
   GENERATION_PATTERN,
   LOCK_FILE,
+  LOCK_PARKED_PREFIXES,
   acquireLock,
   newLockToken,
   readLock,
@@ -77,6 +80,13 @@ const MAX_RETIRED_PARSE = 4096;
 const HASH_PATTERN = /^[a-f0-9]{64}$/;
 const MAX_DIMENSION = 65536;
 const MIN_CAPACITY_ROWS = 64;
+
+function movedError() {
+  return new VectorCacheError(
+    "Cache directory no longer resolves to the location it was opened at.",
+    "invalid_cache_dir",
+  );
+}
 
 function littleEndian(buffer) {
   if (os.endianness() === "LE") return buffer;
@@ -389,18 +399,25 @@ class VectorCache {
   // The directory must still be the one opened: real path unchanged, not a
   // link, outside the root. Cheap enough to run before every operation group.
   verifyLocation() {
-    const moved = new VectorCacheError(
-      "Cache directory no longer resolves to the location it was opened at.",
-      "invalid_cache_dir",
-    );
     assertNotSymlink(this.dir);
     let actual;
     try {
       actual = fs.realpathSync(this.dir);
     } catch {
-      throw moved;
+      throw movedError();
     }
-    if (actual !== this.dir) throw moved;
+    this.assertOpenedLocation(actual);
+  }
+
+  // Before the directory exists: its existing ancestors must still resolve
+  // to where they did at open, which also keeps it outside the root.
+  verifyAncestors() {
+    assertNotSymlink(this.dir);
+    this.assertOpenedLocation(realpathOfExistingAncestors(this.dir));
+  }
+
+  assertOpenedLocation(actual) {
+    if (actual !== this.dir) throw movedError();
     if (this.realRoot && !this.allowInsideRoot && isInside(this.realRoot, actual, path)) {
       throw new VectorCacheError(
         "Cache directory resolves inside the bundle root.",
@@ -421,20 +438,21 @@ class VectorCache {
   // Recreates the directory when it was deleted underneath a running process,
   // after checking that its ancestors still lead where they did at open.
   ensureWritableDirectory() {
-    assertNotSymlink(this.dir);
-    if (realpathOfExistingAncestors(this.dir) !== this.dir) {
-      throw new VectorCacheError(
-        "Cache directory no longer resolves to the location it was opened at.",
-        "invalid_cache_dir",
-      );
-    }
-    fs.mkdirSync(this.dir, { recursive: true });
+    this.guardedMkdir();
     this.verifyLocation();
   }
 
   // Seams for tests that inject failures; production never replaces them.
+  makeDirectory(dir) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+
   writeFile(target, content) {
-    writeAtomic(target, content);
+    writeAtomic(target, content, { verify: () => this.verifyLocation() });
+  }
+
+  createFile(target, content) {
+    return createExclusive(target, content);
   }
 
   removeFile(target) {
@@ -450,7 +468,18 @@ class VectorCache {
   }
 
   // Every mutation of the directory goes through these: each verifies the
-  // location first, so no call site can skip the check.
+  // location first, so no call site can skip the check. writeFile verifies
+  // again inside writeAtomic, before the rename and before cleanup.
+  guardedMkdir() {
+    this.verifyAncestors();
+    this.makeDirectory(this.dir);
+  }
+
+  guardedCreate(target, content) {
+    this.verifyLocation();
+    return this.createFile(target, content);
+  }
+
   guardedWrite(target, content) {
     this.verifyLocation();
     return this.writeFile(target, content);
@@ -504,7 +533,7 @@ class VectorCache {
     const generation = newGeneration();
     const token = newLockToken();
     const io = {
-      verify: () => this.verifyLocation(),
+      create: (target, content) => this.guardedCreate(target, content),
       rename: (from, to) => this.guardedRename(from, to),
       remove: (target) => this.guardedRemove(target),
       link: (from, to) => this.guardedLink(from, to),
@@ -576,10 +605,10 @@ class VectorCache {
   // Generations this process wrote earlier go at once: nothing else can
   // reference them, and readers hold their rows in memory. A retired foreign
   // generation goes once its retirement is older than the grace period; a
-  // never-committed orphan, a stale temporary file or a parked stale lock
-  // once its files are. Best effort: a failure here never fails the write
-  // that just completed, and a directory that no longer verifies stops the
-  // collection before anything is unlinked.
+  // never-committed orphan, a stale temporary file or a lock parked by a
+  // reclaim or a release once its files are. Best effort: a failure here
+  // never fails the write that just completed, and a directory that no
+  // longer verifies stops the collection before anything is unlinked.
   collectGarbage(retired) {
     let entries;
     try {
@@ -604,7 +633,10 @@ class VectorCache {
         if (this.ownGenerations.has(generation)) remove = true;
         else if (retiredAt.has(generation)) remove = retiredAt.get(generation) < cutoff;
         else remove = mtimeBefore(target, cutoff);
-      } else if (entry.name.endsWith(".tmp") || entry.name.startsWith(`${LOCK_FILE}.stale.`)) {
+      } else if (
+        entry.name.endsWith(".tmp") ||
+        LOCK_PARKED_PREFIXES.some((prefix) => entry.name.startsWith(prefix))
+      ) {
         remove = mtimeBefore(target, cutoff);
       }
       if (!remove) continue;

@@ -11,26 +11,35 @@
 // carries the token that was observed stale, and is still stale, is it
 // removed; a fresh lock that slipped into the slot between the staleness
 // read and the rename is put back with link(parked, lock) and the slot is
-// treated as busy. Release reads the lock and unlinks it only while it still
-// holds the releaser's token, so a successor's lock survives a late release.
+// treated as busy. Release works the same way: it renames `lock` to
+// lock.release.<token> first, then reads the renamed file; it unlinks it only
+// when it carries the releaser's token and otherwise puts the successor's
+// lock back with link(). No pathname is ever unlinked on the strength of an
+// earlier read, so a successor's lock survives a late release.
 //
 // Residual windows, documented rather than closed: a crashed writer blocks
 // other writers for up to staleMs; a write that outlasts staleMs can lose
-// its lock to a reclaimer; and when a third writer creates `lock` between a
+// its lock to a reclaimer; when a third writer creates `lock` between a
 // mistaken park and the restoring link, the displaced fresh owner finishes
-// its write without the lock while its parked copy waits for collection.
-// The deadline always ends in cache_locked, a failed or undone reclaim
-// included.
+// its write without the lock while its parked copy waits for collection;
+// and a late release that parks a successor's lock leaves the slot empty
+// until the restoring link, so a writer that creates `lock` in that gap
+// wins it, the successor finishes without the lock, and its copy under
+// lock.release.<token> waits for collection. The deadline always ends in
+// cache_locked, a failed or undone reclaim included.
 
 const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
 
-const { createExclusive, readRegularFile } = require("./files");
+const { readRegularFile } = require("./files");
 const { VectorCacheError } = require("./paths");
 
 const LOCK_FILE = "lock";
 const LOCK_POLL_MS = 25;
+// Names a lock is moved to by a reclaim or a release; leftovers are
+// collected by age.
+const LOCK_PARKED_PREFIXES = [`${LOCK_FILE}.stale.`, `${LOCK_FILE}.release.`];
 const GENERATION_PATTERN = /^[0-9a-z]{1,16}-[0-9a-f]{8}$/;
 
 function newLockToken() {
@@ -74,9 +83,10 @@ function readLock(lockPath) {
   };
 }
 
-// Puts a mistakenly parked fresh lock back. link() refuses when the slot has
-// been taken meanwhile (EEXIST); then the parked copy stays for collection
-// and its owner's release finds no token of its own and leaves things alone.
+// Puts a mistakenly parked fresh lock back, after a reclaim or a release.
+// link() refuses when the slot has been taken meanwhile (EEXIST); then the
+// parked copy stays for collection and its owner's release finds no token of
+// its own and puts back whatever it moved.
 function restoreParkedLock(lockPath, parked, io) {
   try {
     io.link(parked, lockPath);
@@ -119,21 +129,22 @@ function reclaimStaleLock(lockPath, observed, token, staleMs, io) {
   return false;
 }
 
-// io: { verify(), rename(from, to), remove(target), link(from, to) }. The
-// store's io verifies the directory inside every operation; verify() also
-// runs before every attempt, so a directory swapped while waiting fails the
-// wait instead of placing the lock, and later the files, somewhere else.
+// io: { create(target, content), rename(from, to), remove(target),
+// link(from, to) }. The store's io verifies the directory inside every
+// operation, the O_EXCL creation of each attempt included, so a directory
+// swapped while waiting fails the wait (invalid_cache_dir) instead of placing
+// the lock, and later the files, somewhere else.
 async function acquireLock(dir, options) {
   const { token, generation, waitMs, staleMs, io } = options;
   const lockPath = path.join(dir, LOCK_FILE);
   const deadline = Date.now() + waitMs;
   for (;;) {
-    io.verify();
     let created;
     try {
       const claim = { token, pid: process.pid, createdAt: new Date().toISOString(), generation };
-      created = createExclusive(lockPath, Buffer.from(JSON.stringify(claim)));
+      created = io.create(lockPath, Buffer.from(JSON.stringify(claim)));
     } catch (error) {
+      if (error instanceof VectorCacheError) throw error;
       throw new VectorCacheError(
         "The vector cache could not be locked for writing.",
         "cache_write_failed",
@@ -154,14 +165,26 @@ async function acquireLock(dir, options) {
   }
 }
 
-// Unlinks the lock only while it still carries this writer's token.
+// Moves the lock aside under a name only this writer uses, then decides on
+// what was moved: this writer's lock is unlinked, anyone else's is put back.
+// Returns true only when this writer's lock was removed.
 function releaseLock(lockPath, token, io) {
-  const holder = readLock(lockPath);
-  if (!holder || holder.token !== token) return false;
+  const released = `${lockPath}.release.${token}`;
   try {
-    io.remove(lockPath);
+    io.rename(lockPath, released);
+  } catch {
+    return false;
+  }
+  const moved = readLock(released);
+  if (!moved || moved.token !== token) {
+    restoreParkedLock(lockPath, released, io);
+    return false;
+  }
+  try {
+    io.remove(released);
     return true;
   } catch {
+    // Left behind for garbage collection.
     return false;
   }
 }
@@ -169,6 +192,7 @@ function releaseLock(lockPath, token, io) {
 module.exports = {
   GENERATION_PATTERN,
   LOCK_FILE,
+  LOCK_PARKED_PREFIXES,
   LOCK_POLL_MS,
   acquireLock,
   newLockToken,
