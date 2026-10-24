@@ -226,6 +226,8 @@ Directories emptied by a stale deletion are removed with their last managed file
 - `--write-token <token>`: bearer token for write endpoints; defaults to `OKF_WRITE_TOKEN`
 - `--proposal-root <path>`: proposal JSON directory; defaults to `.okf-proposals` under the selected local root or project
 
+Proposals are stored state, not a derived cache, so the proposal directory is never cleaned up automatically. A server started with `--git-commit` refuses to publish while the worktree has untracked files, so that directory must be ignored by Git: add `.okf-proposals/` to `.gitignore` (as this repository does), or pass `--proposal-root` with a directory Git already ignores. In project mode the proposal root must stay inside the project root.
+
 ## MCP Client Config
 
 The npm-based examples below use the current published release. A source checkout can invoke its executable `bin/okf-mcp.js` with the same arguments.
