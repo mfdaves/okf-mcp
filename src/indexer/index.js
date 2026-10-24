@@ -2,8 +2,9 @@
 
 // The indexer's public surface. build.js loads bundles and builds a complete
 // index, edges.js derives one document's outbound graph, resolve.js turns
-// locators into concepts, and update.js keeps derived views and applies
-// changes to an existing index. Internal helpers stay on their modules; only
+// locators into concepts, assemble.js registers documents and assembles the
+// index object for both paths, and update.js applies changes to an existing
+// index and keeps derived views. Internal helpers stay on their modules; only
 // the names listed here are part of the package API.
 const build = require("./build");
 const edges = require("./edges");
@@ -23,14 +24,17 @@ module.exports = {
   bundleExcludesPath: build.bundleExcludesPath,
   edgesBySource: update.edgesBySource,
   findConceptMatches: resolve.findConceptMatches,
+  indexUpdateStats: update.indexUpdateStats,
   linkSets: update.linkSets,
   loadProjectBundles: build.loadProjectBundles,
   normalizeConceptTitle: resolve.normalizeConceptTitle,
   parseBundleArg: build.parseBundleArg,
   recoverConceptLocator: resolve.recoverConceptLocator,
+  refreshIndex: update.refreshIndex,
   resolveLinkPath: edges.resolveLinkPath,
   resolveConcept: resolve.resolveConcept,
   semanticReferences: edges.semanticReferences,
   sanitizeBundleId: build.sanitizeBundleId,
+  updateIndex: update.updateIndex,
   validateIndex: build.validateIndex,
 };
