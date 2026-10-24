@@ -15,10 +15,10 @@
 const { EmbedderError } = require("../embed/interface");
 const { conceptUnits } = require("../embed/units");
 
-// `embedUnits` names: concept units today; section units come from WP3a's
-// src/context/sections.js (same { id, text, hash } shape) once it lands.
+// `embedUnits` names: sections (default; src/context/sections.js, one unit per
+// section anchored `uri#slug`, the lead as `uri`) or whole concepts (src/embed/units.js).
 const EMBED_UNITS = Object.freeze(["concepts", "sections"]);
-const DEFAULT_EMBED_UNITS = "concepts";
+const DEFAULT_EMBED_UNITS = "sections";
 
 // index -> Map(units function -> memo)
 const UNIT_MEMOS = new WeakMap();

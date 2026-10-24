@@ -14,6 +14,7 @@ const {
 } = require("../src/search/fusion");
 const { openEmbeddingRuntime } = require("../src/search/hybrid");
 const { searchConcepts } = require("../src/search/query");
+const { sectionUnits } = require("../src/context/sections");
 const { startFakeEmbeddingsServer } = require("./fake-embeddings-server");
 
 // WP3c acceptance, offline part only (docs/plan-1.0.md WP3c). The quality numbers come from a
@@ -39,7 +40,7 @@ async function fixtureRuntime(t, name) {
   t.after(() => fs.rmSync(cacheDir, { recursive: true, force: true }));
   const runtime = await openEmbeddingRuntime(
     {
-      embedder: { baseUrl: server.baseUrl, model: "fake", dimensions: 32, batchSize: 512 },
+      embedder: { baseUrl: server.baseUrl, model: "fake", dimensions: 32, batchSize: 2048 },
       cacheDir,
     },
     { root },
@@ -52,7 +53,9 @@ for (const name of ["alpinaria", "atlas"]) {
   test(`${name}: the cache fills in one request and hybrid search runs on every query`, async (t) => {
     const { server, runtime, index } = await fixtureRuntime(t, name);
     const receipt = await runtime.sync(index);
-    assert.equal(receipt.embedded, index.concepts.length);
+    // Section units, the default: one row per distinct section text.
+    assert.equal(runtime.embedUnits, "sections");
+    assert.equal(receipt.embedded, new Set(sectionUnits(index).map((unit) => unit.hash)).size);
     assert.equal(receipt.requests, 1);
     assert.equal(server.requests.length, 1);
     const { queries } = JSON.parse(fs.readFileSync(path.join(RETRIEVAL, name, "queries.json")));

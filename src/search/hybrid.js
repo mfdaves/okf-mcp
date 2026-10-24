@@ -15,7 +15,7 @@ const { openVectorCache, resolveCacheDir } = require("../cache/store");
 const { EmbedderError, describeEmbedder, validateEmbedder } = require("../embed/interface");
 const { OPENAI_SERVER_CODES, createOpenAiEmbedder } = require("../embed/openai");
 const { prepareEmbeddings } = require("../embed/prepare");
-const { denseCoverage, resolveUnits, unitMemo } = require("./dense");
+const { DEFAULT_EMBED_UNITS, denseCoverage, resolveUnits, unitMemo } = require("./dense");
 const { fusionAlpha, fusionNormalization } = require("./fusion");
 const { searchConcepts } = require("./query");
 
@@ -142,7 +142,8 @@ class EmbeddingRuntime {
     this.context = context || {};
     this.alpha = fusionAlpha(config.fusion?.alpha);
     this.normalization = fusionNormalization(config.fusion?.normalization);
-    this.embedUnits = typeof config.embedUnits === "string" ? config.embedUnits : "concepts";
+    this.embedUnits =
+      typeof config.embedUnits === "string" ? config.embedUnits : DEFAULT_EMBED_UNITS;
     this.units = null;
     this.embedders = null;
     this.cache = null;

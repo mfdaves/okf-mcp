@@ -45,7 +45,16 @@ async function harness(t, extra) {
   const run = (args) =>
     runHybridEvaluation(
       parseHybridArgs(
-        ["--embedder", embedderFile, "--fixture", "atlas", "--bootstrap", "20"].concat(args || []),
+        [
+          "--embedder",
+          embedderFile,
+          "--fixture",
+          "atlas",
+          "--bootstrap",
+          "20",
+          "--units",
+          "concepts",
+        ].concat(args || []),
       ),
       { env: { XDG_CACHE_HOME: path.join(dir, "xdg") } },
     );
@@ -164,6 +173,8 @@ test("node scripts/eval-search.js --embedder runs the hybrid harness end to end"
     "atlas",
     "--split",
     "dev",
+    "--units",
+    "concepts",
     "--bootstrap",
     "10",
     "--out",

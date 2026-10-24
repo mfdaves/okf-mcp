@@ -15,6 +15,7 @@ const {
 const { TOOL_ORDER, toolEnabled } = require("../src/mcp/registry");
 const { callTool, createStateAsync } = require("../src/mcp/server");
 const { tools: searchTools } = require("../src/mcp/tools/search");
+const { sectionUnits } = require("../src/context/sections");
 const { startFakeEmbeddingsServer } = require("./fake-embeddings-server");
 
 function tempDir(t, prefix) {
@@ -144,7 +145,7 @@ test("--embedder-config files hold a bare embedder block or the project keys", (
     embedder: { type: "openai", baseUrl: "http://127.0.0.1:1", model: "m" },
     cacheDir: null,
     fusion: { alpha: 0.4, normalization: "tmm" },
-    embedUnits: "concepts",
+    embedUnits: "sections",
   });
   const full = path.join(dir, "full.yaml");
   fs.writeFileSync(
@@ -181,7 +182,10 @@ test("an MCP server with an embedder prepares vectors, fuses searches and report
   const { server, root, cacheDir, state } = await hybridState(t);
   assert.ok(state.embeddings, "runtime attached");
   await state.embeddings.idle();
-  assert.equal(server.requests.length, 1, "12 concepts in one startup request");
+  // Section units by default: a lead unit and one per heading, all in one startup request.
+  const units = new Set(sectionUnits(state.index).map((unit) => unit.hash)).size;
+  assert.ok(units > 12);
+  assert.equal(server.requests.length, 1, "every section in one startup request");
   assert.equal(toolEnabled(searchTools.embedding_status, state), true);
   assert.equal(TOOL_ORDER.at(-1), "embedding_status");
 
@@ -190,9 +194,10 @@ test("an MCP server with an embedder prepares vectors, fuses searches and report
   assert.equal(status.embedder.remote, false, "loopback endpoint");
   assert.equal(status.embedder.degraded, false);
   assert.equal(status.alpha, 0.4);
-  assert.equal(status.startup.embedded, 12);
+  assert.equal(status.startup.embedded, units);
+  assert.equal(status.embedUnits, "sections");
   assert.equal(status.startup.requests, 1);
-  assert.equal(status.cache.rows, 12);
+  assert.equal(status.cache.rows, units);
   assert.equal(
     fs.realpathSync(status.cache.dir),
     fs.realpathSync(cacheDir),
@@ -218,6 +223,7 @@ test("okf_apply_changes embeds a 5-concept batch in one request and reports it",
   const { server, state } = await hybridState(t);
   await state.embeddings.idle();
   const before = server.requests.length;
+  const rowsBefore = state.embeddings.cache.size;
   const changes = Array.from({ length: 5 }, (_value, index) => ({
     op: "create",
     path: `reference/new-${index}.md`,
@@ -228,13 +234,13 @@ test("okf_apply_changes embeds a 5-concept batch in one request and reports it",
   const receipt = parse(await callTool(state, "okf_apply_changes", { changes }));
   assert.equal(receipt.applied, true);
   assert.equal(server.requests.length - before, 1, "one embeddings request for the batch");
-  assert.equal(server.requests.at(-1).body.input.length, 5);
-  assert.equal(receipt.embedding.units, 5);
-  assert.equal(receipt.embedding.embedded, 5);
+  assert.equal(server.requests.at(-1).body.input.length, receipt.embedding.units);
+  assert.ok(receipt.embedding.units >= 5, "at least one section per new concept");
+  assert.equal(receipt.embedding.embedded, receipt.embedding.units);
   assert.equal(receipt.embedding.usage.requests, 1);
   assert.ok(receipt.embedding.usage.promptTokens > 0);
   assert.equal(receipt.embedding.embedder.degraded, false);
-  assert.equal(receipt.embedding.cache.rows, 17);
+  assert.equal(receipt.embedding.cache.rows, rowsBefore + receipt.embedding.units);
   const search = parse(await callTool(state, "search_concepts", { query: "fresh finding" }));
   assert.equal(search.hybrid, true);
   await state.embeddings.idle();

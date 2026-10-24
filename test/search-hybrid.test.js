@@ -144,7 +144,7 @@ async function runtimeWorld(t, options) {
   const topic = topicEmbedder();
   const cacheDir = path.join(tempDir(t, "okf-hybrid-runtime-"), "cache");
   const runtime = await openEmbeddingRuntime(
-    Object.assign({ embedder: topic.embedder, cacheDir }, options || {}),
+    Object.assign({ embedder: topic.embedder, cacheDir, embedUnits: "concepts" }, options || {}),
     { root: world.root },
   );
   return { ...world, ...topic, runtime, cacheDir };

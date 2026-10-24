@@ -30,7 +30,7 @@ async function runtimeWorld(t, embedder, context) {
   const world = hybridWorld(t);
   const cacheDir = path.join(tempDir(t, "okf-hybrid-review-"), "cache");
   const runtime = await openEmbeddingRuntime(
-    { embedder, cacheDir },
+    { embedder, cacheDir, embedUnits: "concepts" },
     Object.assign({ root: world.root }, context || {}),
   );
   return { ...world, runtime };

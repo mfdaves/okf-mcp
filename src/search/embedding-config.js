@@ -12,7 +12,7 @@ const path = require("node:path");
 
 const { createOpenAiEmbedder } = require("../embed/openai");
 const { parseFrontmatterYaml } = require("../parser");
-const { EMBED_UNITS } = require("./dense");
+const { DEFAULT_EMBED_UNITS, EMBED_UNITS } = require("./dense");
 const { FUSION_NORMALIZATIONS, fusionAlpha, fusionNormalization } = require("./fusion");
 
 const EMBEDDER_TYPES = Object.freeze(["openai"]);
@@ -123,7 +123,7 @@ function normalizeEmbeddingConfig(config, errors) {
       });
     }
   }
-  let embedUnits = "concepts";
+  let embedUnits = DEFAULT_EMBED_UNITS;
   if (source.embedUnits !== undefined) {
     if (!EMBED_UNITS.includes(source.embedUnits)) {
       errors.push({
