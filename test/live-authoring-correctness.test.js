@@ -595,6 +595,10 @@ test("assume-unchanged and skip-worktree flags cannot hide user bytes from prefl
 });
 
 test("core.filemode false cannot make a metadata update absorb a hidden chmod", async (t) => {
+  if (process.platform === "win32") {
+    t.skip("Executable permission bits cannot be represented on Windows.");
+    return;
+  }
   const root = makeRoot();
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   initializeGit(root);
