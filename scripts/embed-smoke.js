@@ -71,7 +71,11 @@ async function main() {
   });
   const probe = await embedder.probe();
   console.log(`embed-smoke: ${probe.id} remote=${embedder.remote} cache=${cacheDir}`);
-  const cache = openVectorCache(cacheDir, { embedderId: probe.id, dimension: probe.dimension });
+  const cache = openVectorCache(cacheDir, {
+    embedderId: probe.id,
+    dimension: probe.dimension,
+    root: path.dirname(projectPath),
+  });
   const index = buildProjectIndex(projectPath);
   const first = await prepareEmbeddings(index, embedder, cache, {
     onProgress: (event) => console.log(`embed-smoke: ${event.embedded}/${event.total} embedded`),

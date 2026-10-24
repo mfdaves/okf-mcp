@@ -10,14 +10,22 @@ const test = require("node:test");
 const {
   VECTOR_CACHE_FORMAT,
   VECTOR_CACHE_FORMAT_VERSION,
+  VectorCache,
   VectorCacheError,
   openVectorCache,
   resolveCacheDir,
 } = require("../src/cache/store");
 
-const EMBEDDER = "openai:api.example.com:model:4";
+const EMBEDDER = "openai:https://api.example.com/v1/embeddings:model:4:32000";
 const POSIX_ONLY =
   process.platform === "win32" ? "symbolic links need privileges on Windows" : false;
+const UNPRIVILEGED_POSIX_ONLY =
+  process.platform === "win32"
+    ? "POSIX permissions"
+    : typeof process.getuid === "function" && process.getuid() === 0
+      ? "root bypasses permissions"
+      : false;
+const MINUTES = 60 * 1000;
 
 function hash(text) {
   return crypto.createHash("sha256").update(text).digest("hex");
@@ -47,6 +55,26 @@ function manifestOf(dir) {
 
 function dataFiles(dir) {
   return fs.readdirSync(dir).sort();
+}
+
+function ageFile(target, ms) {
+  const when = new Date(Date.now() - ms);
+  fs.utimesSync(target, when, when);
+}
+
+function writeGeneration(dir, generation, rows, floats) {
+  const unitBytes = Buffer.from(`${JSON.stringify(rows)}\n`);
+  const vectorBytes = Buffer.alloc(floats.length * 4);
+  floats.forEach((value, index) => {
+    vectorBytes.writeFloatLE(value, index * 4);
+  });
+  fs.writeFileSync(path.join(dir, `units.${generation}.json`), unitBytes);
+  fs.writeFileSync(path.join(dir, `vectors.${generation}.f32`), vectorBytes);
+  return { units: sha256(unitBytes), vectors: sha256(vectorBytes) };
+}
+
+function writeLock(dir, content) {
+  fs.writeFileSync(path.join(dir, "lock"), content);
 }
 
 test("round-trips rows through a generation of files and reopens them", (t) => {
@@ -109,7 +137,7 @@ test("round-trips rows through a generation of files and reopens them", (t) => {
   );
 });
 
-test("upserts by hash, prunes by hash, keeps earlier views, and collects old generations", (t) => {
+test("upserts by hash, prunes by hash, keeps earlier views, and drops its own old generations", (t) => {
   const dir = path.join(tempDir(t, "okf-vector-cache-"), "cache");
   const cache = open(dir);
   cache.putMany([entry("a", [1, 1, 1, 1]), entry("b", [2, 2, 2, 2]), entry("c", [3, 3, 3, 3])]);
@@ -172,7 +200,8 @@ test("starts empty and says why on any mismatch, corruption or tampering", (t) =
   const dir = path.join(tempDir(t, "okf-vector-cache-"), "cache");
   open(dir).putMany([entry("a", [1, 2, 3, 4]), entry("b", [5, 6, 7, 8])]);
   assert.equal(
-    open(dir, { embedderId: "openai:api.example.com:other:4" }).opened.reason,
+    open(dir, { embedderId: "openai:https://api.example.com/v1/embeddings:other:4:32000" }).opened
+      .reason,
     "embedder_mismatch",
   );
   assert.equal(open(dir, { dimension: 8 }).opened.reason, "dimension_mismatch");
@@ -225,7 +254,8 @@ test("starts empty and says why on any mismatch, corruption or tampering", (t) =
   fs.unlinkSync(manifestPath);
   assert.equal(open(dir).opened.reason, "manifest_missing");
 
-  // A rebuilt cache leaves only its own generation behind on its first write.
+  // A rebuilt cache commits its own generation; the stale one is foreign to
+  // it and stays until the grace period has passed.
   const rebuilt = open(dir);
   rebuilt.putMany([entry("fresh", [4, 3, 2, 1])]);
   assert.deepEqual(
@@ -234,6 +264,10 @@ test("starts empty and says why on any mismatch, corruption or tampering", (t) =
       .map((row) => row.id),
     ["fresh"],
   );
+  assert.equal(dataFiles(dir).length, 5);
+  ageFile(unitsPath, 16 * MINUTES);
+  ageFile(vectorsPath, 16 * MINUTES);
+  rebuilt.putMany([entry("more", [1, 1, 1, 1])]);
   assert.equal(dataFiles(dir).length, 3);
 });
 
@@ -243,43 +277,60 @@ test("an interrupted write never pairs rows of one generation with vectors of an
   cache.putMany([entry("a", [1, 1, 1, 1]), entry("b", [2, 2, 2, 2])]);
   const committed = manifestOf(dir);
 
-  // Data files of a newer generation landed, the manifest did not: the
-  // committed generation is what opens, and the orphans go on the next write.
+  // Writer X has landed its data files but not yet its manifest.
   const orphan = "zzzzzzzz-deadbeef";
-  fs.writeFileSync(
-    path.join(dir, `units.${orphan}.json`),
-    JSON.stringify([
-      { id: "a", hash: hash("a") },
-      { id: "c", hash: hash("c") },
-    ]),
-  );
-  const newer = Buffer.alloc(2 * 4 * 4);
-  for (let index = 0; index < 8; index += 1) newer.writeFloatLE(9, index * 4);
-  fs.writeFileSync(path.join(dir, `vectors.${orphan}.f32`), newer);
-  const reopened = open(dir);
-  assert.deepEqual(reopened.opened, { rebuilt: false, reason: null, rows: 2 });
+  const xRows = [
+    { id: "a", hash: hash("a") },
+    { id: "c", hash: hash("c") },
+  ];
+  const xDigests = writeGeneration(dir, orphan, xRows, [9, 9, 9, 9, 8, 8, 8, 8]);
+  const reader = open(dir);
+  assert.deepEqual(reader.opened, { rebuilt: false, reason: null, rows: 2 });
   assert.deepEqual(
-    reopened.all().map((row) => [row.id, Array.from(row.vector)]),
+    reader.all().map((row) => [row.id, Array.from(row.vector)]),
     [
       ["a", [1, 1, 1, 1]],
       ["b", [2, 2, 2, 2]],
     ],
   );
-  reopened.putMany([entry("d", [4, 4, 4, 4])]);
+
+  // Another writer commits meanwhile: its own old generation goes, X's young
+  // files stay, and X's manifest then commits a consistent generation.
+  cache.putMany([entry("d", [4, 4, 4, 4])]);
   const current = manifestOf(dir);
   assert.deepEqual(dataFiles(dir), [
     "manifest.json",
     `units.${current.generation}.json`,
+    `units.${orphan}.json`,
     `vectors.${current.generation}.f32`,
+    `vectors.${orphan}.f32`,
   ]);
-
-  // The reverse: a manifest for a generation whose files never landed.
   fs.writeFileSync(
     path.join(dir, "manifest.json"),
     JSON.stringify({
       ...committed,
       generation: orphan,
       files: { units: `units.${orphan}.json`, vectors: `vectors.${orphan}.f32` },
+      digests: xDigests,
+    }),
+  );
+  const afterX = open(dir);
+  assert.deepEqual(afterX.opened, { rebuilt: false, reason: null, rows: 2 });
+  assert.deepEqual(
+    afterX.all().map((row) => [row.id, Array.from(row.vector)]),
+    [
+      ["a", [9, 9, 9, 9]],
+      ["c", [8, 8, 8, 8]],
+    ],
+  );
+
+  // The reverse: a manifest for a generation whose files never landed.
+  fs.writeFileSync(
+    path.join(dir, "manifest.json"),
+    JSON.stringify({
+      ...committed,
+      generation: "aaaaaaaa-00000000",
+      files: { units: "units.aaaaaaaa-00000000.json", vectors: "vectors.aaaaaaaa-00000000.f32" },
     }),
   );
   assert.equal(open(dir).opened.reason, "units_corrupt");
@@ -290,6 +341,151 @@ test("an interrupted write never pairs rows of one generation with vectors of an
     JSON.stringify({ ...current, digests: committed.digests }),
   );
   assert.equal(open(dir).opened.reason, "integrity_mismatch");
+});
+
+test("writers take an advisory lock, wait for a live one, and take over a stale one", (t) => {
+  const dir = path.join(tempDir(t, "okf-vector-cache-"), "cache");
+  const cache = open(dir, { lockWaitMs: 60 });
+  cache.putMany([entry("a", [1, 1, 1, 1])]);
+  assert.equal(fs.existsSync(path.join(dir, "lock")), false, "the lock is released");
+
+  writeLock(dir, JSON.stringify({ pid: 424242, createdAt: new Date().toISOString() }));
+  const started = Date.now();
+  assert.throws(
+    () => cache.putMany([entry("b", [2, 2, 2, 2])]),
+    (error) =>
+      error.code === "cache_locked" && error.details.pid === 424242 && error.details.ageMs >= 0,
+  );
+  assert.ok(Date.now() - started >= 50, "a live lock is waited for");
+  assert.equal(fs.existsSync(path.join(dir, "lock")), true, "a live lock is left alone");
+  assert.equal(manifestOf(dir).count, 1);
+  fs.unlinkSync(path.join(dir, "lock"));
+  assert.equal(cache.size, 2, "the row stays in memory and lands on the next write");
+  cache.putMany([entry("c", [3, 3, 3, 3])]);
+  assert.equal(manifestOf(dir).count, 3);
+
+  writeLock(
+    dir,
+    JSON.stringify({ pid: 424242, createdAt: new Date(Date.now() - 11 * MINUTES).toISOString() }),
+  );
+  cache.putMany([entry("d", [4, 4, 4, 4])]);
+  assert.equal(manifestOf(dir).count, 4, "a stale lock is taken over");
+  assert.equal(fs.existsSync(path.join(dir, "lock")), false);
+
+  writeLock(dir, "not json");
+  assert.throws(
+    () => cache.putMany([entry("e", [5, 5, 5, 5])]),
+    (error) => error.code === "cache_locked" && error.details.pid === null,
+  );
+  ageFile(path.join(dir, "lock"), 11 * MINUTES);
+  cache.putMany([entry("f", [6, 6, 6, 6])]);
+  assert.equal(manifestOf(dir).count, 6, "an unparsable lock is aged by its mtime");
+});
+
+test("collects foreign generations only after the grace period", (t) => {
+  const dir = path.join(tempDir(t, "okf-vector-cache-"), "cache");
+  const cache = open(dir);
+  cache.putMany([entry("a", [1, 1, 1, 1])]);
+  const young = "yyyyyyyy-0000aaaa";
+  const old = "oooooooo-0000bbbb";
+  writeGeneration(dir, young, [{ id: "y", hash: hash("y") }], [1, 2, 3, 4]);
+  writeGeneration(dir, old, [{ id: "o", hash: hash("o") }], [1, 2, 3, 4]);
+  ageFile(path.join(dir, `units.${old}.json`), 16 * MINUTES);
+  ageFile(path.join(dir, `vectors.${old}.f32`), 16 * MINUTES);
+  fs.writeFileSync(path.join(dir, "stale.tmp"), "x");
+  ageFile(path.join(dir, "stale.tmp"), 16 * MINUTES);
+  fs.writeFileSync(path.join(dir, "fresh.tmp"), "x");
+  cache.putMany([entry("b", [2, 2, 2, 2])]);
+  const current = manifestOf(dir).generation;
+  assert.deepEqual(dataFiles(dir), [
+    "fresh.tmp",
+    "manifest.json",
+    `units.${current}.json`,
+    `units.${young}.json`,
+    `vectors.${current}.f32`,
+    `vectors.${young}.f32`,
+  ]);
+});
+
+test("a reader keeps serving its generation after other writers commit and collect", (t) => {
+  const dir = path.join(tempDir(t, "okf-vector-cache-"), "cache");
+  open(dir).putMany([entry("a", [1, 1, 1, 1]), entry("b", [2, 2, 2, 2])]);
+  const first = manifestOf(dir);
+  const reader = open(dir);
+  assert.equal(reader.generation, first.generation);
+
+  const writer = open(dir);
+  writer.putMany([entry("c", [3, 3, 3, 3])]);
+  ageFile(path.join(dir, first.files.units), 16 * MINUTES);
+  ageFile(path.join(dir, first.files.vectors), 16 * MINUTES);
+  writer.putMany([entry("d", [4, 4, 4, 4])]);
+  assert.equal(fs.existsSync(path.join(dir, first.files.units)), false);
+  assert.equal(fs.existsSync(path.join(dir, first.files.vectors)), false);
+
+  assert.deepEqual(Array.from(reader.get(hash("b"))), [2, 2, 2, 2]);
+  assert.deepEqual(
+    reader.all().map((row) => row.id),
+    ["a", "b"],
+  );
+  reader.putMany([entry("e", [5, 5, 5, 5])]);
+  assert.deepEqual(
+    open(dir)
+      .all()
+      .map((row) => row.id),
+    ["a", "b", "e"],
+  );
+});
+
+test("a failed write releases the lock, keeps the previous generation, and recovers", (t) => {
+  const dir = path.join(tempDir(t, "okf-vector-cache-"), "cache");
+  const cache = open(dir);
+  cache.putMany([entry("a", [1, 1, 1, 1])]);
+  const first = manifestOf(dir);
+  cache.writeFile = (target, content) => {
+    if (target.endsWith(".f32")) throw new Error("disk full");
+    return VectorCache.prototype.writeFile.call(cache, target, content);
+  };
+  assert.throws(() => cache.putMany([entry("b", [2, 2, 2, 2])]), /disk full/);
+  assert.equal(fs.existsSync(path.join(dir, "lock")), false, "the lock is released");
+  assert.deepEqual(manifestOf(dir), first, "the previous generation stays committed");
+  assert.deepEqual(open(dir).opened, { rebuilt: false, reason: null, rows: 1 });
+  assert.equal(cache.size, 2, "memory keeps the row");
+  assert.equal(dataFiles(dir).length, 4, "the half-written generation is left behind for now");
+
+  delete cache.writeFile;
+  cache.flush();
+  assert.equal(manifestOf(dir).count, 2);
+  assert.deepEqual(
+    open(dir)
+      .all()
+      .map((row) => row.id),
+    ["a", "b"],
+  );
+  assert.equal(dataFiles(dir).length, 3, "its own half-written generation is collected");
+});
+
+test("a directory the process cannot write to fails the write without a stale lock", {
+  skip: UNPRIVILEGED_POSIX_ONLY,
+}, (t) => {
+  const dir = path.join(tempDir(t, "okf-vector-cache-"), "cache");
+  const cache = open(dir);
+  cache.putMany([entry("a", [1, 1, 1, 1])]);
+  fs.chmodSync(dir, 0o500);
+  t.after(() => {
+    try {
+      fs.chmodSync(dir, 0o700);
+    } catch {
+      // The temporary directory may already be gone.
+    }
+  });
+  assert.throws(
+    () => cache.putMany([entry("b", [2, 2, 2, 2])]),
+    (error) => error.code === "cache_write_failed" && error.details.cause === "EACCES",
+  );
+  fs.chmodSync(dir, 0o700);
+  assert.equal(fs.existsSync(path.join(dir, "lock")), false);
+  cache.putMany([entry("c", [3, 3, 3, 3])]);
+  assert.equal(manifestOf(dir).count, 3);
 });
 
 test("recovers when the directory disappears between two writes", (t) => {
@@ -315,7 +511,7 @@ test("recovers when the directory disappears between two writes", (t) => {
   );
 });
 
-test("applies path safety to the cache directory and its files", (t) => {
+test("applies path safety to the cache directory and its options", (t) => {
   const base = tempDir(t, "okf-vector-cache-");
   for (const bad of [
     "relative/cache",
@@ -350,6 +546,18 @@ test("applies path safety to the cache directory and its files", (t) => {
     () => openVectorCache(path.join(base, "c"), { embedderId: "ok", dimension: 0 }),
     (error) => error.code === "invalid_cache_options" && error.details.field === "dimension",
   );
+
+  // With the root known, open refuses a directory inside it unless told so.
+  const root = path.join(base, "bundle");
+  fs.mkdirSync(root);
+  assert.throws(
+    () => open(path.join(root, ".okf-cache"), { root }),
+    (error) => error.code === "cache_inside_root",
+  );
+  assert.equal(open(path.join(root, ".okf-cache"), { root, allowInsideRoot: true }).size, 0);
+  const outside = open(path.join(base, "outside"), { root });
+  outside.putMany([entry("a", [1, 1, 1, 1])]);
+  assert.equal(outside.size, 1);
 });
 
 test("refuses a symlinked cache directory, resolves linked ancestors, never follows linked files", {
@@ -393,6 +601,61 @@ test("refuses a symlinked cache directory, resolves linked ancestors, never foll
   cache.putMany([entry("b", [5, 6, 7, 8])]);
   assert.equal(fs.lstatSync(path.join(real, "manifest.json")).isSymbolicLink(), false);
   assert.equal(JSON.parse(fs.readFileSync(outside, "utf8")).count, 1);
+});
+
+test("an ancestor link created after open makes the next write fail closed", {
+  skip: POSIX_ONLY,
+}, (t) => {
+  const base = tempDir(t, "okf-vector-cache-");
+  const root = path.join(base, "bundle");
+  fs.mkdirSync(root);
+  const elsewhere = path.join(base, "elsewhere");
+  fs.mkdirSync(elsewhere);
+  const dir = path.join(base, "parent", "cache");
+  const cache = open(dir, { root });
+  cache.putMany([entry("a", [1, 1, 1, 1])]);
+
+  // Re-point the parent into the bundle root: the write must not land there.
+  fs.rmSync(path.join(base, "parent"), { recursive: true, force: true });
+  fs.symlinkSync(root, path.join(base, "parent"));
+  assert.throws(
+    () => cache.putMany([entry("b", [2, 2, 2, 2])]),
+    (error) => error.code === "invalid_cache_dir",
+  );
+  assert.deepEqual(fs.readdirSync(root), [], "nothing was written into the root");
+
+  // The same when the parent now points somewhere harmless: the location
+  // is no longer the one opened.
+  fs.unlinkSync(path.join(base, "parent"));
+  fs.symlinkSync(elsewhere, path.join(base, "parent"));
+  assert.throws(
+    () => cache.putMany([entry("c", [3, 3, 3, 3])]),
+    (error) => error.code === "invalid_cache_dir",
+  );
+  assert.deepEqual(fs.readdirSync(elsewhere), []);
+});
+
+test("a data file swapped for a link fails closed instead of being read", {
+  skip: POSIX_ONLY,
+}, (t) => {
+  const base = tempDir(t, "okf-vector-cache-");
+  const dir = path.join(base, "cache");
+  open(dir).putMany([entry("a", [1, 2, 3, 4])]);
+  const manifest = manifestOf(dir);
+  for (const [file, reason] of [
+    [manifest.files.units, "units_corrupt"],
+    [manifest.files.vectors, "vectors_corrupt"],
+  ]) {
+    const target = path.join(dir, file);
+    const copy = path.join(base, `${file}.copy`);
+    fs.copyFileSync(target, copy);
+    fs.unlinkSync(target);
+    fs.symlinkSync(copy, target);
+    assert.equal(open(dir).opened.reason, reason, file);
+    fs.unlinkSync(target);
+    fs.copyFileSync(copy, target);
+    assert.equal(open(dir).opened.rebuilt, false);
+  }
 });
 
 test("resolveCacheDir derives a location outside the root and follows the platform", (t) => {
