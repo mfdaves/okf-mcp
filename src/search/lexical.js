@@ -1,12 +1,16 @@
 "use strict";
 
 // Lexical index over an OKF index (plan R-1, R-2, R-3, R-5): one MiniSearch
-// instance per OKF index and language set, built lazily and cached in a
-// WeakMap. Index time keeps the raw token (diacritics folded) and adds one
-// stem per configured language; the `exact` field (path, identifiers,
-// aliases, raw title tokens) is never stemmed. Query time folds, drops stop
-// words and single letters, stems with every configured language, and runs an
-// all-term or any-term tree where each query term is an OR of its forms.
+// instance per OKF index and language setting, built lazily and cached in a
+// WeakMap. Languages are detected per bundle (the union of languages present
+// in at least 5% of that bundle's documents) unless configured; each document
+// is stemmed with its own bundle's set and queries with the union of all sets.
+// Text fields keep the raw token (diacritics folded) plus one stem per
+// language; the `exact` field (path, identifiers, aliases, raw title tokens)
+// is literal: never stemmed, folded or stop-worded. Query time folds, drops
+// stop words and single letters, and stems every plain term; quoted text and
+// identifier-looking tokens stay literal and run an all-term or any-term
+// tree where each query term is an OR of its forms.
 
 const MiniSearch = require("minisearch");
 const {
@@ -20,7 +24,7 @@ const {
 const MAX_QUERY_CHARACTERS = 512;
 const MAX_QUERY_TERMS = 16;
 const EXACT_FIELD = "exact";
-const SEARCH_FIELDS = Object.freeze([
+const TEXT_FIELDS = Object.freeze([
   "title",
   "type",
   "tags",
@@ -28,8 +32,8 @@ const SEARCH_FIELDS = Object.freeze([
   "description",
   "path",
   "body",
-  EXACT_FIELD,
 ]);
+const SEARCH_FIELDS = Object.freeze(TEXT_FIELDS.concat([EXACT_FIELD]));
 const SEARCH_BOOSTS = Object.freeze({
   title: 8,
   type: 5,
@@ -44,50 +48,112 @@ const SEARCH_BOOSTS = Object.freeze({
 const DETECTION_SAMPLE_CHARACTERS = 4000;
 // Distinct tokens whose index forms are memoised per language set.
 const TERM_FORMS_CACHE_LIMIT = 50000;
-// OKF index -> { detection, variants: Map<language key, { languages, searchIndex }> }
+// OKF index -> { detection, variants: Map<language key, variant> }
 const SEARCH_INDEXES = new WeakMap();
 const tokenize = MiniSearch.getDefault("tokenize");
 const identity = (value) => value;
 const identityTokenize = (text) => [text];
+// Query pieces in order: "double quoted", “typographic quoted”, or a run of non-spaces.
+const QUERY_PIECES = /"([^"]*)"|“([^”]*)”|(\S+)/gu;
+// An unquoted chunk that looks like an identifier: digits or an internal hyphen.
+const IDENTIFIER_CHUNK = /\p{N}|[\p{L}\p{N}]-[\p{L}\p{N}]/u;
+// An indexed chunk kept whole beside its pieces: an internal hyphen, underscore or dot.
+const IDENTIFIER_SEGMENT = /[\p{L}\p{N}][-_.][\p{L}\p{N}]/u;
+const EDGE_PUNCTUATION = /^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu;
+const FILE_EXTENSION = /\.[a-z0-9]+$/;
+
+const canonicalCodes = (codes) => Array.from(new Set(codes)).sort();
+const languageKey = (codes) => canonicalCodes(codes).join(",") || "none";
 
 // A custom id is a full okf:// URI; only its concept path is an identifier.
 function customIdPath(customId) {
   return customId ? String(customId).replace(/^okf:\/\/[^/]+\//, "") : "";
 }
 
+// One segment per identifier-bearing value; the exact tokenizer sees them
+// separately so whole titles and aliases become tokens of their own.
+function exactSegments(doc) {
+  return [doc.conceptId, customIdPath(doc.customId), doc.path, doc.title]
+    .concat(doc.aliases || [])
+    .filter(Boolean)
+    .map((value) => String(value).replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+}
+
 function searchDocument(doc) {
-  const aliases = doc.aliases || [];
   return {
     id: doc.uri,
     title: String(doc.title || ""),
     type: String(doc.type || ""),
     tags: (doc.tags || []).join(" "),
-    aliases: aliases.join(" "),
+    aliases: (doc.aliases || []).join(" "),
     description: String(doc.description || ""),
     path: String(doc.path || ""),
     body: String(doc.body || ""),
-    exact: [doc.conceptId, customIdPath(doc.customId), doc.path, doc.title]
-      .concat(aliases)
-      .filter(Boolean)
-      .map(String)
-      .join(" "),
+    exact: exactSegments(doc).join("\n"),
   };
 }
 
-// Index-time term processing for one language set: the folded token plus its
-// stems (an array when any stem differs), only the folded token on the exact
-// field. Memoised because catalog vocabulary repeats heavily across documents.
-function createTermProcessor(languages) {
-  const cache = new Map();
+// Exact-field tokens are literal (lower-cased, diacritics kept): each segment
+// as a whole, its default tokens, and every identifier chunk with and without
+// a file extension, so "TRK-W-042" survives as one token beside "trk", "w"
+// and "042".
+function exactTokens(text) {
+  const out = new Set();
+  String(text)
+    .split("\n")
+    .forEach((line) => {
+      const segment = line.trim().toLowerCase();
+      if (!segment) {
+        return;
+      }
+      out.add(segment);
+      tokenize(segment).forEach((token) => {
+        if (token) {
+          out.add(token);
+        }
+      });
+      segment.split(/[\s/]+/).forEach((chunk) => {
+        const clean = chunk.replace(EDGE_PUNCTUATION, "");
+        if (clean && IDENTIFIER_SEGMENT.test(clean)) {
+          out.add(clean);
+          const bare = clean.replace(FILE_EXTENSION, "");
+          if (bare && bare !== clean) {
+            out.add(bare);
+          }
+        }
+      });
+    });
+  return Array.from(out);
+}
+
+function fieldTokenize(text, field) {
+  return field === EXACT_FIELD ? exactTokens(text) : tokenize(text);
+}
+
+// Index-time term processing. `current` names the language set of the
+// document being added (set by the variant before each add): the folded token
+// plus its stems for text fields, the literal token for the exact field.
+// Memoised per language set because catalog vocabulary repeats heavily.
+function createTermProcessor(current) {
+  const caches = new Map();
   return (term, field) => {
+    if (field === EXACT_FIELD) {
+      return term;
+    }
     const lower = term.toLowerCase();
-    if (field === EXACT_FIELD || !languages.length) {
+    if (!current.languages.length) {
       return foldDiacritics(lower);
+    }
+    let cache = caches.get(current.key);
+    if (!cache) {
+      cache = new Map();
+      caches.set(current.key, cache);
     }
     let forms = cache.get(lower);
     if (forms === undefined) {
       const folded = foldDiacritics(lower);
-      const stems = stemForms(lower, languages);
+      const stems = stemForms(lower, current.languages);
       forms = stems.length ? [folded].concat(stems) : folded;
       if (cache.size >= TERM_FORMS_CACHE_LIMIT) {
         cache.delete(cache.keys().next().value);
@@ -96,20 +162,6 @@ function createTermProcessor(languages) {
     }
     return forms;
   };
-}
-
-function buildSearchIndex(index, languages) {
-  const searchIndex = new MiniSearch({
-    fields: SEARCH_FIELDS,
-    idField: "id",
-    processTerm: createTermProcessor(languages),
-    searchOptions: {
-      boost: SEARCH_BOOSTS,
-      combineWith: "AND",
-    },
-  });
-  searchIndex.addAll(index.concepts.map(searchDocument));
-  return searchIndex;
 }
 
 function detectionTokens(doc) {
@@ -132,44 +184,110 @@ function indexState(index) {
   return state;
 }
 
+// Bundle-level detection (R-2): each bundle's set from its own documents; the
+// union stems queries.
 function detectIndexLanguages(index, state) {
   if (!state.detection) {
-    state.detection = detectLanguages(index.concepts.map(detectionTokens));
+    const tokenLists = new Map();
+    index.concepts.forEach((doc) => {
+      const bundle = String(doc.bundle);
+      if (!tokenLists.has(bundle)) {
+        tokenLists.set(bundle, []);
+      }
+      tokenLists.get(bundle).push(detectionTokens(doc));
+    });
+    const bundles = {};
+    const union = new Set();
+    Array.from(tokenLists.keys())
+      .sort()
+      .forEach((bundle) => {
+        bundles[bundle] = detectLanguages(tokenLists.get(bundle));
+        bundles[bundle].languages.forEach((code) => {
+          union.add(code);
+        });
+      });
+    state.detection = { bundles, languages: canonicalCodes(Array.from(union)) };
   }
   return state.detection;
 }
 
 // Precedence: explicit option, `index.languages` (CLI --languages),
-// `index.project.languages` (project config), then auto detection.
+// `index.project.languages` (project config), then per-bundle detection.
 function requestedLanguages(index, options) {
+  let value;
   if (options && options.languages !== undefined) {
-    return normalizeLanguages(options.languages);
+    value = options.languages;
+  } else if (index.languages !== undefined) {
+    value = index.languages;
+  } else if (index.project && index.project.languages !== undefined) {
+    value = index.project.languages;
   }
-  if (index.languages !== undefined) {
-    return normalizeLanguages(index.languages);
-  }
-  if (index.project && index.project.languages !== undefined) {
-    return normalizeLanguages(index.project.languages);
-  }
-  return "auto";
+  const normalized = normalizeLanguages(value);
+  return normalized === "auto" ? "auto" : canonicalCodes(normalized);
 }
 
-// The language codes a search over `index` stems and stop-words with.
-function searchLanguages(index, options) {
+// The effective setting: the union used for queries, a per-bundle lookup for
+// documents, and the cache key (canonical, so ["it","en"] and ["en","it"]
+// share one index).
+function languagePlan(index, options) {
   const requested = requestedLanguages(index, options);
-  return requested === "auto"
-    ? detectIndexLanguages(index, indexState(index)).languages
-    : requested;
+  if (requested !== "auto") {
+    return {
+      requested,
+      languages: requested,
+      key: languageKey(requested),
+      bundles: null,
+      languagesFor: () => requested,
+    };
+  }
+  const detection = detectIndexLanguages(index, indexState(index));
+  return {
+    requested,
+    languages: detection.languages,
+    key: "auto",
+    bundles: detection.bundles,
+    languagesFor: (bundle) =>
+      detection.bundles[bundle] ? detection.bundles[bundle].languages : detection.languages,
+  };
+}
+
+function searchLanguages(index, options) {
+  return languagePlan(index, options).languages;
+}
+
+function buildVariant(index, plan) {
+  const current = { languages: [], key: "none" };
+  const searchIndex = new MiniSearch({
+    fields: SEARCH_FIELDS,
+    idField: "id",
+    tokenize: fieldTokenize,
+    processTerm: createTermProcessor(current),
+    searchOptions: {
+      boost: SEARCH_BOOSTS,
+      combineWith: "AND",
+    },
+  });
+  const upsert = (doc) => {
+    current.languages = plan.languagesFor(String(doc.bundle));
+    current.key = languageKey(current.languages);
+    const document = searchDocument(doc);
+    if (searchIndex.has(document.id)) {
+      searchIndex.replace(document);
+    } else {
+      searchIndex.add(document);
+    }
+  };
+  index.concepts.forEach(upsert);
+  return { searchIndex, upsert, languages: plan.languages, bundles: plan.bundles };
 }
 
 function searchVariant(index, options) {
   const state = indexState(index);
-  const languages = searchLanguages(index, options);
-  const key = languages.join(",");
-  let variant = state.variants.get(key);
+  const plan = languagePlan(index, options);
+  let variant = state.variants.get(plan.key);
   if (!variant) {
-    variant = { languages, searchIndex: buildSearchIndex(index, languages) };
-    state.variants.set(key, variant);
+    variant = buildVariant(index, plan);
+    state.variants.set(plan.key, variant);
   }
   return variant;
 }
@@ -179,27 +297,52 @@ function prepareSearchIndex(index, options) {
 }
 
 // What a search over `index` would use, without building anything but the
-// detection pass: the requested setting, the effective codes, and per-language
-// document counts when detection ran.
+// detection pass: the requested setting, the effective union, and per-bundle
+// sets with document counts when detection ran.
 function describeSearchIndex(index, options) {
-  const requested = requestedLanguages(index, options);
-  const detection = requested === "auto" ? detectIndexLanguages(index, indexState(index)) : null;
-  return {
-    requested,
-    languages: detection ? detection.languages : requested,
-    detection: detection
-      ? { counts: detection.counts, documents: detection.documents, detected: detection.detected }
-      : null,
-  };
+  const plan = languagePlan(index, options);
+  return { requested: plan.requested, languages: plan.languages, bundles: plan.bundles };
 }
 
 const isSingleLetter = (token) => token.length === 1 && !/\d/.test(token);
 
-// Query analysis (R-3): lower-case tokens; drop stop words of the configured
-// languages and single letters (reported as `dropped`); when nothing would be
-// left, search the dropped tokens literally instead of returning nothing; the
-// term limit counts what is left. Each kept token carries its forms: the
-// folded token first, then one stem per configured language.
+function plainTerm(raw, languages) {
+  const folded = foldDiacritics(raw);
+  const forms = [folded].concat(stemForms(raw, languages));
+  return {
+    kind: "plain",
+    raw,
+    literal: raw,
+    forms,
+    run: [],
+    leaves: [raw].concat(forms),
+    snippetTerms: [folded],
+    stems: forms.slice(1),
+  };
+}
+
+// Quoted text and identifier-looking chunks: the lower-cased literal as a
+// whole plus its pieces, nothing folded, stemmed or dropped.
+function literalTerm(kind, text) {
+  const literal = text.toLowerCase().replace(/\s+/g, " ").trim();
+  const run = tokenize(literal).filter(Boolean);
+  return {
+    kind,
+    raw: literal,
+    literal,
+    forms: [],
+    run,
+    leaves: [literal].concat(run),
+    snippetTerms: [literal].concat(run),
+    stems: [],
+  };
+}
+
+// Query analysis (R-3): quoted spans and identifier-looking chunks become
+// literal terms; other chunks are tokenised, lower-cased, and lose stop words
+// of the configured languages and single letters (reported as `dropped`).
+// When nothing would be left, the dropped tokens are searched literally
+// instead of returning nothing; the term limit counts what is left.
 function analyzeQuery(value, options) {
   const config = options || {};
   const query = String(value || "").trim();
@@ -208,32 +351,55 @@ function analyzeQuery(value, options) {
   }
   const languages = config.languages || [];
   const stopWords = config.stopWords || stopWordsFor(languages);
+  const tokens = [];
   const dropped = [];
-  let terms = [];
-  tokenize(query)
-    .map((token) => token.toLowerCase())
-    .filter(Boolean)
-    .forEach((token) => {
-      if (terms.includes(token) || dropped.includes(token)) {
-        return;
+  const seen = new Set();
+  const push = (term) => {
+    const key = `${term.kind}:${term.raw}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      tokens.push(term);
+    }
+  };
+  for (const piece of query.matchAll(QUERY_PIECES)) {
+    const quoted = piece[1] !== undefined ? piece[1] : piece[2];
+    if (quoted !== undefined) {
+      const term = literalTerm("exact", quoted);
+      if (term.run.length) {
+        push(term);
       }
-      if (isSingleLetter(token) || stopWords.has(token)) {
-        dropped.push(token);
-        return;
-      }
-      terms.push(token);
-    });
-  if (!terms.length && dropped.length) {
-    terms = dropped.splice(0, dropped.length);
+      continue;
+    }
+    const chunk = piece[3].replace(EDGE_PUNCTUATION, "");
+    if (!chunk) {
+      continue;
+    }
+    if (IDENTIFIER_CHUNK.test(chunk)) {
+      push(literalTerm("identifier", chunk));
+      continue;
+    }
+    tokenize(chunk)
+      .map((token) => token.toLowerCase())
+      .filter(Boolean)
+      .forEach((token) => {
+        if (isSingleLetter(token) || stopWords.has(token)) {
+          if (!dropped.includes(token)) {
+            dropped.push(token);
+          }
+          return;
+        }
+        push(plainTerm(token, languages));
+      });
   }
-  if (terms.length > MAX_QUERY_TERMS) {
+  if (!tokens.length && dropped.length) {
+    dropped.splice(0, dropped.length).forEach((token) => {
+      push(plainTerm(token, languages));
+    });
+  }
+  if (tokens.length > MAX_QUERY_TERMS) {
     throw new TypeError(`Search query must not exceed ${MAX_QUERY_TERMS} terms.`);
   }
-  const tokens = terms.map((raw) => ({
-    raw,
-    forms: [foldDiacritics(raw)].concat(stemForms(raw, languages)),
-  }));
-  return { query, terms, tokens, dropped, languages };
+  return { query, terms: tokens.map((term) => term.raw), tokens, dropped, languages };
 }
 
 // 0.9.1 shape ({ query, terms }) plus the analysis fields.
@@ -241,29 +407,50 @@ function normalizeSearchQuery(value, options) {
   return analyzeQuery(value, options);
 }
 
-function queryTree(tokens, combineWith) {
+// One term of the query tree. Plain terms: the literal against the exact
+// field, the folded token and stems against the text fields. Literal terms:
+// the whole against the exact field, or every piece (an ordered run the
+// tokenizer split) across all fields.
+function termNode(term) {
+  if (term.kind === "plain") {
+    return {
+      combineWith: "OR",
+      queries: [
+        { combineWith: "OR", fields: [EXACT_FIELD], queries: [term.literal] },
+        { combineWith: "OR", fields: TEXT_FIELDS, queries: term.forms },
+      ],
+    };
+  }
+  if (term.run.length === 1 && term.run[0] === term.literal) {
+    return { combineWith: "OR", fields: SEARCH_FIELDS, queries: [term.literal] };
+  }
   return {
-    combineWith,
-    queries: tokens.map((token) =>
-      token.forms.length === 1 ? token.forms[0] : { combineWith: "OR", queries: token.forms },
-    ),
+    combineWith: "OR",
+    queries: [
+      { combineWith: "OR", fields: [EXACT_FIELD], queries: [term.literal] },
+      { combineWith: "AND", fields: SEARCH_FIELDS, queries: term.run },
+    ],
   };
 }
 
-// One MiniSearch run over analysed tokens. `combineWith` AND requires every
-// token (any of its forms), OR accepts any token. Prefix and fuzzy matching
-// stay off (R-12). Each hit reports the raw tokens it matched and the share
-// of distinct query tokens matched.
+function queryTree(tokens, combineWith) {
+  return { combineWith, queries: tokens.map(termNode) };
+}
+
+// One MiniSearch run over analysed terms. `combineWith` AND requires every
+// term (any of its forms), OR accepts any term. Prefix and fuzzy matching
+// stay off (R-12). Each hit reports the raw terms it matched and the share
+// of distinct query terms matched.
 function runQuery(searchIndex, tokens, options) {
   const config = options || {};
   const combineWith = config.combineWith === "OR" ? "OR" : "AND";
   const positions = new Map();
-  tokens.forEach((token, position) => {
-    token.forms.forEach((form) => {
-      if (!positions.has(form)) {
-        positions.set(form, new Set());
+  tokens.forEach((term, position) => {
+    term.leaves.forEach((leaf) => {
+      if (!positions.has(leaf)) {
+        positions.set(leaf, new Set());
       }
-      positions.get(form).add(position);
+      positions.get(leaf).add(position);
     });
   });
   const results = searchIndex.search(queryTree(tokens, combineWith), {
@@ -275,8 +462,8 @@ function runQuery(searchIndex, tokens, options) {
   });
   return results.map((result) => {
     const matched = new Set();
-    result.queryTerms.forEach((term) => {
-      (positions.get(term) || []).forEach((position) => {
+    result.queryTerms.forEach((leaf) => {
+      (positions.get(leaf) || []).forEach((position) => {
         matched.add(position);
       });
     });
@@ -291,10 +478,10 @@ function runQuery(searchIndex, tokens, options) {
 }
 
 // Incremental maintenance for a functional index update (WP2): every cached
-// variant of `index` learns the new documents or forgets the URIs. Language
-// detection is not re-run; the set chosen at build time stays. Both return
-// false when `index` has no lexical index yet, in which case the next search
-// builds one from the current documents.
+// variant of `index` learns the new documents (stemmed with their bundle's
+// set) or forgets the URIs. Detection is not re-run; a bundle unknown at
+// build time takes the union. Both return false when `index` has no lexical
+// index yet, in which case the next search builds one from the documents.
 function addDocuments(index, docs) {
   const state = SEARCH_INDEXES.get(index);
   if (!state) {
@@ -302,12 +489,7 @@ function addDocuments(index, docs) {
   }
   state.variants.forEach((variant) => {
     (docs || []).forEach((doc) => {
-      const document = searchDocument(doc);
-      if (variant.searchIndex.has(document.id)) {
-        variant.searchIndex.replace(document);
-      } else {
-        variant.searchIndex.add(document);
-      }
+      variant.upsert(doc);
     });
   });
   return true;
@@ -347,10 +529,12 @@ module.exports = {
   MAX_QUERY_TERMS,
   SEARCH_BOOSTS,
   SEARCH_FIELDS,
+  TEXT_FIELDS,
   addDocuments,
   adoptSearchIndex,
   analyzeQuery,
   describeSearchIndex,
+  exactTokens,
   normalizeSearchQuery,
   prepareSearchIndex,
   removeDocuments,

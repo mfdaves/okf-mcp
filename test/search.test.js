@@ -17,6 +17,7 @@ const {
   addDocuments,
   adoptSearchIndex,
   describeSearchIndex,
+  prepareSearchIndex,
   removeDocuments,
 } = require("../src/search/lexical");
 
@@ -66,8 +67,8 @@ function searchFixture(t) {
   return { root, index: buildIndex([{ id: "search", root }]) };
 }
 
-// Italian and English documents, an identifier, a custom id, and three
-// equally scoring policies with different lifecycle signals.
+// Italian and English documents, two SKUs differing in one letter, a custom
+// id, and three equally scoring policies with different lifecycle signals.
 function languageFixture(t) {
   const root = tempRoot(t, "okf-search-lang-");
   writeConcept(
@@ -78,9 +79,15 @@ function languageFixture(t) {
   );
   writeConcept(
     root,
-    "products/trk-w-042.md",
-    { type: "Product", title: "TRK-W-042 Dolomiti" },
-    "# TRK-W-042 Dolomiti\n\nScarponi da trekking per la montagna.",
+    "products/trk-w-042-dolomiti-w.md",
+    { type: "Product", title: "TRK-W-042 Dolomiti AquaStop W" },
+    "# TRK-W-042 Dolomiti AquaStop W\n\nScarponi da trekking per la montagna, versione donna.",
+  );
+  writeConcept(
+    root,
+    "products/trk-m-042-dolomiti-m.md",
+    { type: "Product", title: "TRK-M-042 Dolomiti AquaStop M" },
+    "# TRK-M-042 Dolomiti AquaStop M\n\nScarponi da trekking per la montagna, versione uomo; taglie W e M disponibili.",
   );
   writeConcept(
     root,
@@ -91,7 +98,7 @@ function languageFixture(t) {
   writeConcept(
     root,
     "notes/trail.md",
-    { type: "Note", title: "Trail", id: "okf://lang/runners" },
+    { type: "Note", title: "Trail", id: "okf://lang/runner" },
     "# Trail\n\nMountain paths.",
   );
   writeConcept(
@@ -220,18 +227,43 @@ test("diacritics fold on both sides of the match", (t) => {
   assert.deepEqual(accented.queryTerms, ["città", "metropolitana"]);
 });
 
-test("the exact field keeps identifiers literal and is never stemmed", (t) => {
+test("quoted and identifier terms stay literal: the exact SKU wins and stems never reach the exact field", (t) => {
   const { index } = languageFixture(t);
-  const sku = searchConcepts(index, { query: "TRK-W-042" });
-  assert.deepEqual([sku.queryTerms, sku.droppedTerms], [["trk", "042"], ["w"]]);
-  assert.equal(sku.mode, "all");
-  assert.deepEqual(paths(sku), ["products/trk-w-042.md", "mentions.md"]);
-  assert.ok(sku.results[0].relevance === 1 && sku.results[1].relevance < 0.5);
-  // The custom id lands only in the exact field: the literal token matches, its stem does not.
-  const plural = searchConcepts(index, { query: "runners", languages: ["en"] });
-  assert.deepEqual(paths(plural), ["notes/trail.md"]);
-  const singular = searchConcepts(index, { query: "runner", languages: ["en"], mode: "all" });
-  assert.equal(singular.total, 0);
+  ['"TRK-W-042"', "TRK-W-042"].forEach((query) => {
+    const result = searchConcepts(index, { query });
+    assert.deepEqual([result.queryTerms, result.droppedTerms], [["trk-w-042"], []], query);
+    assert.equal(result.mode, "all", query);
+    assert.equal(result.results[0].path, "products/trk-w-042-dolomiti-w.md", query);
+    const other = result.results.find((entry) => entry.path === "products/trk-m-042-dolomiti-m.md");
+    assert.ok(!other || other.relevance < 1, `${query}: the M product must rank strictly lower`);
+    assert.equal(
+      result.results.some((entry) => entry.path === "mentions.md"),
+      false,
+      `${query}: a body mention without the W letter is not the SKU`,
+    );
+  });
+  // The custom id "runner" lands only in the exact field, which stems never reach.
+  assert.deepEqual(paths(searchConcepts(index, { query: '"runner"' })), ["notes/trail.md"]);
+  assert.deepEqual(paths(searchConcepts(index, { query: "runner", mode: "all" })), [
+    "notes/trail.md",
+  ]);
+  assert.equal(searchConcepts(index, { query: '"runners"', mode: "all" }).total, 0);
+  assert.equal(
+    searchConcepts(index, { query: "runners", mode: "all", languages: ["en"] }).total,
+    0,
+  );
+  // Quoted text keeps stop words and single letters, and a quoted title matches whole.
+  const phrase = searchConcepts(index, { query: '"the trk 042 code"', mode: "all" });
+  assert.deepEqual(
+    [phrase.queryTerms, phrase.droppedTerms, paths(phrase)],
+    [["the trk 042 code"], [], ["mentions.md"]],
+  );
+  const letter = searchConcepts(index, { query: '"w"', mode: "all" });
+  assert.deepEqual(letter.queryTerms, ["w"]);
+  assert.ok(letter.total >= 1);
+  assert.deepEqual(paths(searchConcepts(index, { query: '"Città metropolitana"', mode: "all" })), [
+    "cities.md",
+  ]);
 });
 
 test("coverage and relevance floors filter results while allTermsTotal stays known", (t) => {
@@ -313,30 +345,87 @@ test("the freshness prior demotes deprecated, stale and draft concepts only when
   assert.ok(close(prior.results[2].relevance, 0.5));
 });
 
-test("auto detection picks each retrieval fixture's language set", () => {
+test("auto detection picks each retrieval fixture's language set per bundle", () => {
   const alpinaria = buildProjectIndex(path.join(FIXTURES_ROOT, "alpinaria", "okf.project.yaml"));
   const first = describeSearchIndex(alpinaria);
   assert.equal(first.requested, "auto");
-  assert.deepEqual(first.languages, ["it", "en"]);
-  assert.equal(first.detection.documents, alpinaria.concepts.length);
-  assert.ok(first.detection.counts.it > first.detection.counts.en);
+  assert.deepEqual(first.languages, ["en", "it"]);
+  assert.deepEqual(Object.keys(first.bundles), ["alpinaria", "playbook"]);
+  assert.deepEqual(first.bundles.alpinaria.languages, ["it", "en"]);
+  assert.ok(first.bundles.alpinaria.counts.it > first.bundles.alpinaria.counts.en);
+  assert.equal(
+    first.bundles.alpinaria.documents + first.bundles.playbook.documents,
+    alpinaria.concepts.length,
+  );
   const atlas = buildProjectIndex(path.join(FIXTURES_ROOT, "atlas", "okf.project.yaml"));
   const second = describeSearchIndex(atlas);
-  assert.deepEqual(second.languages, ["en", "it"]);
-  assert.ok(second.detection.counts.en > second.detection.counts.it);
-  assert.ok(second.detection.counts.it / second.detection.documents >= 0.05);
+  assert.deepEqual(Object.keys(second.bundles), ["atlas", "standards"]);
+  assert.deepEqual(second.bundles.atlas.languages, ["en", "it"]);
+  assert.ok(second.bundles.atlas.counts.en > second.bundles.atlas.counts.it);
+  assert.ok(second.languages.includes("en"));
+});
+
+test("detection is per bundle: a small Italian bundle keeps its language beside a large English one", (t) => {
+  const english = tempRoot(t, "okf-search-en-");
+  for (let position = 0; position < 40; position += 1) {
+    writeConcept(
+      english,
+      `guide-${position}.md`,
+      { type: "Guide", title: `Guide ${position}` },
+      `# Guide ${position}\n\nThe category pages of the shop are indexed by the crawler.`,
+    );
+  }
+  const italian = tempRoot(t, "okf-search-it-");
+  writeConcept(
+    italian,
+    "categorie.md",
+    { type: "Guida", title: "Categorie del negozio" },
+    "# Categorie del negozio\n\nLe categorie del negozio sono indicizzate dal crawler.",
+  );
+  writeConcept(
+    italian,
+    "scarponi.md",
+    { type: "Guida", title: "Scarponi in offerta" },
+    "# Scarponi in offerta\n\nGli scarponi da trekking per la montagna sono in offerta.",
+  );
+  const index = buildIndex([
+    { id: "en", root: english },
+    { id: "it", root: italian },
+  ]);
+  // Two of 42 documents (4.8%) would miss a project-wide 5% threshold.
+  const described = describeSearchIndex(index);
+  assert.deepEqual(described.languages, ["en", "it"]);
+  assert.deepEqual(described.bundles.en.languages, ["en"]);
+  assert.deepEqual(described.bundles.it.languages, ["it"]);
+  const scarpone = searchConcepts(index, { query: "scarpone", bundle: "it", mode: "all" });
+  assert.deepEqual(paths(scarpone), ["scarponi.md"]);
+  // The English bundle is not stemmed with Italian: "categoria" (Italian stem) reaches only
+  // the Italian document, not the forty English ones whose "category" carries the English stem.
+  const categoria = searchConcepts(index, { query: "categoria", mode: "all" });
+  assert.deepEqual(paths(categoria), ["categorie.md"]);
+  assert.equal(searchConcepts(index, { query: "categories", mode: "all" }).total, 40);
 });
 
 test("search languages come from the option, the index, the project config, then detection", (t) => {
   const { index } = languageFixture(t);
-  assert.deepEqual(describeSearchIndex(index).languages, ["it", "en"]);
+  assert.deepEqual(describeSearchIndex(index).languages, ["en", "it"]);
+  assert.deepEqual(describeSearchIndex(index).bundles.lang.languages, ["it", "en"]);
   assert.deepEqual(describeSearchIndex(index, { languages: "none" }).languages, []);
   assert.deepEqual(describeSearchIndex(index, { languages: "en" }).languages, ["en"]);
+  // The cache key is canonical: order and repeats do not create another index.
+  assert.deepEqual(describeSearchIndex(index, { languages: ["it", "en", "it"] }).languages, [
+    "en",
+    "it",
+  ]);
+  assert.equal(
+    prepareSearchIndex(index, { languages: ["it", "en"] }),
+    prepareSearchIndex(index, { languages: ["en", "it", "en"] }),
+  );
   index.project = { languages: ["en"] };
   assert.deepEqual(describeSearchIndex(index), {
     requested: ["en"],
     languages: ["en"],
-    detection: null,
+    bundles: null,
   });
   index.languages = "it";
   assert.deepEqual(describeSearchIndex(index).languages, ["it"]);

@@ -579,7 +579,7 @@
             "type": "integer"
           },
           "query": {
-            "description": "Optional text query applied together with the listing filters; maximum 16 terms after stop words. Write it as keywords in the catalog's languages (Italian and English word endings and accents are normalised) and include identifiers, codes, paths and SKUs verbatim, in quotes if you like: they match exactly against ids, paths, aliases and titles. Leave out question words; stop words and single letters are dropped.",
+            "description": "Optional text query applied together with the listing filters; maximum 16 terms after stop words. Write it as keywords in the catalog's languages (Italian and English word endings and accents are normalised) and put identifiers, codes, paths, SKUs and exact titles in double quotes: quoted text is matched literally (no stemming, accents and single letters kept) against ids, paths, aliases, titles and raw tokens, and unquoted tokens with digits or hyphens stay literal too. Leave out question words; unquoted stop words and single letters are dropped.",
             "maxLength": 512,
             "type": "string"
           },
@@ -935,7 +935,7 @@
         "openWorldHint": false,
         "readOnlyHint": true
       },
-      "description": "Search OKF concepts with a text query and structured filters; returns ranked summaries with match confidence. Write it as keywords in the catalog's languages (Italian and English word endings and accents are normalised) and include identifiers, codes, paths and SKUs verbatim, in quotes if you like: they match exactly against ids, paths, aliases and titles. Leave out question words; stop words and single letters are dropped. Mode auto requires every term and falls back to any-term matching when nothing matches all of them. The response reports the mode that ran, queryTerms and droppedTerms, allTermsTotal (how many concepts match every term), and lowConfidence, true when the any-term fallback produced the page and its best result matched fewer than half of the terms: treat such results as weak and rephrase or narrow with filters. Each result carries coverage (share of query terms it matched) and relevance (score relative to the top result).",
+      "description": "Search OKF concepts with a text query and structured filters; returns ranked summaries with match confidence. Write it as keywords in the catalog's languages (Italian and English word endings and accents are normalised) and put identifiers, codes, paths, SKUs and exact titles in double quotes: quoted text is matched literally (no stemming, accents and single letters kept) against ids, paths, aliases, titles and raw tokens, and unquoted tokens with digits or hyphens stay literal too. Leave out question words; unquoted stop words and single letters are dropped. Mode auto requires every term and falls back to any-term matching when nothing matches all of them. The response reports the mode that ran, queryTerms and droppedTerms, allTermsTotal (how many concepts match every term), and lowConfidence, true when the any-term fallback produced the page and its best result matched fewer than half of the terms: treat such results as weak and rephrase or narrow with filters. Each result carries coverage (share of query terms it matched) and relevance (score relative to the top result).",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -1044,7 +1044,7 @@
             "type": "string"
           },
           "query": {
-            "description": "Text query matched against concept metadata and content; maximum 16 terms after stop words. Write it as keywords in the catalog's languages (Italian and English word endings and accents are normalised) and include identifiers, codes, paths and SKUs verbatim, in quotes if you like: they match exactly against ids, paths, aliases and titles. Leave out question words; stop words and single letters are dropped.",
+            "description": "Text query matched against concept metadata and content; maximum 16 terms after stop words. Write it as keywords in the catalog's languages (Italian and English word endings and accents are normalised) and put identifiers, codes, paths, SKUs and exact titles in double quotes: quoted text is matched literally (no stemming, accents and single letters kept) against ids, paths, aliases, titles and raw tokens, and unquoted tokens with digits or hyphens stay literal too. Leave out question words; unquoted stop words and single letters are dropped.",
             "maxLength": 512,
             "type": "string"
           },

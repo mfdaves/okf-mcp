@@ -67,8 +67,8 @@ function docText(doc) {
 
 const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-// Earliest occurrence of a raw query token (diacritics folded on both sides);
-// failing that, of a word that starts with one of the token's stems.
+// Earliest occurrence of a query term's literal or folded form (diacritics
+// folded on both sides); failing that, of a word starting with one of its stems.
 function snippetFor(doc, tokens) {
   if (!tokens.length) {
     return "";
@@ -84,11 +84,14 @@ function snippetFor(doc, tokens) {
     }
   };
   tokens.forEach((token) => {
-    consider(normalized.indexOf(token.forms[0]), token.forms[0].length);
+    token.snippetTerms.forEach((term) => {
+      const folded = foldDiacritics(term);
+      consider(normalized.indexOf(folded), folded.length);
+    });
   });
   if (idx === -1) {
     tokens.forEach((token) => {
-      token.forms.slice(1).forEach((stem) => {
+      token.stems.forEach((stem) => {
         const match = new RegExp(
           `(?<![\\p{L}\\p{N}])${escapeRegExp(stem)}[\\p{L}\\p{N}]*`,
           "u",

@@ -22,9 +22,11 @@ const {
 // catalog text (B-6, S-3): it is composed from constants only.
 const QUERY_GUIDANCE =
   "Write it as keywords in the catalog's languages (Italian and English word endings and " +
-  "accents are normalised) and include identifiers, codes, paths and SKUs verbatim, in quotes " +
-  "if you like: they match exactly against ids, paths, aliases and titles. Leave out question " +
-  "words; stop words and single letters are dropped.";
+  "accents are normalised) and put identifiers, codes, paths, SKUs and exact titles in double " +
+  "quotes: quoted text is matched literally (no stemming, accents and single letters kept) " +
+  "against ids, paths, aliases, titles and raw tokens, and unquoted tokens with digits or " +
+  "hyphens stay literal too. Leave out question words; unquoted stop words and single letters " +
+  "are dropped.";
 
 const SEARCH_DESCRIPTION =
   "Search OKF concepts with a text query and structured filters; returns ranked summaries " +

@@ -618,8 +618,12 @@ search falls back to any-term matching; `all` restores the pre-0.10
 behaviour and `any` ranks anything matching one term. BM25+ ranks title,
 type, tags, aliases, description, path, body, and an exact field (ids,
 paths, aliases, raw title tokens) that is never stemmed, so identifiers and
-SKUs still match literally; frontmatter remains available through exact
-structured filters but is not copied into the text index. Scores are
+SKUs still match literally. Double-quoted text is matched literally (no
+stemming or accent folding, stop words and single letters kept) against ids,
+paths, aliases, titles and raw tokens, and unquoted tokens containing digits
+or hyphens stay literal as well; stems only ever reach the text fields.
+Frontmatter remains available through exact structured filters but is not
+copied into the text index. Scores are
 relative within a result set and are not a stable cross-version scale; use
 ordering and `relevance` instead.
 
