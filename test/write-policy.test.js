@@ -346,6 +346,31 @@ test("evaluateWritePolicy decides by the first matching rule across actors, bund
   assert.deepEqual(reasons(evaluate(statusPolicy, nightly, [change({ op: "update" })])), [
     [0, "missing_required_field", "status"],
   ]);
+  // Inherited properties never satisfy a requirement, and a list of empty
+  // entries is empty.
+  const inherited = policyOf({
+    rules: [{ actors: ["**"], requiredFields: ["constructor", "toString", "sources"] }],
+  });
+  const bare = (frontmatter) => Object.assign(change(), { frontmatter });
+  assert.deepEqual(reasons(evaluate(inherited, nightly, [bare({ type: "SEO Finding" })])), [
+    [0, "missing_required_field", "constructor"],
+    [0, "missing_required_field", "toString"],
+    [0, "missing_required_field", "sources"],
+  ]);
+  for (const sources of [[""], ["  ", null], [[], {}]]) {
+    assert.deepEqual(
+      reasons(evaluate(inherited, nightly, [bare({ sources })])).map((entry) => entry[2]),
+      ["constructor", "toString", "sources"],
+    );
+  }
+  assert.deepEqual(
+    reasons(
+      evaluate(inherited, nightly, [
+        bare({ constructor: "x", toString: "y", sources: ["", "/a.md"] }),
+      ]),
+    ),
+    [],
+  );
 
   // Batch size counts the changes the rule decides.
   const three = evaluate(policy, nightly, [

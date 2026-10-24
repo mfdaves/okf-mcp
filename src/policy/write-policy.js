@@ -387,10 +387,12 @@ function isWritePolicy(value) {
   return Boolean(value && typeof value === "object" && value[PARSED] === true);
 }
 
+// A list counts as empty when every entry is: `sources: [""]` satisfies no
+// requirement.
 function isEmptyValue(value) {
   if (value === undefined || value === null) return true;
   if (typeof value === "string") return value.trim() === "";
-  if (Array.isArray(value)) return value.length === 0;
+  if (Array.isArray(value)) return value.every(isEmptyValue);
   if (isPlainObject(value)) return Object.keys(value).length === 0;
   return false;
 }
@@ -453,7 +455,9 @@ function denyReason(rule) {
 
 function appliesDefaultStatus(rule, change) {
   return Boolean(
-    rule.defaultStatus && change.op === "create" && isEmptyValue(change.frontmatter.status),
+    rule.defaultStatus &&
+      change.op === "create" &&
+      (!hasOwn(change.frontmatter, "status") || isEmptyValue(change.frontmatter.status)),
   );
 }
 
@@ -544,7 +548,9 @@ function evaluateWritePolicy(policy, input) {
       ? Object.assign({}, change.frontmatter, { status: decision.defaultStatus })
       : change.frontmatter;
     decision.rule.requiredFields.forEach((field) => {
-      if (isEmptyValue(frontmatter[field])) {
+      // Own keys only: "constructor" or "toString" must not be satisfied by
+      // Object.prototype.
+      if (!hasOwn(frontmatter, field) || isEmptyValue(frontmatter[field])) {
         violations.push(violation(decision.id, "missing_required_field", change, { field }));
       }
     });
