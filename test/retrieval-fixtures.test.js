@@ -8,11 +8,13 @@ const path = require("node:path");
 const test = require("node:test");
 
 const { buildProjectIndex } = require("../src/indexer");
+const { assignSplit, splitCounts, stratumKey } = require("./fixtures/retrieval/lib/split");
 
 const FIXTURES_ROOT = path.join(__dirname, "fixtures", "retrieval");
 const CLI = path.join(__dirname, "..", "bin", "okf-mcp.js");
 const LANGUAGES = new Set(["en", "it", "mixed"]);
 const GRADES = new Set([1, 2]);
+const SPLITS = new Set(["dev", "heldout"]);
 
 // Every directory under test/fixtures/retrieval that ships a generator is a retrieval fixture:
 // generated bundles, okf.project.yaml, and a graded queries.json sidecar.
@@ -113,6 +115,31 @@ FIXTURES.forEach((fixture) => {
         assert.ok(index.byUri.get(uri), `${query.id} references ${uri}, which is not indexed`);
       });
       expected.forEach((entry) => assert.ok(GRADES.has(entry.grade), `${query.id} grade ${entry.grade}`));
+      if (query.added !== undefined) {
+        assert.equal(query.added, "wp0", `${query.id} carries an unknown provenance marker`);
+      }
     });
+    assert.ok(sidecar.queries.filter((query) => query.category === "no-answer").length >= 8, "at least 8 no-answer queries");
+  });
+
+  test(`${fixture}: the dev/heldout split is the committed seeded stratified assignment`, () => {
+    const sidecar = JSON.parse(fs.readFileSync(queriesPath, "utf8"));
+    assert.ok(sidecar.split && Number.isInteger(sidecar.split.seed), "split metadata records the seed");
+    const derived = assignSplit(sidecar.queries, { seed: sidecar.split.seed, devRatio: sidecar.split.devRatio });
+    const strata = new Map();
+    sidecar.queries.forEach((query) => {
+      assert.ok(SPLITS.has(query.split), `${query.id} split ${query.split}`);
+      assert.equal(query.split, derived.get(query.id), `${query.id} split drifted from the seeded assignment`);
+      const key = stratumKey(query);
+      if (!strata.has(key)) {
+        strata.set(key, { dev: 0, heldout: 0 });
+      }
+      strata.get(key)[query.split] += 1;
+    });
+    // Every stratum keeps at least one development query, and the overall ratio stays near 70/30.
+    strata.forEach((counts, key) => assert.ok(counts.dev >= 1, `stratum ${key} has no dev query`));
+    const counts = splitCounts(sidecar.queries);
+    const devShare = counts.dev / (counts.dev + counts.heldout);
+    assert.ok(devShare >= 0.6 && devShare <= 0.8, `dev share ${devShare.toFixed(2)} is outside 60-80%`);
   });
 });

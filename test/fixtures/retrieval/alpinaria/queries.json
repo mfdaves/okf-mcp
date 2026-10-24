@@ -1,7 +1,12 @@
 {
-  "version": 1,
-  "description": "Retrieval evaluation queries for an autonomous SEO agent over the Alpinaria OKF bundle (+ shared playbook). Graded relevance: 2 = must appear, 1 = acceptable. 'distractors' are near-duplicates that should rank BELOW the grade-2 concept (stale snapshot, wrong intent, wrong language, deprecated page).",
+  "version": 2,
+  "description": "Retrieval evaluation queries for an autonomous SEO agent over the Alpinaria OKF bundle (+ shared playbook). Graded relevance: 2 = must appear, 1 = acceptable. distractors are near-duplicates that should rank BELOW the grade-2 concept (stale snapshot, wrong intent, wrong language, deprecated page). Queries marked added: wp0 were written from the bundle text before any search run (pre-registered). split is the seeded 70/30 dev/heldout assignment stratified by category x lang (test/fixtures/retrieval/assign-split.js); tune only on dev. sectionAnchor marks queries whose answer lives in one section of one concept (WP3a).",
   "as_of": "2026-10-24",
+  "split": {
+    "seed": 20261024,
+    "devRatio": 0.7,
+    "strata": "category x lang"
+  },
   "categories": {
     "nl-task": "Natural-language task sentence, as the agent would phrase a question mid-task",
     "keyword": "Short keyword query (1-3 content words)",
@@ -16,359 +21,4181 @@
     "no-answer": "Plausible agent question with no relevant concept; the system should return nothing or score low"
   },
   "queries": [
-    { "id": "Q01", "query": "which landing page targets winter hiking boots for women?", "lang": "en", "category": "nl-task",
+    {
+      "id": "Q01",
+      "query": "which landing page targets winter hiking boots for women?",
+      "lang": "en",
+      "category": "nl-task",
+      "split": "dev",
       "expected": [
-        { "bundle": "alpinaria", "id": "landing-pages/en-womens-winter-hiking-boots", "grade": 2 },
-        { "bundle": "alpinaria", "id": "landing-pages/it-scarponcini-invernali-donna", "grade": 1 },
-        { "bundle": "alpinaria", "id": "landing-pages/en-womens-winter-hiking-boots-draft-v2", "grade": 1 } ],
-      "distractors": [ { "bundle": "alpinaria", "id": "landing-pages/en-womens-winter-hiking-boots-draft-v2", "reason": "draft, not live" } ],
-      "notes": "Question words (which, for) are not in the page text." },
-    { "id": "Q02", "query": "cosa abbiamo deciso sulle pagine categoria duplicate?", "lang": "it", "category": "nl-task",
+        {
+          "bundle": "alpinaria",
+          "id": "landing-pages/en-womens-winter-hiking-boots",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "landing-pages/it-scarponcini-invernali-donna",
+          "grade": 1
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "landing-pages/en-womens-winter-hiking-boots-draft-v2",
+          "grade": 1
+        }
+      ],
+      "distractors": [
+        {
+          "bundle": "alpinaria",
+          "id": "landing-pages/en-womens-winter-hiking-boots-draft-v2",
+          "reason": "draft, not live"
+        }
+      ],
+      "notes": "Question words (which, for) are not in the page text."
+    },
+    {
+      "id": "Q02",
+      "query": "cosa abbiamo deciso sulle pagine categoria duplicate?",
+      "lang": "it",
+      "category": "nl-task",
+      "split": "dev",
       "expected": [
-        { "bundle": "alpinaria", "id": "decisions/canonical-pagine-categoria-duplicate", "grade": 2 },
-        { "bundle": "alpinaria", "id": "seo-findings/duplicate-category-pages-filters", "grade": 1 },
-        { "bundle": "alpinaria", "id": "decisions/noindex-filtri-colore-2026-03", "grade": 1 } ],
-      "distractors": [ { "bundle": "alpinaria", "id": "decisions/noindex-filtri-colore-2026-03", "reason": "superseded decision" } ],
-      "notes": "Italian function words (cosa, abbiamo, sulle); 'deciso' appears in the decision body." },
-    { "id": "Q03", "query": "what is the current status of core web vitals on mobile?", "lang": "en", "category": "nl-task",
+        {
+          "bundle": "alpinaria",
+          "id": "decisions/canonical-pagine-categoria-duplicate",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "seo-findings/duplicate-category-pages-filters",
+          "grade": 1
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "decisions/noindex-filtri-colore-2026-03",
+          "grade": 1
+        }
+      ],
+      "distractors": [
+        {
+          "bundle": "alpinaria",
+          "id": "decisions/noindex-filtri-colore-2026-03",
+          "reason": "superseded decision"
+        }
+      ],
+      "notes": "Italian function words (cosa, abbiamo, sulle); 'deciso' appears in the decision body."
+    },
+    {
+      "id": "Q03",
+      "query": "what is the current status of core web vitals on mobile?",
+      "lang": "en",
+      "category": "nl-task",
+      "split": "dev",
       "expected": [
-        { "bundle": "alpinaria", "id": "seo-findings/core-web-vitals-mobile-2026-09", "grade": 2 },
-        { "bundle": "alpinaria", "id": "technical-issues/lcp-immagini-prodotto-mobile", "grade": 1 },
-        { "bundle": "alpinaria", "id": "technical-issues/inp-filtri-plp", "grade": 1 } ],
-      "distractors": [ { "bundle": "alpinaria", "id": "seo-findings/core-web-vitals-mobile-2026-01", "reason": "stale snapshot" } ],
-      "notes": "Also a freshness case: the January snapshot is stale." },
-    { "id": "Q04", "query": "quali claim sull'impermeabilità possiamo usare nelle descrizioni prodotto?", "lang": "it", "category": "nl-task",
+        {
+          "bundle": "alpinaria",
+          "id": "seo-findings/core-web-vitals-mobile-2026-09",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "technical-issues/lcp-immagini-prodotto-mobile",
+          "grade": 1
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "technical-issues/inp-filtri-plp",
+          "grade": 1
+        }
+      ],
+      "distractors": [
+        {
+          "bundle": "alpinaria",
+          "id": "seo-findings/core-web-vitals-mobile-2026-01",
+          "reason": "stale snapshot"
+        }
+      ],
+      "notes": "Also a freshness case: the January snapshot is stale."
+    },
+    {
+      "id": "Q04",
+      "query": "quali claim sull'impermeabilità possiamo usare nelle descrizioni prodotto?",
+      "lang": "it",
+      "category": "nl-task",
+      "split": "dev",
       "expected": [
-        { "bundle": "alpinaria", "id": "policies/claim-impermeabile", "grade": 2 },
-        { "bundle": "alpinaria", "id": "decisions/naming-impermeabile-vs-idrorepellente", "grade": 1 } ],
-      "notes": "Apostrophe splits sull'impermeabilità; verb forms (possiamo, usare) absent." },
-    { "id": "Q05", "query": "experiment Made in Italy English titles result", "lang": "en", "category": "nl-task",
+        {
+          "bundle": "alpinaria",
+          "id": "policies/claim-impermeabile",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "decisions/naming-impermeabile-vs-idrorepellente",
+          "grade": 1
+        }
+      ],
+      "notes": "Apostrophe splits sull'impermeabilità; verb forms (possiamo, usare) absent."
+    },
+    {
+      "id": "Q05",
+      "query": "experiment Made in Italy English titles result",
+      "lang": "en",
+      "category": "nl-task",
+      "split": "dev",
       "expected": [
-        { "bundle": "alpinaria", "id": "experiments/en-title-italian-made", "grade": 2 },
-        { "bundle": "alpinaria", "id": "policies/made-in-italy-claim", "grade": 1 } ],
-      "notes": "Terse task phrasing without question words: content words only." },
-    { "id": "Q06", "query": "chi è il competitor più forte sugli scarponi da trekking?", "lang": "it", "category": "nl-task",
+        {
+          "bundle": "alpinaria",
+          "id": "experiments/en-title-italian-made",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "policies/made-in-italy-claim",
+          "grade": 1
+        }
+      ],
+      "notes": "Terse task phrasing without question words: content words only."
+    },
+    {
+      "id": "Q06",
+      "query": "chi è il competitor più forte sugli scarponi da trekking?",
+      "lang": "it",
+      "category": "nl-task",
+      "split": "dev",
       "expected": [
-        { "bundle": "alpinaria", "id": "competitors/montevia", "grade": 2 },
-        { "bundle": "alpinaria", "id": "seo-findings/competitor-montevia-serp-share", "grade": 2 } ],
-      "notes": "The finding literally says 'il competitor più forte'; the rest are function words." },
-    { "id": "Q07", "query": "English pages missing hreflang return tags", "lang": "en", "category": "nl-task",
+        {
+          "bundle": "alpinaria",
+          "id": "competitors/montevia",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "seo-findings/competitor-montevia-serp-share",
+          "grade": 2
+        }
+      ],
+      "notes": "The finding literally says 'il competitor più forte'; the rest are function words."
+    },
+    {
+      "id": "Q07",
+      "query": "English pages missing hreflang return tags",
+      "lang": "en",
+      "category": "nl-task",
+      "split": "dev",
       "expected": [
-        { "bundle": "alpinaria", "id": "seo-findings/hreflang-missing-en-pages", "grade": 2 },
-        { "bundle": "alpinaria", "id": "technical-issues/hreflang-return-tags-en", "grade": 2 },
-        { "bundle": "alpinaria", "id": "decisions/hreflang-implementation-subfolder", "grade": 1 } ],
-      "notes": "Terse, all content words present in the finding title." },
-    { "id": "Q08", "query": "perché è calato il traffico sulle pagine dei pile?", "lang": "it", "category": "nl-task",
+        {
+          "bundle": "alpinaria",
+          "id": "seo-findings/hreflang-missing-en-pages",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "technical-issues/hreflang-return-tags-en",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "decisions/hreflang-implementation-subfolder",
+          "grade": 1
+        }
+      ],
+      "notes": "Terse, all content words present in the finding title."
+    },
+    {
+      "id": "Q08",
+      "query": "perché è calato il traffico sulle pagine dei pile?",
+      "lang": "it",
+      "category": "nl-task",
+      "split": "dev",
       "expected": [
-        { "bundle": "alpinaria", "id": "seo-findings/calo-traffico-pile-autunno-2026", "grade": 2 },
-        { "bundle": "alpinaria", "id": "experiments/internal-links-pile-from-giacche", "grade": 1 } ],
-      "notes": "Verb form 'calato' vs noun 'calo' in the title; function words." },
-    { "id": "Q09", "query": "how many words of unique copy does a product page need", "lang": "en", "category": "nl-task",
+        {
+          "bundle": "alpinaria",
+          "id": "seo-findings/calo-traffico-pile-autunno-2026",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "experiments/internal-links-pile-from-giacche",
+          "grade": 1
+        }
+      ],
+      "notes": "Verb form 'calato' vs noun 'calo' in the title; function words."
+    },
+    {
+      "id": "Q09",
+      "query": "how many words of unique copy does a product page need",
+      "lang": "en",
+      "category": "nl-task",
+      "split": "dev",
       "expected": [
-        { "bundle": "alpinaria", "id": "decisions/product-page-copy-minimum-120-words", "grade": 2 },
-        { "bundle": "alpinaria", "id": "seo-findings/thin-content-product-pages-torrente", "grade": 1 },
-        { "bundle": "alpinaria", "id": "content-briefs/torrente-product-copy-refresh", "grade": 1 } ],
-      "notes": "'words', 'unique copy', 'product page' all present; question words are not." },
-    { "id": "Q10", "query": "a che pubblico ci rivolgiamo con la linea Torrente?", "lang": "it", "category": "nl-task",
+        {
+          "bundle": "alpinaria",
+          "id": "decisions/product-page-copy-minimum-120-words",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "seo-findings/thin-content-product-pages-torrente",
+          "grade": 1
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "content-briefs/torrente-product-copy-refresh",
+          "grade": 1
+        }
+      ],
+      "notes": "'words', 'unique copy', 'product page' all present; question words are not."
+    },
+    {
+      "id": "Q10",
+      "query": "a che pubblico ci rivolgiamo con la linea Torrente?",
+      "lang": "it",
+      "category": "nl-task",
+      "split": "heldout",
       "expected": [
-        { "bundle": "alpinaria", "id": "audiences/trail-runner", "grade": 2 },
-        { "bundle": "alpinaria", "id": "product-lines/torrente", "grade": 2 } ],
-      "notes": "'pubblico' is a synonym of the indexed 'segmento'/'audience'." },
-
-    { "id": "Q11", "query": "scarponi trekking donna", "lang": "it", "category": "keyword",
+        {
+          "bundle": "alpinaria",
+          "id": "audiences/trail-runner",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "product-lines/torrente",
+          "grade": 2
+        }
+      ],
+      "notes": "'pubblico' is a synonym of the indexed 'segmento'/'audience'."
+    },
+    {
+      "id": "Q11",
+      "query": "scarponi trekking donna",
+      "lang": "it",
+      "category": "keyword",
+      "split": "dev",
       "expected": [
-        { "bundle": "alpinaria", "id": "keyword-clusters/scarponi-trekking-donna-transazionale", "grade": 2 },
-        { "bundle": "alpinaria", "id": "landing-pages/it-scarponi-da-trekking-donna", "grade": 2 },
-        { "bundle": "alpinaria", "id": "product-lines/dolomiti", "grade": 1 },
-        { "bundle": "alpinaria", "id": "landing-pages/it-scarponi-da-trekking-donna-old", "grade": 1 } ],
-      "distractors": [ { "bundle": "alpinaria", "id": "landing-pages/it-scarponi-da-trekking-donna-old", "reason": "deprecated page" } ],
-      "notes": "Head term; many product pages also match." },
-    { "id": "Q12", "query": "approach shoes", "lang": "en", "category": "keyword",
+        {
+          "bundle": "alpinaria",
+          "id": "keyword-clusters/scarponi-trekking-donna-transazionale",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "landing-pages/it-scarponi-da-trekking-donna",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "product-lines/dolomiti",
+          "grade": 1
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "landing-pages/it-scarponi-da-trekking-donna-old",
+          "grade": 1
+        }
+      ],
+      "distractors": [
+        {
+          "bundle": "alpinaria",
+          "id": "landing-pages/it-scarponi-da-trekking-donna-old",
+          "reason": "deprecated page"
+        }
+      ],
+      "notes": "Head term; many product pages also match."
+    },
+    {
+      "id": "Q12",
+      "query": "approach shoes",
+      "lang": "en",
+      "category": "keyword",
+      "split": "heldout",
       "expected": [
-        { "bundle": "alpinaria", "id": "keyword-clusters/approach-shoes", "grade": 2 },
-        { "bundle": "alpinaria", "id": "landing-pages/en-approach-shoes", "grade": 2 },
-        { "bundle": "alpinaria", "id": "product-lines/cresta", "grade": 1 },
-        { "bundle": "alpinaria", "id": "content-briefs/en-approach-vs-hiking-shoes", "grade": 1 } ],
-      "notes": "" },
-    { "id": "Q13", "query": "calze merino", "lang": "it", "category": "keyword",
+        {
+          "bundle": "alpinaria",
+          "id": "keyword-clusters/approach-shoes",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "landing-pages/en-approach-shoes",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "product-lines/cresta",
+          "grade": 1
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "content-briefs/en-approach-vs-hiking-shoes",
+          "grade": 1
+        }
+      ],
+      "notes": ""
+    },
+    {
+      "id": "Q13",
+      "query": "calze merino",
+      "lang": "it",
+      "category": "keyword",
+      "split": "dev",
       "expected": [
-        { "bundle": "alpinaria", "id": "keyword-clusters/calze-trekking-merino", "grade": 2 },
-        { "bundle": "alpinaria", "id": "landing-pages/it-calze-merino", "grade": 2 },
-        { "bundle": "alpinaria", "id": "product-lines/rifugio", "grade": 1 } ],
-      "notes": "" },
-    { "id": "Q14", "query": "hreflang", "lang": "en", "category": "keyword",
+        {
+          "bundle": "alpinaria",
+          "id": "keyword-clusters/calze-trekking-merino",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "landing-pages/it-calze-merino",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "product-lines/rifugio",
+          "grade": 1
+        }
+      ],
+      "notes": ""
+    },
+    {
+      "id": "Q14",
+      "query": "hreflang",
+      "lang": "en",
+      "category": "keyword",
+      "split": "dev",
       "expected": [
-        { "bundle": "alpinaria", "id": "technical-issues/hreflang-return-tags-en", "grade": 2 },
-        { "bundle": "alpinaria", "id": "seo-findings/hreflang-missing-en-pages", "grade": 2 },
-        { "bundle": "alpinaria", "id": "decisions/hreflang-implementation-subfolder", "grade": 2 },
-        { "bundle": "alpinaria", "id": "experiments/hreflang-x-default-en", "grade": 1 },
-        { "bundle": "playbook", "id": "guidelines/hreflang-checklist", "grade": 1 } ],
-      "notes": "Single technical token." },
-    { "id": "Q15", "query": "cannibalizzazione", "lang": "it", "category": "keyword",
+        {
+          "bundle": "alpinaria",
+          "id": "technical-issues/hreflang-return-tags-en",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "seo-findings/hreflang-missing-en-pages",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "decisions/hreflang-implementation-subfolder",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "experiments/hreflang-x-default-en",
+          "grade": 1
+        },
+        {
+          "bundle": "playbook",
+          "id": "guidelines/hreflang-checklist",
+          "grade": 1
+        }
+      ],
+      "notes": "Single technical token."
+    },
+    {
+      "id": "Q15",
+      "query": "cannibalizzazione",
+      "lang": "it",
+      "category": "keyword",
+      "split": "dev",
       "expected": [
-        { "bundle": "alpinaria", "id": "seo-findings/cannibalizzazione-scarponi-donna", "grade": 2 },
-        { "bundle": "alpinaria", "id": "decisions/redirect-vecchia-pagina-donna", "grade": 1 } ],
-      "notes": "Single Italian token; the playbook definition is English (cannibalization)." },
-    { "id": "Q16", "query": "sitemap", "lang": "en", "category": "keyword",
+        {
+          "bundle": "alpinaria",
+          "id": "seo-findings/cannibalizzazione-scarponi-donna",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "decisions/redirect-vecchia-pagina-donna",
+          "grade": 1
+        }
+      ],
+      "notes": "Single Italian token; the playbook definition is English (cannibalization)."
+    },
+    {
+      "id": "Q16",
+      "query": "sitemap",
+      "lang": "en",
+      "category": "keyword",
+      "split": "dev",
       "expected": [
-        { "bundle": "alpinaria", "id": "seo-findings/sitemap-stale-urls", "grade": 2 },
-        { "bundle": "alpinaria", "id": "technical-issues/sitemap-410-urls", "grade": 2 },
-        { "bundle": "playbook", "id": "guidelines/xml-sitemap-hygiene", "grade": 1 } ],
-      "notes": "" },
-    { "id": "Q17", "query": "giacca guscio", "lang": "it", "category": "keyword",
+        {
+          "bundle": "alpinaria",
+          "id": "seo-findings/sitemap-stale-urls",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "technical-issues/sitemap-410-urls",
+          "grade": 2
+        },
+        {
+          "bundle": "playbook",
+          "id": "guidelines/xml-sitemap-hygiene",
+          "grade": 1
+        }
+      ],
+      "notes": ""
+    },
+    {
+      "id": "Q17",
+      "query": "giacca guscio",
+      "lang": "it",
+      "category": "keyword",
+      "split": "dev",
       "expected": [
-        { "bundle": "alpinaria", "id": "seo-findings/query-mismatch-giacca-guscio", "grade": 2 },
-        { "bundle": "alpinaria", "id": "keyword-clusters/giacca-impermeabile-montagna", "grade": 2 },
-        { "bundle": "alpinaria", "id": "landing-pages/it-giacche-impermeabili", "grade": 1 },
-        { "bundle": "alpinaria", "id": "product-lines/vetta", "grade": 1 } ],
-      "notes": "Singular 'giacca' vs plural 'giacche' in the landing page." },
-    { "id": "Q18", "query": "trail running", "lang": "en", "category": "keyword",
+        {
+          "bundle": "alpinaria",
+          "id": "seo-findings/query-mismatch-giacca-guscio",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "keyword-clusters/giacca-impermeabile-montagna",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "landing-pages/it-giacche-impermeabili",
+          "grade": 1
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "product-lines/vetta",
+          "grade": 1
+        }
+      ],
+      "notes": "Singular 'giacca' vs plural 'giacche' in the landing page."
+    },
+    {
+      "id": "Q18",
+      "query": "trail running",
+      "lang": "en",
+      "category": "keyword",
+      "split": "dev",
       "expected": [
-        { "bundle": "alpinaria", "id": "product-lines/torrente", "grade": 2 },
-        { "bundle": "alpinaria", "id": "keyword-clusters/trail-running-shoes-eu", "grade": 2 },
-        { "bundle": "alpinaria", "id": "keyword-clusters/scarpe-trail-running", "grade": 1 },
-        { "bundle": "alpinaria", "id": "landing-pages/en-trail-running-shoes", "grade": 1 },
-        { "bundle": "alpinaria", "id": "landing-pages/it-scarpe-trail-running", "grade": 1 },
-        { "bundle": "alpinaria", "id": "decisions/trail-running-line-priority-2027", "grade": 1 } ],
-      "notes": "Broad topical query; many relevant concepts." },
-
-    { "id": "Q19", "query": "landing page scarponi donna", "lang": "mixed", "category": "mixed-lang",
+        {
+          "bundle": "alpinaria",
+          "id": "product-lines/torrente",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "keyword-clusters/trail-running-shoes-eu",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "keyword-clusters/scarpe-trail-running",
+          "grade": 1
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "landing-pages/en-trail-running-shoes",
+          "grade": 1
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "landing-pages/it-scarpe-trail-running",
+          "grade": 1
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "decisions/trail-running-line-priority-2027",
+          "grade": 1
+        }
+      ],
+      "notes": "Broad topical query; many relevant concepts."
+    },
+    {
+      "id": "Q19",
+      "query": "landing page scarponi donna",
+      "lang": "mixed",
+      "category": "mixed-lang",
+      "split": "heldout",
       "expected": [
-        { "bundle": "alpinaria", "id": "landing-pages/it-scarponi-da-trekking-donna", "grade": 2 },
-        { "bundle": "alpinaria", "id": "landing-pages/it-scarponi-da-trekking-donna-old", "grade": 1 } ],
-      "distractors": [ { "bundle": "alpinaria", "id": "landing-pages/it-scarponi-da-trekking-donna-old", "reason": "deprecated page" } ],
-      "notes": "English type words + Italian topic words." },
-    { "id": "Q20", "query": "keyword cluster giacche impermeabili intent", "lang": "mixed", "category": "mixed-lang",
+        {
+          "bundle": "alpinaria",
+          "id": "landing-pages/it-scarponi-da-trekking-donna",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "landing-pages/it-scarponi-da-trekking-donna-old",
+          "grade": 1
+        }
+      ],
+      "distractors": [
+        {
+          "bundle": "alpinaria",
+          "id": "landing-pages/it-scarponi-da-trekking-donna-old",
+          "reason": "deprecated page"
+        }
+      ],
+      "notes": "English type words + Italian topic words."
+    },
+    {
+      "id": "Q20",
+      "query": "keyword cluster giacche impermeabili intent",
+      "lang": "mixed",
+      "category": "mixed-lang",
+      "split": "dev",
       "expected": [
-        { "bundle": "alpinaria", "id": "keyword-clusters/giacca-impermeabile-montagna", "grade": 2 },
-        { "bundle": "alpinaria", "id": "keyword-clusters/hardshell-jacket", "grade": 1 } ],
-      "notes": "" },
-    { "id": "Q21", "query": "finding pile traffico", "lang": "mixed", "category": "mixed-lang",
+        {
+          "bundle": "alpinaria",
+          "id": "keyword-clusters/giacca-impermeabile-montagna",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "keyword-clusters/hardshell-jacket",
+          "grade": 1
+        }
+      ],
+      "notes": ""
+    },
+    {
+      "id": "Q21",
+      "query": "finding pile traffico",
+      "lang": "mixed",
+      "category": "mixed-lang",
+      "split": "dev",
       "expected": [
-        { "bundle": "alpinaria", "id": "seo-findings/calo-traffico-pile-autunno-2026", "grade": 2 } ],
-      "notes": "" },
-    { "id": "Q22", "query": "policy claim riciclato", "lang": "mixed", "category": "mixed-lang",
+        {
+          "bundle": "alpinaria",
+          "id": "seo-findings/calo-traffico-pile-autunno-2026",
+          "grade": 2
+        }
+      ],
+      "notes": ""
+    },
+    {
+      "id": "Q22",
+      "query": "policy claim riciclato",
+      "lang": "mixed",
+      "category": "mixed-lang",
+      "split": "dev",
       "expected": [
-        { "bundle": "alpinaria", "id": "policies/green-claims", "grade": 2 } ],
-      "notes": "" },
-    { "id": "Q23", "query": "brief guida scarponi invernali women", "lang": "mixed", "category": "mixed-lang",
+        {
+          "bundle": "alpinaria",
+          "id": "policies/green-claims",
+          "grade": 2
+        }
+      ],
+      "notes": ""
+    },
+    {
+      "id": "Q23",
+      "query": "brief guida scarponi invernali women",
+      "lang": "mixed",
+      "category": "mixed-lang",
+      "split": "heldout",
       "expected": [
-        { "bundle": "alpinaria", "id": "content-briefs/guida-scarponi-invernali-donna", "grade": 2 },
-        { "bundle": "alpinaria", "id": "content-briefs/en-how-to-choose-winter-hiking-boots", "grade": 1 } ],
-      "notes": "One English token (women) in an otherwise Italian query; the Italian brief says 'donna'." },
-
-    { "id": "Q24", "query": "TRK-W-042", "lang": "en", "category": "exact",
+        {
+          "bundle": "alpinaria",
+          "id": "content-briefs/guida-scarponi-invernali-donna",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "content-briefs/en-how-to-choose-winter-hiking-boots",
+          "grade": 1
+        }
+      ],
+      "notes": "One English token (women) in an otherwise Italian query; the Italian brief says 'donna'."
+    },
+    {
+      "id": "Q24",
+      "query": "TRK-W-042",
+      "lang": "en",
+      "category": "exact",
+      "split": "heldout",
       "expected": [
-        { "bundle": "alpinaria", "id": "products/trk-w-042-dolomiti-aquastop-w", "grade": 2 },
-        { "bundle": "alpinaria", "id": "landing-pages/it-scarponi-da-trekking-donna", "grade": 1 },
-        { "bundle": "alpinaria", "id": "product-lines/dolomiti", "grade": 1 } ],
-      "notes": "SKU; the tokenizer splits it into trk / w / 042. TRK-M-042 is the near-duplicate men's SKU." },
-    { "id": "Q25", "query": "/en/womens-winter-hiking-boots/", "lang": "en", "category": "exact",
+        {
+          "bundle": "alpinaria",
+          "id": "products/trk-w-042-dolomiti-aquastop-w",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "landing-pages/it-scarponi-da-trekking-donna",
+          "grade": 1
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "product-lines/dolomiti",
+          "grade": 1
+        }
+      ],
+      "notes": "SKU; the tokenizer splits it into trk / w / 042. TRK-M-042 is the near-duplicate men's SKU."
+    },
+    {
+      "id": "Q25",
+      "query": "/en/womens-winter-hiking-boots/",
+      "lang": "en",
+      "category": "exact",
+      "split": "dev",
       "expected": [
-        { "bundle": "alpinaria", "id": "landing-pages/en-womens-winter-hiking-boots", "grade": 2 },
-        { "bundle": "alpinaria", "id": "landing-pages/en-womens-winter-hiking-boots-draft-v2", "grade": 1 },
-        { "bundle": "alpinaria", "id": "keyword-clusters/womens-winter-hiking-boots-transactional", "grade": 1 } ],
-      "distractors": [ { "bundle": "alpinaria", "id": "landing-pages/en-womens-winter-hiking-boots-draft-v2", "reason": "draft with the same URL" } ],
-      "notes": "URL path lookup." },
-    { "id": "Q26", "query": "AquaStop", "lang": "en", "category": "exact",
+        {
+          "bundle": "alpinaria",
+          "id": "landing-pages/en-womens-winter-hiking-boots",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "landing-pages/en-womens-winter-hiking-boots-draft-v2",
+          "grade": 1
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "keyword-clusters/womens-winter-hiking-boots-transactional",
+          "grade": 1
+        }
+      ],
+      "distractors": [
+        {
+          "bundle": "alpinaria",
+          "id": "landing-pages/en-womens-winter-hiking-boots-draft-v2",
+          "reason": "draft with the same URL"
+        }
+      ],
+      "notes": "URL path lookup."
+    },
+    {
+      "id": "Q26",
+      "query": "AquaStop",
+      "lang": "en",
+      "category": "exact",
+      "split": "heldout",
       "expected": [
-        { "bundle": "alpinaria", "id": "policies/claim-impermeabile", "grade": 2 },
-        { "bundle": "alpinaria", "id": "brand-voice/glossario-terminologia", "grade": 1 },
-        { "bundle": "alpinaria", "id": "decisions/naming-impermeabile-vs-idrorepellente", "grade": 1 },
-        { "bundle": "alpinaria", "id": "product-lines/dolomiti", "grade": 1 },
-        { "bundle": "alpinaria", "id": "product-lines/nevaio", "grade": 1 },
-        { "bundle": "alpinaria", "id": "product-lines/vetta", "grade": 1 } ],
-      "notes": "Brand term present in 29 files; product titles contain it and get the title boost." },
-    { "id": "Q27", "query": "Montevia", "lang": "it", "category": "exact",
+        {
+          "bundle": "alpinaria",
+          "id": "policies/claim-impermeabile",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "brand-voice/glossario-terminologia",
+          "grade": 1
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "decisions/naming-impermeabile-vs-idrorepellente",
+          "grade": 1
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "product-lines/dolomiti",
+          "grade": 1
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "product-lines/nevaio",
+          "grade": 1
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "product-lines/vetta",
+          "grade": 1
+        }
+      ],
+      "notes": "Brand term present in 29 files; product titles contain it and get the title boost."
+    },
+    {
+      "id": "Q27",
+      "query": "Montevia",
+      "lang": "it",
+      "category": "exact",
+      "split": "dev",
       "expected": [
-        { "bundle": "alpinaria", "id": "competitors/montevia", "grade": 2 },
-        { "bundle": "alpinaria", "id": "seo-findings/competitor-montevia-serp-share", "grade": 1 },
-        { "bundle": "alpinaria", "id": "seo-findings/calo-traffico-pile-autunno-2026", "grade": 1 } ],
-      "notes": "Competitor name." },
-    { "id": "Q28", "query": "/scarponi-da-trekking/donna/", "lang": "it", "category": "exact",
+        {
+          "bundle": "alpinaria",
+          "id": "competitors/montevia",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "seo-findings/competitor-montevia-serp-share",
+          "grade": 1
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "seo-findings/calo-traffico-pile-autunno-2026",
+          "grade": 1
+        }
+      ],
+      "notes": "Competitor name."
+    },
+    {
+      "id": "Q28",
+      "query": "/scarponi-da-trekking/donna/",
+      "lang": "it",
+      "category": "exact",
+      "split": "dev",
       "expected": [
-        { "bundle": "alpinaria", "id": "landing-pages/it-scarponi-da-trekking-donna", "grade": 2 },
-        { "bundle": "alpinaria", "id": "decisions/redirect-vecchia-pagina-donna", "grade": 1 },
-        { "bundle": "alpinaria", "id": "seo-findings/cannibalizzazione-scarponi-donna", "grade": 1 } ],
-      "notes": "URL path; tokens also match product pages under that path." },
-    { "id": "Q29", "query": "JKT-U-310", "lang": "en", "category": "exact",
+        {
+          "bundle": "alpinaria",
+          "id": "landing-pages/it-scarponi-da-trekking-donna",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "decisions/redirect-vecchia-pagina-donna",
+          "grade": 1
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "seo-findings/cannibalizzazione-scarponi-donna",
+          "grade": 1
+        }
+      ],
+      "notes": "URL path; tokens also match product pages under that path."
+    },
+    {
+      "id": "Q29",
+      "query": "JKT-U-310",
+      "lang": "en",
+      "category": "exact",
+      "split": "dev",
       "expected": [
-        { "bundle": "alpinaria", "id": "products/jkt-u-310-vetta-guscio-u", "grade": 2 },
-        { "bundle": "alpinaria", "id": "product-lines/vetta", "grade": 1 } ],
-      "notes": "Unisex jacket SKU." },
-    { "id": "Q30", "query": "x-default", "lang": "en", "category": "exact",
+        {
+          "bundle": "alpinaria",
+          "id": "products/jkt-u-310-vetta-guscio-u",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "product-lines/vetta",
+          "grade": 1
+        }
+      ],
+      "notes": "Unisex jacket SKU."
+    },
+    {
+      "id": "Q30",
+      "query": "x-default",
+      "lang": "en",
+      "category": "exact",
+      "split": "dev",
       "expected": [
-        { "bundle": "alpinaria", "id": "decisions/hreflang-implementation-subfolder", "grade": 2 },
-        { "bundle": "alpinaria", "id": "experiments/hreflang-x-default-en", "grade": 2 },
-        { "bundle": "playbook", "id": "guidelines/hreflang-checklist", "grade": 1 } ],
-      "notes": "Hyphenated technical token splits into x / default." },
-
-    { "id": "Q31", "query": "scarpone trekking donna", "lang": "it", "category": "morph",
+        {
+          "bundle": "alpinaria",
+          "id": "decisions/hreflang-implementation-subfolder",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "experiments/hreflang-x-default-en",
+          "grade": 2
+        },
+        {
+          "bundle": "playbook",
+          "id": "guidelines/hreflang-checklist",
+          "grade": 1
+        }
+      ],
+      "notes": "Hyphenated technical token splits into x / default."
+    },
+    {
+      "id": "Q31",
+      "query": "scarpone trekking donna",
+      "lang": "it",
+      "category": "morph",
+      "split": "dev",
       "expected": [
-        { "bundle": "alpinaria", "id": "keyword-clusters/scarponi-trekking-donna-transazionale", "grade": 2 },
-        { "bundle": "alpinaria", "id": "landing-pages/it-scarponi-da-trekking-donna", "grade": 2 },
-        { "bundle": "alpinaria", "id": "product-lines/dolomiti", "grade": 1 } ],
-      "notes": "Singular 'scarpone'; cluster and page only use the plural 'scarponi'. Product sheets use the singular." },
-    { "id": "Q32", "query": "canonicalize filtered category pages", "lang": "en", "category": "morph",
+        {
+          "bundle": "alpinaria",
+          "id": "keyword-clusters/scarponi-trekking-donna-transazionale",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "landing-pages/it-scarponi-da-trekking-donna",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "product-lines/dolomiti",
+          "grade": 1
+        }
+      ],
+      "notes": "Singular 'scarpone'; cluster and page only use the plural 'scarponi'. Product sheets use the singular."
+    },
+    {
+      "id": "Q32",
+      "query": "canonicalize filtered category pages",
+      "lang": "en",
+      "category": "morph",
+      "split": "dev",
       "expected": [
-        { "bundle": "alpinaria", "id": "decisions/faceted-parameters-robots", "grade": 2 },
-        { "bundle": "alpinaria", "id": "decisions/canonical-pagine-categoria-duplicate", "grade": 2 },
-        { "bundle": "alpinaria", "id": "seo-findings/faceted-navigation-index-bloat", "grade": 1 },
-        { "bundle": "playbook", "id": "guidelines/canonicalization-rules", "grade": 1 } ],
-      "notes": "Indexed forms: canonical, filters, facets." },
-    { "id": "Q33", "query": "impermeabilizzazione scarponi", "lang": "it", "category": "morph",
+        {
+          "bundle": "alpinaria",
+          "id": "decisions/faceted-parameters-robots",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "decisions/canonical-pagine-categoria-duplicate",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "seo-findings/faceted-navigation-index-bloat",
+          "grade": 1
+        },
+        {
+          "bundle": "playbook",
+          "id": "guidelines/canonicalization-rules",
+          "grade": 1
+        }
+      ],
+      "notes": "Indexed forms: canonical, filters, facets."
+    },
+    {
+      "id": "Q33",
+      "query": "impermeabilizzazione scarponi",
+      "lang": "it",
+      "category": "morph",
+      "split": "dev",
       "expected": [
-        { "bundle": "alpinaria", "id": "seo-findings/featured-snippet-impermeabilizzare", "grade": 2 },
-        { "bundle": "alpinaria", "id": "content-briefs/guida-impermeabilizzare-scarponi", "grade": 2 },
-        { "bundle": "alpinaria", "id": "landing-pages/it-guida-cura-scarponi", "grade": 1 },
-        { "bundle": "alpinaria", "id": "keyword-clusters/cura-manutenzione-scarponi", "grade": 1 } ],
-      "notes": "Noun form; the texts use the verb 'impermeabilizzare' and the adjective 'impermeabilizzante'." },
-    { "id": "Q34", "query": "redirects outlet", "lang": "en", "category": "morph",
+        {
+          "bundle": "alpinaria",
+          "id": "seo-findings/featured-snippet-impermeabilizzare",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "content-briefs/guida-impermeabilizzare-scarponi",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "landing-pages/it-guida-cura-scarponi",
+          "grade": 1
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "keyword-clusters/cura-manutenzione-scarponi",
+          "grade": 1
+        }
+      ],
+      "notes": "Noun form; the texts use the verb 'impermeabilizzare' and the adjective 'impermeabilizzante'."
+    },
+    {
+      "id": "Q34",
+      "query": "redirects outlet",
+      "lang": "en",
+      "category": "morph",
+      "split": "dev",
       "expected": [
-        { "bundle": "alpinaria", "id": "technical-issues/redirect-chains-outlet", "grade": 2 },
-        { "bundle": "alpinaria", "id": "seo-findings/redirect-chains-outlet", "grade": 2 } ],
-      "notes": "Plural 'redirects'; the texts use 'redirect chain'." },
-    { "id": "Q35", "query": "pagina categoria duplicata", "lang": "it", "category": "morph",
+        {
+          "bundle": "alpinaria",
+          "id": "technical-issues/redirect-chains-outlet",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "seo-findings/redirect-chains-outlet",
+          "grade": 2
+        }
+      ],
+      "notes": "Plural 'redirects'; the texts use 'redirect chain'."
+    },
+    {
+      "id": "Q35",
+      "query": "pagina categoria duplicata",
+      "lang": "it",
+      "category": "morph",
+      "split": "dev",
       "expected": [
-        { "bundle": "alpinaria", "id": "decisions/canonical-pagine-categoria-duplicate", "grade": 2 },
-        { "bundle": "alpinaria", "id": "seo-findings/duplicate-category-pages-filters", "grade": 2 } ],
-      "notes": "Singular; the texts say 'pagine categoria duplicate'." },
-    { "id": "Q36", "query": "missing alt texts images", "lang": "en", "category": "morph",
+        {
+          "bundle": "alpinaria",
+          "id": "decisions/canonical-pagine-categoria-duplicate",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "seo-findings/duplicate-category-pages-filters",
+          "grade": 2
+        }
+      ],
+      "notes": "Singular; the texts say 'pagine categoria duplicate'."
+    },
+    {
+      "id": "Q36",
+      "query": "missing alt texts images",
+      "lang": "en",
+      "category": "morph",
+      "split": "heldout",
       "expected": [
-        { "bundle": "alpinaria", "id": "technical-issues/alt-text-mancanti", "grade": 2 },
-        { "bundle": "alpinaria", "id": "seo-findings/immagini-senza-alt", "grade": 2 },
-        { "bundle": "alpinaria", "id": "decisions/image-alt-template", "grade": 1 } ],
-      "notes": "'texts' vs 'text'; the technical issue is written in Italian." },
-
-    { "id": "Q37", "query": "impermeabilita scarponi", "lang": "it", "category": "accent",
+        {
+          "bundle": "alpinaria",
+          "id": "technical-issues/alt-text-mancanti",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "seo-findings/immagini-senza-alt",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "decisions/image-alt-template",
+          "grade": 1
+        }
+      ],
+      "notes": "'texts' vs 'text'; the technical issue is written in Italian."
+    },
+    {
+      "id": "Q37",
+      "query": "impermeabilita scarponi",
+      "lang": "it",
+      "category": "accent",
+      "split": "dev",
       "expected": [
-        { "bundle": "alpinaria", "id": "policies/claim-impermeabile", "grade": 2 },
-        { "bundle": "alpinaria", "id": "keyword-clusters/membrana-impermeabile-info", "grade": 2 },
-        { "bundle": "alpinaria", "id": "decisions/naming-impermeabile-vs-idrorepellente", "grade": 1 } ],
-      "notes": "Typed without the accent; all texts have 'impermeabilità'." },
-    { "id": "Q38", "query": "sostenibilita claim", "lang": "it", "category": "accent",
+        {
+          "bundle": "alpinaria",
+          "id": "policies/claim-impermeabile",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "keyword-clusters/membrana-impermeabile-info",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "decisions/naming-impermeabile-vs-idrorepellente",
+          "grade": 1
+        }
+      ],
+      "notes": "Typed without the accent; all texts have 'impermeabilità'."
+    },
+    {
+      "id": "Q38",
+      "query": "sostenibilita claim",
+      "lang": "it",
+      "category": "accent",
+      "split": "dev",
       "expected": [
-        { "bundle": "alpinaria", "id": "policies/green-claims", "grade": 2 } ],
-      "notes": "Unaccented 'sostenibilita' vs indexed 'sostenibilità'." },
-    { "id": "Q39", "query": "traspirabilità membrana", "lang": "it", "category": "accent",
+        {
+          "bundle": "alpinaria",
+          "id": "policies/green-claims",
+          "grade": 2
+        }
+      ],
+      "notes": "Unaccented 'sostenibilita' vs indexed 'sostenibilità'."
+    },
+    {
+      "id": "Q39",
+      "query": "traspirabilità membrana",
+      "lang": "it",
+      "category": "accent",
+      "split": "dev",
       "expected": [
-        { "bundle": "alpinaria", "id": "keyword-clusters/membrana-impermeabile-info", "grade": 2 },
-        { "bundle": "alpinaria", "id": "policies/claim-impermeabile", "grade": 1 },
-        { "bundle": "alpinaria", "id": "brand-voice/glossario-terminologia", "grade": 1 } ],
-      "notes": "Control: accent typed exactly as indexed." },
-    { "id": "Q40", "query": "novita inverno 2026", "lang": "it", "category": "accent",
+        {
+          "bundle": "alpinaria",
+          "id": "keyword-clusters/membrana-impermeabile-info",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "policies/claim-impermeabile",
+          "grade": 1
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "brand-voice/glossario-terminologia",
+          "grade": 1
+        }
+      ],
+      "notes": "Control: accent typed exactly as indexed."
+    },
+    {
+      "id": "Q40",
+      "query": "novita inverno 2026",
+      "lang": "it",
+      "category": "accent",
+      "split": "heldout",
       "expected": [
-        { "bundle": "alpinaria", "id": "content-briefs/calendario-contenuti-inverno-2026", "grade": 2 } ],
-      "notes": "Unaccented 'novita' vs indexed 'novità'." },
-
-    { "id": "Q41", "query": "rain jacket for hiking", "lang": "en", "category": "synonym",
+        {
+          "bundle": "alpinaria",
+          "id": "content-briefs/calendario-contenuti-inverno-2026",
+          "grade": 2
+        }
+      ],
+      "notes": "Unaccented 'novita' vs indexed 'novità'."
+    },
+    {
+      "id": "Q41",
+      "query": "rain jacket for hiking",
+      "lang": "en",
+      "category": "synonym",
+      "split": "dev",
       "expected": [
-        { "bundle": "alpinaria", "id": "keyword-clusters/hardshell-jacket", "grade": 2 },
-        { "bundle": "alpinaria", "id": "landing-pages/en-hardshell-jackets", "grade": 2 },
-        { "bundle": "alpinaria", "id": "product-lines/vetta", "grade": 1 } ],
-      "notes": "'rain' never occurs; texts say hardshell / waterproof / shell jacket." },
-    { "id": "Q42", "query": "scarpe da neve donna", "lang": "it", "category": "synonym",
+        {
+          "bundle": "alpinaria",
+          "id": "keyword-clusters/hardshell-jacket",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "landing-pages/en-hardshell-jackets",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "product-lines/vetta",
+          "grade": 1
+        }
+      ],
+      "notes": "'rain' never occurs; texts say hardshell / waterproof / shell jacket."
+    },
+    {
+      "id": "Q42",
+      "query": "scarpe da neve donna",
+      "lang": "it",
+      "category": "synonym",
+      "split": "heldout",
       "expected": [
-        { "bundle": "alpinaria", "id": "keyword-clusters/scarponcini-invernali-donna", "grade": 2 },
-        { "bundle": "alpinaria", "id": "landing-pages/it-scarponcini-invernali-donna", "grade": 2 },
-        { "bundle": "alpinaria", "id": "product-lines/nevaio", "grade": 1 } ],
-      "notes": "Texts say scarponcini invernali / doposci." },
-    { "id": "Q43", "query": "page speed problems on phones", "lang": "en", "category": "synonym",
+        {
+          "bundle": "alpinaria",
+          "id": "keyword-clusters/scarponcini-invernali-donna",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "landing-pages/it-scarponcini-invernali-donna",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "product-lines/nevaio",
+          "grade": 1
+        }
+      ],
+      "notes": "Texts say scarponcini invernali / doposci."
+    },
+    {
+      "id": "Q43",
+      "query": "page speed problems on phones",
+      "lang": "en",
+      "category": "synonym",
+      "split": "dev",
       "expected": [
-        { "bundle": "alpinaria", "id": "seo-findings/core-web-vitals-mobile-2026-09", "grade": 2 },
-        { "bundle": "alpinaria", "id": "technical-issues/lcp-immagini-prodotto-mobile", "grade": 1 },
-        { "bundle": "alpinaria", "id": "technical-issues/inp-filtri-plp", "grade": 1 } ],
-      "notes": "Texts say Core Web Vitals, LCP, mobile." },
-    { "id": "Q44", "query": "regole sulle promozioni e prezzi barrati", "lang": "it", "category": "synonym",
+        {
+          "bundle": "alpinaria",
+          "id": "seo-findings/core-web-vitals-mobile-2026-09",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "technical-issues/lcp-immagini-prodotto-mobile",
+          "grade": 1
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "technical-issues/inp-filtri-plp",
+          "grade": 1
+        }
+      ],
+      "notes": "Texts say Core Web Vitals, LCP, mobile."
+    },
+    {
+      "id": "Q44",
+      "query": "regole sulle promozioni e prezzi barrati",
+      "lang": "it",
+      "category": "synonym",
+      "split": "heldout",
       "expected": [
-        { "bundle": "alpinaria", "id": "policies/price-promo-claims", "grade": 2 } ],
-      "notes": "'regole' and 'prezzi barrati' are in the policy; 'promozioni' and 'sulle' are not." },
-    { "id": "Q45", "query": "thin product descriptions", "lang": "en", "category": "synonym",
+        {
+          "bundle": "alpinaria",
+          "id": "policies/price-promo-claims",
+          "grade": 2
+        }
+      ],
+      "notes": "'regole' and 'prezzi barrati' are in the policy; 'promozioni' and 'sulle' are not."
+    },
+    {
+      "id": "Q45",
+      "query": "thin product descriptions",
+      "lang": "en",
+      "category": "synonym",
+      "split": "dev",
       "expected": [
-        { "bundle": "alpinaria", "id": "seo-findings/thin-content-product-pages-torrente", "grade": 2 },
-        { "bundle": "alpinaria", "id": "decisions/product-page-copy-minimum-120-words", "grade": 1 },
-        { "bundle": "alpinaria", "id": "content-briefs/torrente-product-copy-refresh", "grade": 1 } ],
-      "notes": "Texts say thin content / unique copy." },
-    { "id": "Q46", "query": "pubblico target famiglie", "lang": "it", "category": "synonym",
+        {
+          "bundle": "alpinaria",
+          "id": "seo-findings/thin-content-product-pages-torrente",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "decisions/product-page-copy-minimum-120-words",
+          "grade": 1
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "content-briefs/torrente-product-copy-refresh",
+          "grade": 1
+        }
+      ],
+      "notes": "Texts say thin content / unique copy."
+    },
+    {
+      "id": "Q46",
+      "query": "pubblico target famiglie",
+      "lang": "it",
+      "category": "synonym",
+      "split": "dev",
       "expected": [
-        { "bundle": "alpinaria", "id": "audiences/famiglie-in-montagna", "grade": 2 } ],
-      "notes": "'pubblico' absent; 'target' is a tag; 'famiglie' in the title." },
-
-    { "id": "Q47", "query": "core web vitals mobile LCP", "lang": "en", "category": "freshness",
+        {
+          "bundle": "alpinaria",
+          "id": "audiences/famiglie-in-montagna",
+          "grade": 2
+        }
+      ],
+      "notes": "'pubblico' absent; 'target' is a tag; 'famiglie' in the title."
+    },
+    {
+      "id": "Q47",
+      "query": "core web vitals mobile LCP",
+      "lang": "en",
+      "category": "freshness",
+      "split": "heldout",
       "expected": [
-        { "bundle": "alpinaria", "id": "seo-findings/core-web-vitals-mobile-2026-09", "grade": 2 },
-        { "bundle": "alpinaria", "id": "seo-findings/core-web-vitals-mobile-2026-01", "grade": 1 },
-        { "bundle": "alpinaria", "id": "technical-issues/lcp-immagini-prodotto-mobile", "grade": 1 },
-        { "bundle": "alpinaria", "id": "experiments/lazy-load-hero-image", "grade": 1 } ],
-      "distractors": [ { "bundle": "alpinaria", "id": "seo-findings/core-web-vitals-mobile-2026-01", "reason": "stale (stale_after 2026-04-30), superseded" } ],
-      "notes": "Both snapshots match equally; the fresh, verified one should come first." },
-    { "id": "Q48", "query": "backlink profile review", "lang": "en", "category": "freshness",
+        {
+          "bundle": "alpinaria",
+          "id": "seo-findings/core-web-vitals-mobile-2026-09",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "seo-findings/core-web-vitals-mobile-2026-01",
+          "grade": 1
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "technical-issues/lcp-immagini-prodotto-mobile",
+          "grade": 1
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "experiments/lazy-load-hero-image",
+          "grade": 1
+        }
+      ],
+      "distractors": [
+        {
+          "bundle": "alpinaria",
+          "id": "seo-findings/core-web-vitals-mobile-2026-01",
+          "reason": "stale (stale_after 2026-04-30), superseded"
+        }
+      ],
+      "notes": "Both snapshots match equally; the fresh, verified one should come first."
+    },
+    {
+      "id": "Q48",
+      "query": "backlink profile review",
+      "lang": "en",
+      "category": "freshness",
+      "split": "dev",
       "expected": [
-        { "bundle": "alpinaria", "id": "seo-findings/backlink-profile-review-2026-q3", "grade": 2 },
-        { "bundle": "alpinaria", "id": "seo-findings/backlink-profile-review-2026-q2", "grade": 1 } ],
-      "distractors": [ { "bundle": "alpinaria", "id": "seo-findings/backlink-profile-review-2026-q2", "reason": "stale (stale_after 2026-08-31), superseded" } ],
-      "notes": "Near-identical titles; Q3 is fresh and human-verified." },
-    { "id": "Q49", "query": "filtri colore noindex o canonical", "lang": "it", "category": "freshness",
+        {
+          "bundle": "alpinaria",
+          "id": "seo-findings/backlink-profile-review-2026-q3",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "seo-findings/backlink-profile-review-2026-q2",
+          "grade": 1
+        }
+      ],
+      "distractors": [
+        {
+          "bundle": "alpinaria",
+          "id": "seo-findings/backlink-profile-review-2026-q2",
+          "reason": "stale (stale_after 2026-08-31), superseded"
+        }
+      ],
+      "notes": "Near-identical titles; Q3 is fresh and human-verified."
+    },
+    {
+      "id": "Q49",
+      "query": "filtri colore noindex o canonical",
+      "lang": "it",
+      "category": "freshness",
+      "split": "dev",
       "expected": [
-        { "bundle": "alpinaria", "id": "decisions/canonical-pagine-categoria-duplicate", "grade": 2 },
-        { "bundle": "alpinaria", "id": "decisions/faceted-parameters-robots", "grade": 1 },
-        { "bundle": "alpinaria", "id": "decisions/noindex-filtri-colore-2026-03", "grade": 1 } ],
-      "distractors": [ { "bundle": "alpinaria", "id": "decisions/noindex-filtri-colore-2026-03", "reason": "deprecated, superseded decision" } ],
-      "notes": "Current decision vs the deprecated March decision." },
-    { "id": "Q50", "query": "women's winter hiking boots landing page", "lang": "en", "category": "freshness",
+        {
+          "bundle": "alpinaria",
+          "id": "decisions/canonical-pagine-categoria-duplicate",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "decisions/faceted-parameters-robots",
+          "grade": 1
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "decisions/noindex-filtri-colore-2026-03",
+          "grade": 1
+        }
+      ],
+      "distractors": [
+        {
+          "bundle": "alpinaria",
+          "id": "decisions/noindex-filtri-colore-2026-03",
+          "reason": "deprecated, superseded decision"
+        }
+      ],
+      "notes": "Current decision vs the deprecated March decision."
+    },
+    {
+      "id": "Q50",
+      "query": "women's winter hiking boots landing page",
+      "lang": "en",
+      "category": "freshness",
+      "split": "heldout",
       "expected": [
-        { "bundle": "alpinaria", "id": "landing-pages/en-womens-winter-hiking-boots", "grade": 2 },
-        { "bundle": "alpinaria", "id": "landing-pages/en-womens-winter-hiking-boots-draft-v2", "grade": 1 } ],
-      "distractors": [ { "bundle": "alpinaria", "id": "landing-pages/en-womens-winter-hiking-boots-draft-v2", "reason": "status draft, not live" } ],
-      "notes": "Live stable page vs its draft redesign with the same URL." },
-
-    { "id": "Q51", "query": "come scegliere scarponi da trekking", "lang": "it", "category": "disambig",
+        {
+          "bundle": "alpinaria",
+          "id": "landing-pages/en-womens-winter-hiking-boots",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "landing-pages/en-womens-winter-hiking-boots-draft-v2",
+          "grade": 1
+        }
+      ],
+      "distractors": [
+        {
+          "bundle": "alpinaria",
+          "id": "landing-pages/en-womens-winter-hiking-boots-draft-v2",
+          "reason": "status draft, not live"
+        }
+      ],
+      "notes": "Live stable page vs its draft redesign with the same URL."
+    },
+    {
+      "id": "Q51",
+      "query": "come scegliere scarponi da trekking",
+      "lang": "it",
+      "category": "disambig",
+      "split": "dev",
       "expected": [
-        { "bundle": "alpinaria", "id": "keyword-clusters/scarponi-trekking-informazionale", "grade": 2 },
-        { "bundle": "alpinaria", "id": "landing-pages/it-guida-scelta-scarponi", "grade": 2 } ],
-      "distractors": [ { "bundle": "alpinaria", "id": "keyword-clusters/scarponi-trekking-donna-transazionale", "reason": "same topic, transactional intent" } ],
-      "notes": "Informational vs transactional cluster on the same head term." },
-    { "id": "Q52", "query": "how to choose winter hiking boots", "lang": "en", "category": "disambig",
+        {
+          "bundle": "alpinaria",
+          "id": "keyword-clusters/scarponi-trekking-informazionale",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "landing-pages/it-guida-scelta-scarponi",
+          "grade": 2
+        }
+      ],
+      "distractors": [
+        {
+          "bundle": "alpinaria",
+          "id": "keyword-clusters/scarponi-trekking-donna-transazionale",
+          "reason": "same topic, transactional intent"
+        }
+      ],
+      "notes": "Informational vs transactional cluster on the same head term."
+    },
+    {
+      "id": "Q52",
+      "query": "how to choose winter hiking boots",
+      "lang": "en",
+      "category": "disambig",
+      "split": "heldout",
       "expected": [
-        { "bundle": "alpinaria", "id": "keyword-clusters/womens-winter-hiking-boots-informational", "grade": 2 },
-        { "bundle": "alpinaria", "id": "content-briefs/en-how-to-choose-winter-hiking-boots", "grade": 2 } ],
-      "distractors": [ { "bundle": "alpinaria", "id": "keyword-clusters/womens-winter-hiking-boots-transactional", "reason": "same topic, transactional intent" } ],
-      "notes": "" },
-    { "id": "Q53", "query": "buy women's winter hiking boots", "lang": "en", "category": "disambig",
+        {
+          "bundle": "alpinaria",
+          "id": "keyword-clusters/womens-winter-hiking-boots-informational",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "content-briefs/en-how-to-choose-winter-hiking-boots",
+          "grade": 2
+        }
+      ],
+      "distractors": [
+        {
+          "bundle": "alpinaria",
+          "id": "keyword-clusters/womens-winter-hiking-boots-transactional",
+          "reason": "same topic, transactional intent"
+        }
+      ],
+      "notes": ""
+    },
+    {
+      "id": "Q53",
+      "query": "buy women's winter hiking boots",
+      "lang": "en",
+      "category": "disambig",
+      "split": "dev",
       "expected": [
-        { "bundle": "alpinaria", "id": "keyword-clusters/womens-winter-hiking-boots-transactional", "grade": 2 },
-        { "bundle": "alpinaria", "id": "landing-pages/en-womens-winter-hiking-boots", "grade": 1 } ],
-      "distractors": [ { "bundle": "alpinaria", "id": "keyword-clusters/womens-winter-hiking-boots-informational", "reason": "same topic, informational intent" } ],
-      "notes": "" },
-    { "id": "Q54", "query": "pagina inglese scarpe da avvicinamento", "lang": "it", "category": "disambig",
+        {
+          "bundle": "alpinaria",
+          "id": "keyword-clusters/womens-winter-hiking-boots-transactional",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "landing-pages/en-womens-winter-hiking-boots",
+          "grade": 1
+        }
+      ],
+      "distractors": [
+        {
+          "bundle": "alpinaria",
+          "id": "keyword-clusters/womens-winter-hiking-boots-informational",
+          "reason": "same topic, informational intent"
+        }
+      ],
+      "notes": ""
+    },
+    {
+      "id": "Q54",
+      "query": "pagina inglese scarpe da avvicinamento",
+      "lang": "it",
+      "category": "disambig",
+      "split": "dev",
       "expected": [
-        { "bundle": "alpinaria", "id": "landing-pages/en-approach-shoes", "grade": 2 },
-        { "bundle": "alpinaria", "id": "landing-pages/it-scarpe-da-avvicinamento", "grade": 1 } ],
-      "distractors": [ { "bundle": "alpinaria", "id": "landing-pages/it-scarpe-da-avvicinamento", "reason": "Italian twin of the requested English page" } ],
-      "notes": "Italian query asking for the English page; the Italian page mentions 'versione inglese'." },
-
-    { "id": "Q55", "query": "black friday discount strategy", "lang": "en", "category": "no-answer", "expected": [], "notes": "No pricing-strategy concepts exist." },
-    { "id": "Q56", "query": "orari di apertura del negozio di Bolzano", "lang": "it", "category": "no-answer", "expected": [], "notes": "Store information is out of scope." },
-    { "id": "Q57", "query": "returns policy for EU customers", "lang": "en", "category": "no-answer", "expected": [], "notes": "'policy' matches the Policy type; no returns policy exists." },
-    { "id": "Q58", "query": "scarponi da sci alpino", "lang": "it", "category": "no-answer", "expected": [], "notes": "Ski boots are not sold; 'scarponi' matches dozens of concepts." },
-    { "id": "Q59", "query": "men's winter hiking boots landing page", "lang": "en", "category": "no-answer", "expected": [], "notes": "There is a women's winter page and a men's (non-winter) page, but no men's winter landing page." },
-    { "id": "Q60", "query": "decisione sul cambio hosting", "lang": "it", "category": "no-answer", "expected": [], "notes": "'decisione' matches every Italian Decision title." },
-    { "id": "Q61", "query": "experiment on free shipping threshold", "lang": "en", "category": "no-answer", "expected": [], "notes": "'experiment' matches the Experiment type." },
-    { "id": "Q62", "query": "scarpe per bambini", "lang": "it", "category": "no-answer", "expected": [], "notes": "No kids line; the families audience mentions 'bambini'." },
-
-    { "id": "Q63", "query": "INP LCP thresholds", "lang": "en", "category": "playbook",
+        {
+          "bundle": "alpinaria",
+          "id": "landing-pages/en-approach-shoes",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "landing-pages/it-scarpe-da-avvicinamento",
+          "grade": 1
+        }
+      ],
+      "distractors": [
+        {
+          "bundle": "alpinaria",
+          "id": "landing-pages/it-scarpe-da-avvicinamento",
+          "reason": "Italian twin of the requested English page"
+        }
+      ],
+      "notes": "Italian query asking for the English page; the Italian page mentions 'versione inglese'."
+    },
+    {
+      "id": "Q55",
+      "query": "black friday discount strategy",
+      "lang": "en",
+      "category": "no-answer",
+      "split": "dev",
+      "expected": [],
+      "notes": "No pricing-strategy concepts exist."
+    },
+    {
+      "id": "Q56",
+      "query": "orari di apertura del negozio di Bolzano",
+      "lang": "it",
+      "category": "no-answer",
+      "split": "dev",
+      "expected": [],
+      "notes": "Store information is out of scope."
+    },
+    {
+      "id": "Q57",
+      "query": "returns policy for EU customers",
+      "lang": "en",
+      "category": "no-answer",
+      "split": "dev",
+      "expected": [],
+      "notes": "'policy' matches the Policy type; no returns policy exists."
+    },
+    {
+      "id": "Q58",
+      "query": "scarponi da sci alpino",
+      "lang": "it",
+      "category": "no-answer",
+      "split": "dev",
+      "expected": [],
+      "notes": "Ski boots are not sold; 'scarponi' matches dozens of concepts."
+    },
+    {
+      "id": "Q59",
+      "query": "men's winter hiking boots landing page",
+      "lang": "en",
+      "category": "no-answer",
+      "split": "heldout",
+      "expected": [],
+      "notes": "There is a women's winter page and a men's (non-winter) page, but no men's winter landing page."
+    },
+    {
+      "id": "Q60",
+      "query": "decisione sul cambio hosting",
+      "lang": "it",
+      "category": "no-answer",
+      "split": "dev",
+      "expected": [],
+      "notes": "'decisione' matches every Italian Decision title."
+    },
+    {
+      "id": "Q61",
+      "query": "experiment on free shipping threshold",
+      "lang": "en",
+      "category": "no-answer",
+      "split": "dev",
+      "expected": [],
+      "notes": "'experiment' matches the Experiment type."
+    },
+    {
+      "id": "Q62",
+      "query": "scarpe per bambini",
+      "lang": "it",
+      "category": "no-answer",
+      "split": "heldout",
+      "expected": [],
+      "notes": "No kids line; the families audience mentions 'bambini'."
+    },
+    {
+      "id": "Q63",
+      "query": "INP LCP thresholds",
+      "lang": "en",
+      "category": "playbook",
+      "split": "dev",
       "expected": [
-        { "bundle": "playbook", "id": "guidelines/core-web-vitals-thresholds", "grade": 2 },
-        { "bundle": "alpinaria", "id": "seo-findings/core-web-vitals-mobile-2026-09", "grade": 1 } ],
-      "notes": "Agency-wide thresholds live in the playbook bundle." },
-    { "id": "Q64", "query": "how long should a title tag be", "lang": "en", "category": "playbook",
+        {
+          "bundle": "playbook",
+          "id": "guidelines/core-web-vitals-thresholds",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "seo-findings/core-web-vitals-mobile-2026-09",
+          "grade": 1
+        }
+      ],
+      "notes": "Agency-wide thresholds live in the playbook bundle."
+    },
+    {
+      "id": "Q64",
+      "query": "how long should a title tag be",
+      "lang": "en",
+      "category": "playbook",
+      "split": "heldout",
       "expected": [
-        { "bundle": "playbook", "id": "guidelines/title-tag-length", "grade": 2 } ],
-      "notes": "Natural-language question; 'long' and 'should' are not in the guideline text." },
-    { "id": "Q65", "query": "checklist hreflang", "lang": "mixed", "category": "playbook",
+        {
+          "bundle": "playbook",
+          "id": "guidelines/title-tag-length",
+          "grade": 2
+        }
+      ],
+      "notes": "Natural-language question; 'long' and 'should' are not in the guideline text."
+    },
+    {
+      "id": "Q65",
+      "query": "checklist hreflang",
+      "lang": "mixed",
+      "category": "playbook",
+      "split": "heldout",
       "expected": [
-        { "bundle": "playbook", "id": "guidelines/hreflang-checklist", "grade": 2 },
-        { "bundle": "alpinaria", "id": "technical-issues/hreflang-return-tags-en", "grade": 1 } ],
-      "notes": "" }
+        {
+          "bundle": "playbook",
+          "id": "guidelines/hreflang-checklist",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "technical-issues/hreflang-return-tags-en",
+          "grade": 1
+        }
+      ],
+      "notes": ""
+    },
+    {
+      "id": "Q66",
+      "query": "why do Italian URLs show up for German users searching in English?",
+      "lang": "en",
+      "category": "nl-task",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "seo-findings/hreflang-missing-en-pages",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "technical-issues/hreflang-return-tags-en",
+          "grade": 1
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "decisions/hreflang-implementation-subfolder",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "Question words; the finding body literally explains why Italian URLs are shown to German and Dutch users.",
+      "added": "wp0"
+    },
+    {
+      "id": "Q67",
+      "query": "quanto deve essere lungo il testo unico di una scheda prodotto?",
+      "lang": "it",
+      "category": "nl-task",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "decisions/product-page-copy-minimum-120-words",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "content-briefs/torrente-product-copy-refresh",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "seo-findings/thin-content-product-pages-torrente",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "The decision is written in English; the brief carries the Italian answer (120 parole uniche). Product sheets mention 'testo unico' as noise.",
+      "added": "wp0"
+    },
+    {
+      "id": "Q68",
+      "query": "which pages are five clicks away from the home page?",
+      "lang": "en",
+      "category": "nl-task",
+      "split": "heldout",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "seo-findings/mobile-menu-crawl-depth",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "technical-issues/en-pages-crawl-depth",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "landing-pages/en-lightweight-hiking-shoes",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "'five clicks' is in the finding body; the issue title says 'crawl depth 5'.",
+      "added": "wp0"
+    },
+    {
+      "id": "Q69",
+      "query": "quali linee possono usare il claim Made in Italy?",
+      "lang": "it",
+      "category": "nl-task",
+      "split": "heldout",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "policies/made-in-italy-claim",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "product-lines/dolomiti",
+          "grade": 1
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "product-lines/cresta",
+          "grade": 1
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "product-lines/nevaio",
+          "grade": 1
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "product-lines/rifugio",
+          "grade": 1
+        }
+      ],
+      "distractors": [
+        {
+          "bundle": "alpinaria",
+          "id": "product-lines/sentiero",
+          "reason": "line that must not use the claim; same words in its notes"
+        }
+      ],
+      "notes": "Italian question, English policy. Every product line mentions the claim (allowed or forbidden).",
+      "added": "wp0"
+    },
+    {
+      "id": "Q70",
+      "query": "what did the lazy loading experiment on the hero image show?",
+      "lang": "en",
+      "category": "nl-task",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "experiments/lazy-load-hero-image",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "seo-findings/core-web-vitals-mobile-2026-09",
+          "grade": 1
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "technical-issues/lcp-immagini-prodotto-mobile",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "'show' and 'did' are not in the text.",
+      "added": "wp0"
+    },
+    {
+      "id": "Q71",
+      "query": "come dobbiamo scrivere gli alt delle immagini prodotto?",
+      "lang": "it",
+      "category": "nl-task",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "decisions/image-alt-template",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "seo-findings/immagini-senza-alt",
+          "grade": 1
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "technical-issues/alt-text-mancanti",
+          "grade": 1
+        },
+        {
+          "bundle": "playbook",
+          "id": "guidelines/image-alt-text",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "Italian verb forms (dobbiamo, scrivere); the decision is bilingual.",
+      "added": "wp0"
+    },
+    {
+      "id": "Q72",
+      "query": "is the x-default supposed to point to the English or the Italian page?",
+      "lang": "en",
+      "category": "nl-task",
+      "split": "heldout",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "decisions/hreflang-implementation-subfolder",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "experiments/hreflang-x-default-en",
+          "grade": 2
+        },
+        {
+          "bundle": "playbook",
+          "id": "guidelines/hreflang-checklist",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "Both the decision and the reverted experiment answer it.",
+      "added": "wp0"
+    },
+    {
+      "id": "Q73",
+      "query": "qual è il tasso di conversione migliore del sito?",
+      "lang": "it",
+      "category": "nl-task",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "landing-pages/it-calze-merino",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "landing-pages/en-approach-shoes",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "'migliore' vs the indexed 'miglior'; the English page says 'Best EN conversion rate'.",
+      "added": "wp0"
+    },
+    {
+      "id": "Q74",
+      "query": "when is the packing guide refresh due?",
+      "lang": "en",
+      "category": "nl-task",
+      "split": "heldout",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "content-briefs/en-what-to-pack-dolomites",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "landing-pages/en-dolomites-packing-guide",
+          "grade": 1
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "content-briefs/calendario-contenuti-inverno-2026",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "The brief has 'Due: 2027-02-15'; the page notes say 'refresh brief scheduled'.",
+      "added": "wp0"
+    },
+    {
+      "id": "Q75",
+      "query": "quante immagini prodotto sono senza alt text?",
+      "lang": "it",
+      "category": "nl-task",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "seo-findings/immagini-senza-alt",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "technical-issues/alt-text-mancanti",
+          "grade": 1
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "decisions/image-alt-template",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "'quante' and 'sono' are function words; the finding title is 'Immagini prodotto senza alt text'.",
+      "added": "wp0"
+    },
+    {
+      "id": "Q76",
+      "query": "what should we do about the 300 dead URLs in the sitemap?",
+      "lang": "en",
+      "category": "nl-task",
+      "split": "heldout",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "seo-findings/sitemap-stale-urls",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "technical-issues/sitemap-410-urls",
+          "grade": 2
+        },
+        {
+          "bundle": "playbook",
+          "id": "guidelines/xml-sitemap-hygiene",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "'dead' never occurs (removed, 410 Gone); '300' does.",
+      "added": "wp0"
+    },
+    {
+      "id": "Q77",
+      "query": "perché abbiamo interrotto il test delle emoji nelle meta description?",
+      "lang": "it",
+      "category": "nl-task",
+      "split": "heldout",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "experiments/meta-description-emoji",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "brand-voice/tono-di-voce-it",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "'interrotto' vs 'interrompere'; 'test' vs 'esperimento'.",
+      "added": "wp0"
+    },
+    {
+      "id": "Q78",
+      "query": "which competitor sponsors the Lavaredo Ultra Trail?",
+      "lang": "en",
+      "category": "nl-task",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "competitors/trailforge",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "audiences/trail-runner",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "'sponsors' vs 'sponsorships'; the audience mentions Lavaredo as a race name.",
+      "added": "wp0"
+    },
+    {
+      "id": "Q79",
+      "query": "dove devono stare le guide informative nella struttura URL?",
+      "lang": "it",
+      "category": "nl-task",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "decisions/blog-guides-under-guide-folder",
+          "grade": 2
+        }
+      ],
+      "distractors": [],
+      "notes": "Function words plus 'guide', 'informativi' (morph), 'URL' (title says 'Struttura URL unica').",
+      "added": "wp0"
+    },
+    {
+      "id": "Q80",
+      "query": "what is the outreach plan for the next backlink wave?",
+      "lang": "en",
+      "category": "nl-task",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "seo-findings/backlink-profile-review-2026-q3",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "seo-findings/backlink-profile-review-2026-q2",
+          "grade": 1
+        }
+      ],
+      "distractors": [
+        {
+          "bundle": "alpinaria",
+          "id": "seo-findings/backlink-profile-review-2026-q2",
+          "reason": "superseded review; says outreach has not started"
+        }
+      ],
+      "notes": "Also a freshness case.",
+      "added": "wp0"
+    },
+    {
+      "id": "Q81",
+      "query": "che numero consigliamo con le calze spesse?",
+      "lang": "it",
+      "category": "nl-task",
+      "split": "heldout",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "content-briefs/guida-taglie-scarponi",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "content-briefs/guida-scarponi-invernali-donna",
+          "grade": 1
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "keyword-clusters/misura-scarponi-trekking",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "Several templated product sheets also say 'consigliamo mezzo numero in più con calze spesse'.",
+      "added": "wp0"
+    },
+    {
+      "id": "Q82",
+      "query": "doposci",
+      "lang": "it",
+      "category": "keyword",
+      "split": "heldout",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "keyword-clusters/scarponcini-invernali-donna",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "product-lines/nevaio",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "brand-voice/glossario-terminologia",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "Single Italian token.",
+      "added": "wp0"
+    },
+    {
+      "id": "Q83",
+      "query": "crawl budget",
+      "lang": "en",
+      "category": "keyword",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "seo-findings/faceted-navigation-index-bloat",
+          "grade": 2
+        },
+        {
+          "bundle": "playbook",
+          "id": "guidelines/canonicalization-rules",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "",
+      "added": "wp0"
+    },
+    {
+      "id": "Q84",
+      "query": "risuolabile",
+      "lang": "it",
+      "category": "keyword",
+      "split": "heldout",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "policies/green-claims",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "audiences/eco-conscious-buyers",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "The audience uses the English 'resoleable' / 'resoling'.",
+      "added": "wp0"
+    },
+    {
+      "id": "Q85",
+      "query": "disavow",
+      "lang": "en",
+      "category": "keyword",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "seo-findings/backlink-profile-review-2026-q3",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "seo-findings/backlink-profile-review-2026-q2",
+          "grade": 1
+        }
+      ],
+      "distractors": [
+        {
+          "bundle": "alpinaria",
+          "id": "seo-findings/backlink-profile-review-2026-q2",
+          "reason": "stale review; says 'should be disavowed'"
+        }
+      ],
+      "notes": "Q3 has 'disavow file'; Q2 only the participle.",
+      "added": "wp0"
+    },
+    {
+      "id": "Q86",
+      "query": "featured snippet",
+      "lang": "en",
+      "category": "keyword",
+      "split": "heldout",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "seo-findings/featured-snippet-impermeabilizzare",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "content-briefs/guida-impermeabilizzare-scarponi",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "keyword-clusters/cura-manutenzione-scarponi",
+          "grade": 1
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "keyword-clusters/scarponi-trekking-informazionale",
+          "grade": 1
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "content-briefs/en-what-to-pack-dolomites",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "English term used inside Italian concepts.",
+      "added": "wp0"
+    },
+    {
+      "id": "Q87",
+      "query": "tasselli",
+      "lang": "it",
+      "category": "keyword",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "product-lines/torrente",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "decisions/trail-running-line-priority-2027",
+          "grade": 1
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "content-briefs/torrente-product-copy-refresh",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "Every Italian product sheet says 'tasselli autopulenti'; the line concept carries the specific lug depth.",
+      "added": "wp0"
+    },
+    {
+      "id": "Q88",
+      "query": "GRS certified",
+      "lang": "en",
+      "category": "keyword",
+      "split": "heldout",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "product-lines/bosco",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "policies/green-claims",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "audiences/eco-conscious-buyers",
+          "grade": 1
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "content-briefs/pile-vs-softshell",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "",
+      "added": "wp0"
+    },
+    {
+      "id": "Q89",
+      "query": "settimana bianca",
+      "lang": "it",
+      "category": "keyword",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "audiences/famiglie-in-montagna",
+          "grade": 2
+        }
+      ],
+      "distractors": [],
+      "notes": "",
+      "added": "wp0"
+    },
+    {
+      "id": "Q90",
+      "query": "aggregateRating",
+      "lang": "en",
+      "category": "keyword",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "experiments/product-schema-aggregate-rating",
+          "grade": 2
+        },
+        {
+          "bundle": "playbook",
+          "id": "guidelines/product-structured-data",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "CamelCase technical token.",
+      "added": "wp0"
+    },
+    {
+      "id": "Q91",
+      "query": "share of voice",
+      "lang": "en",
+      "category": "keyword",
+      "split": "heldout",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "seo-findings/competitor-montevia-serp-share",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "competitors/montevia",
+          "grade": 1
+        },
+        {
+          "bundle": "playbook",
+          "id": "guidelines/reporting-cadence",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "'of' is a stop word.",
+      "added": "wp0"
+    },
+    {
+      "id": "Q92",
+      "query": "Montebelluna",
+      "lang": "en",
+      "category": "keyword",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "content-briefs/en-italian-hiking-boots-brands-history",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "keyword-clusters/italian-hiking-boots-brand",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "seo-findings/en-brand-queries-dolomites",
+          "grade": 1
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "competitors/cimalta",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "Place name present in many concepts (lines, brand voice, audiences).",
+      "added": "wp0"
+    },
+    {
+      "id": "Q93",
+      "query": "Alta Via 1",
+      "lang": "en",
+      "category": "keyword",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "content-briefs/en-what-to-pack-dolomites",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "brand-voice/tone-of-voice-en",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "'Alta' also names Dolomiti Alta products.",
+      "added": "wp0"
+    },
+    {
+      "id": "Q94",
+      "query": "redirect 301",
+      "lang": "it",
+      "category": "keyword",
+      "split": "heldout",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "decisions/redirect-vecchia-pagina-donna",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "technical-issues/redirect-chains-outlet",
+          "grade": 1
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "seo-findings/redirect-chains-outlet",
+          "grade": 1
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "seo-findings/cannibalizzazione-scarponi-donna",
+          "grade": 1
+        },
+        {
+          "bundle": "playbook",
+          "id": "guidelines/redirect-hygiene",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "",
+      "added": "wp0"
+    },
+    {
+      "id": "Q95",
+      "query": "decision canonical filtri colore",
+      "lang": "mixed",
+      "category": "mixed-lang",
+      "split": "heldout",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "decisions/canonical-pagine-categoria-duplicate",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "decisions/faceted-parameters-robots",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "decisions/noindex-filtri-colore-2026-03",
+          "grade": 1
+        }
+      ],
+      "distractors": [
+        {
+          "bundle": "alpinaria",
+          "id": "decisions/noindex-filtri-colore-2026-03",
+          "reason": "superseded decision"
+        }
+      ],
+      "notes": "English type word, Italian topic words.",
+      "added": "wp0"
+    },
+    {
+      "id": "Q96",
+      "query": "technical issue alt text PIM",
+      "lang": "mixed",
+      "category": "mixed-lang",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "technical-issues/alt-text-mancanti",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "decisions/image-alt-template",
+          "grade": 1
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "seo-findings/immagini-senza-alt",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "",
+      "added": "wp0"
+    },
+    {
+      "id": "Q97",
+      "query": "audience trail runner mobile",
+      "lang": "mixed",
+      "category": "mixed-lang",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "audiences/trail-runner",
+          "grade": 2
+        }
+      ],
+      "distractors": [],
+      "notes": "",
+      "added": "wp0"
+    },
+    {
+      "id": "Q98",
+      "query": "competitor scarpe da avvicinamento",
+      "lang": "mixed",
+      "category": "mixed-lang",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "competitors/rocciaviva",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "keyword-clusters/scarpe-avvicinamento",
+          "grade": 1
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "landing-pages/it-scarpe-da-avvicinamento",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "",
+      "added": "wp0"
+    },
+    {
+      "id": "Q99",
+      "query": "experiment title prezzo da 149",
+      "lang": "mixed",
+      "category": "mixed-lang",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "experiments/title-tag-prezzo-scarponi-donna",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "policies/price-promo-claims",
+          "grade": 1
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "landing-pages/it-scarponi-da-trekking-donna",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "",
+      "added": "wp0"
+    },
+    {
+      "id": "Q100",
+      "query": "brief merino socks vesciche",
+      "lang": "mixed",
+      "category": "mixed-lang",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "content-briefs/en-merino-socks-benefits",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "keyword-clusters/merino-hiking-socks",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "'vesciche' (blisters) never occurs in Italian.",
+      "added": "wp0"
+    },
+    {
+      "id": "Q101",
+      "query": "finding crawl depth pagine inglesi",
+      "lang": "mixed",
+      "category": "mixed-lang",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "seo-findings/mobile-menu-crawl-depth",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "technical-issues/en-pages-crawl-depth",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "landing-pages/en-lightweight-hiking-shoes",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "",
+      "added": "wp0"
+    },
+    {
+      "id": "Q102",
+      "query": "policy claim medici",
+      "lang": "mixed",
+      "category": "mixed-lang",
+      "split": "heldout",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "policies/medical-health-claims",
+          "grade": 2
+        }
+      ],
+      "distractors": [],
+      "notes": "'medici' vs the English 'medical'.",
+      "added": "wp0"
+    },
+    {
+      "id": "Q103",
+      "query": "WIN-W-309",
+      "lang": "en",
+      "category": "exact",
+      "split": "heldout",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "products/win-w-309-nevaio-polar-w",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "product-lines/nevaio",
+          "grade": 1
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "content-briefs/calendario-contenuti-inverno-2026",
+          "grade": 1
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "landing-pages/en-womens-winter-hiking-boots",
+          "grade": 1
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "landing-pages/it-scarponcini-invernali-donna",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "SKU; WIN-M-309 is the men's near-duplicate.",
+      "added": "wp0"
+    },
+    {
+      "id": "Q104",
+      "query": "SCK-U-705",
+      "lang": "it",
+      "category": "exact",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "products/sck-u-705-rifugio-calze-merino-heavy-u",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "landing-pages/it-calze-merino",
+          "grade": 1
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "content-briefs/en-merino-socks-benefits",
+          "grade": 1
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "product-lines/rifugio",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "SKU of the heavy merino sock.",
+      "added": "wp0"
+    },
+    {
+      "id": "Q105",
+      "query": "/en/approach-shoes/",
+      "lang": "en",
+      "category": "exact",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "landing-pages/en-approach-shoes",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "landing-pages/it-scarpe-da-avvicinamento",
+          "grade": 1
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "seo-findings/hreflang-missing-en-pages",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "URL path.",
+      "added": "wp0"
+    },
+    {
+      "id": "Q106",
+      "query": "/abbigliamento/pile/",
+      "lang": "it",
+      "category": "exact",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "landing-pages/it-pile",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "seo-findings/calo-traffico-pile-autunno-2026",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "URL path.",
+      "added": "wp0"
+    },
+    {
+      "id": "Q107",
+      "query": "nordpasso.com",
+      "lang": "en",
+      "category": "exact",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "competitors/nordpasso",
+          "grade": 2
+        }
+      ],
+      "distractors": [],
+      "notes": "Domain token.",
+      "added": "wp0"
+    },
+    {
+      "id": "Q108",
+      "query": "Dolomyths",
+      "lang": "it",
+      "category": "exact",
+      "split": "heldout",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "audiences/trail-runner",
+          "grade": 2
+        }
+      ],
+      "distractors": [],
+      "notes": "Race name present in one concept.",
+      "added": "wp0"
+    },
+    {
+      "id": "Q109",
+      "query": "fetchpriority",
+      "lang": "en",
+      "category": "exact",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "experiments/lazy-load-hero-image",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "technical-issues/lcp-immagini-prodotto-mobile",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "Attribute name; the experiment writes 'fetchpriority=high'.",
+      "added": "wp0"
+    },
+    {
+      "id": "Q110",
+      "query": "art. 17-bis",
+      "lang": "it",
+      "category": "exact",
+      "split": "heldout",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "policies/price-promo-claims",
+          "grade": 2
+        }
+      ],
+      "distractors": [],
+      "notes": "Legal reference; tokenizer splits into art / 17 / bis.",
+      "added": "wp0"
+    },
+    {
+      "id": "Q111",
+      "query": "TRL-M-404",
+      "lang": "en",
+      "category": "exact",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "products/trl-m-404-torrente-rapido-pro-m",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "content-briefs/torrente-product-copy-refresh",
+          "grade": 1
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "product-lines/torrente",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "SKU.",
+      "added": "wp0"
+    },
+    {
+      "id": "Q112",
+      "query": "Elisa Dalla Costa",
+      "lang": "en",
+      "category": "exact",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "content-briefs/en-what-to-pack-dolomites",
+          "grade": 2
+        }
+      ],
+      "distractors": [],
+      "notes": "Author name in the brief.",
+      "added": "wp0"
+    },
+    {
+      "id": "Q113",
+      "query": "/outlet/",
+      "lang": "en",
+      "category": "exact",
+      "split": "heldout",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "landing-pages/it-outlet",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "decisions/outlet-page-noindex-off-season",
+          "grade": 1
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "technical-issues/redirect-chains-outlet",
+          "grade": 1
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "seo-findings/redirect-chains-outlet",
+          "grade": 1
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "keyword-clusters/saldi-scarponi",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "URL path shared by several concepts; the page itself should lead.",
+      "added": "wp0"
+    },
+    {
+      "id": "Q114",
+      "query": "pantaloni zip-off",
+      "lang": "it",
+      "category": "morph",
+      "split": "heldout",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "products/pnt-w-810-passo-zip-off-w",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "products/pnt-m-810-passo-zip-off-m",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "product-lines/passo",
+          "grade": 2
+        }
+      ],
+      "distractors": [],
+      "notes": "Products say 'Pantalone softshell' (singular); the line lists 'Passo Zip-off'.",
+      "added": "wp0"
+    },
+    {
+      "id": "Q115",
+      "query": "redirected legacy promo urls",
+      "lang": "en",
+      "category": "morph",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "seo-findings/redirect-chains-outlet",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "technical-issues/redirect-chains-outlet",
+          "grade": 2
+        }
+      ],
+      "distractors": [],
+      "notes": "'redirected' vs 'redirect'.",
+      "added": "wp0"
+    },
+    {
+      "id": "Q116",
+      "query": "guide informative",
+      "lang": "it",
+      "category": "morph",
+      "split": "heldout",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "decisions/blog-guides-under-guide-folder",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "landing-pages/it-guida-scelta-scarponi",
+          "grade": 1
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "content-briefs/guida-scarponi-invernali-donna",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "Plural 'guide' and 'informative' vs 'guida informativa' / 'contenuti informativi'.",
+      "added": "wp0"
+    },
+    {
+      "id": "Q117",
+      "query": "indexing of parameter urls",
+      "lang": "en",
+      "category": "morph",
+      "split": "heldout",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "seo-findings/faceted-navigation-index-bloat",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "decisions/faceted-parameters-robots",
+          "grade": 1
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "technical-issues/parametri-filtri-indicizzati",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "'indexing' vs 'indexed'; the issue is Italian ('indicizzate').",
+      "added": "wp0"
+    },
+    {
+      "id": "Q118",
+      "query": "scarponcino invernale",
+      "lang": "it",
+      "category": "morph",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "keyword-clusters/scarponcini-invernali-donna",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "landing-pages/it-scarponcini-invernali-donna",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "product-lines/nevaio",
+          "grade": 1
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "content-briefs/guida-scarponi-invernali-donna",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "Both tokens are singular; the texts have 'scarponcini invernali' (product sheets: 'scarponcino invernali').",
+      "added": "wp0"
+    },
+    {
+      "id": "Q119",
+      "query": "canonicals on english product pages",
+      "lang": "en",
+      "category": "morph",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "technical-issues/canonical-self-reference-missing-en",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "landing-pages/en-trail-running-shoes",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "'canonicals' plural.",
+      "added": "wp0"
+    },
+    {
+      "id": "Q120",
+      "query": "link interno perso",
+      "lang": "it",
+      "category": "morph",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "seo-findings/calo-traffico-pile-autunno-2026",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "experiments/internal-links-pile-from-giacche",
+          "grade": 2
+        },
+        {
+          "bundle": "playbook",
+          "id": "guidelines/internal-linking",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "Singular 'interno' vs 'interni'; 'perso' / 'persi'.",
+      "added": "wp0"
+    },
+    {
+      "id": "Q121",
+      "query": "experiments with positive results",
+      "lang": "en",
+      "category": "morph",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "experiments/en-title-italian-made",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "experiments/product-schema-aggregate-rating",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "experiments/lazy-load-hero-image",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "experiments/title-tag-prezzo-scarponi-donna",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "Plurals; the result tag is 'positive' (Italian experiments: 'positivo').",
+      "added": "wp0"
+    },
+    {
+      "id": "Q122",
+      "query": "cannibalizzazioni tra pagine",
+      "lang": "it",
+      "category": "morph",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "seo-findings/cannibalizzazione-scarponi-donna",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "decisions/redirect-vecchia-pagina-donna",
+          "grade": 1
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "competitors/quota3000",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "Plural 'cannibalizzazioni' never occurs.",
+      "added": "wp0"
+    },
+    {
+      "id": "Q123",
+      "query": "hydrating the filter widget",
+      "lang": "en",
+      "category": "morph",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "technical-issues/inp-filtri-plp",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "seo-findings/core-web-vitals-mobile-2026-09",
+          "grade": 1
+        }
+      ],
+      "distractors": [
+        {
+          "bundle": "alpinaria",
+          "id": "seo-findings/core-web-vitals-mobile-2026-01",
+          "reason": "stale snapshot that also mentions filter widget hydration"
+        }
+      ],
+      "notes": "'hydrating' vs 'hydration'.",
+      "added": "wp0"
+    },
+    {
+      "id": "Q124",
+      "query": "priorita editoriale 2027",
+      "lang": "it",
+      "category": "accent",
+      "split": "heldout",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "decisions/trail-running-line-priority-2027",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "audiences/trail-runner",
+          "grade": 1
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "content-briefs/calendario-contenuti-inverno-2026",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "Unaccented 'priorita' vs indexed 'priorità'.",
+      "added": "wp0"
+    },
+    {
+      "id": "Q125",
+      "query": "sneaker Baita Citta",
+      "lang": "it",
+      "category": "accent",
+      "split": "heldout",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "products/lfs-w-901-baita-citt-w",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "products/lfs-m-901-baita-citt-m",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "product-lines/baita",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "Unaccented 'Citta' vs the product title 'Baita Città'.",
+      "added": "wp0"
+    },
+    {
+      "id": "Q126",
+      "query": "stagionalita cluster scarponi donna",
+      "lang": "it",
+      "category": "accent",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "keyword-clusters/scarponi-trekking-donna-transazionale",
+          "grade": 2
+        }
+      ],
+      "distractors": [],
+      "notes": "Unaccented 'stagionalita'.",
+      "added": "wp0"
+    },
+    {
+      "id": "Q127",
+      "query": "profondita di catalogo Montevia",
+      "lang": "it",
+      "category": "accent",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "seo-findings/competitor-montevia-serp-share",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "competitors/montevia",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "Unaccented 'profondita' vs 'profondità di catalogo'.",
+      "added": "wp0"
+    },
+    {
+      "id": "Q128",
+      "query": "disponibilità immediata famiglie",
+      "lang": "it",
+      "category": "accent",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "audiences/famiglie-in-montagna",
+          "grade": 2
+        }
+      ],
+      "distractors": [],
+      "notes": "Control: accent typed exactly as indexed.",
+      "added": "wp0"
+    },
+    {
+      "id": "Q129",
+      "query": "velocita di scroll mobile",
+      "lang": "it",
+      "category": "accent",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "experiments/category-intro-copy-length",
+          "grade": 2
+        }
+      ],
+      "distractors": [],
+      "notes": "Unaccented 'velocita'.",
+      "added": "wp0"
+    },
+    {
+      "id": "Q130",
+      "query": "gravita alta problemi tecnici",
+      "lang": "it",
+      "category": "accent",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "technical-issues/parametri-filtri-indicizzati",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "technical-issues/hreflang-return-tags-en",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "Unaccented 'gravita' vs 'Gravità: alta'; English issues say 'Severity: high'.",
+      "added": "wp0"
+    },
+    {
+      "id": "Q131",
+      "query": "insulated boots for snowshoeing",
+      "lang": "en",
+      "category": "synonym",
+      "split": "heldout",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "product-lines/nevaio",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "keyword-clusters/womens-winter-hiking-boots-transactional",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "content-briefs/en-how-to-choose-winter-hiking-boots",
+          "grade": 1
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "audiences/eu-english-dolomites-visitors",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "'snowshoeing' never occurs (snowshoe, snowshoes do).",
+      "added": "wp0"
+    },
+    {
+      "id": "Q132",
+      "query": "scarpe basse per camminare",
+      "lang": "it",
+      "category": "synonym",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "keyword-clusters/scarpe-trekking-leggere",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "product-lines/sentiero",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "landing-pages/it-scarpe-da-trekking-leggere",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "'camminare' never occurs (camminata, camminatori).",
+      "added": "wp0"
+    },
+    {
+      "id": "Q133",
+      "query": "star ratings in search results",
+      "lang": "en",
+      "category": "synonym",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "experiments/product-schema-aggregate-rating",
+          "grade": 2
+        },
+        {
+          "bundle": "playbook",
+          "id": "guidelines/product-structured-data",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "Texts say review stars, aggregateRating, SERP.",
+      "added": "wp0"
+    },
+    {
+      "id": "Q134",
+      "query": "marketplace che rivende i nostri prodotti a prezzo più basso",
+      "lang": "it",
+      "category": "synonym",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "competitors/quota3000",
+          "grade": 2
+        }
+      ],
+      "distractors": [],
+      "notes": "'più basso' vs 'prezzo inferiore'.",
+      "added": "wp0"
+    },
+    {
+      "id": "Q135",
+      "query": "slow filters on category pages",
+      "lang": "en",
+      "category": "synonym",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "technical-issues/inp-filtri-plp",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "seo-findings/core-web-vitals-mobile-2026-09",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "'slow' never occurs; texts say INP, long task, blocks the main thread.",
+      "added": "wp0"
+    },
+    {
+      "id": "Q136",
+      "query": "pulizia delle scarpe in pelle",
+      "lang": "it",
+      "category": "synonym",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "landing-pages/it-guida-cura-scarponi",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "keyword-clusters/cura-manutenzione-scarponi",
+          "grade": 2
+        }
+      ],
+      "distractors": [],
+      "notes": "'pulizia' vs 'pulire'; 'scarpe' vs 'scarponi'.",
+      "added": "wp0"
+    },
+    {
+      "id": "Q137",
+      "query": "German shoppers",
+      "lang": "en",
+      "category": "synonym",
+      "split": "heldout",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "audiences/eu-english-dolomites-visitors",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "seo-findings/en-brand-queries-dolomites",
+          "grade": 1
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "experiments/en-title-italian-made",
+          "grade": 1
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "seo-findings/hreflang-missing-en-pages",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "The audience says 'Germany' / 'Germans'; 'shoppers' never occurs.",
+      "added": "wp0"
+    },
+    {
+      "id": "Q138",
+      "query": "testi troppo corti nelle schede Torrente",
+      "lang": "it",
+      "category": "synonym",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "seo-findings/thin-content-product-pages-torrente",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "content-briefs/torrente-product-copy-refresh",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "landing-pages/it-scarpe-trail-running",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "'corti' never occurs; texts say thin content, testo scarso.",
+      "added": "wp0"
+    },
+    {
+      "id": "Q139",
+      "query": "mountain hut trek",
+      "lang": "en",
+      "category": "synonym",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "content-briefs/en-what-to-pack-dolomites",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "seo-findings/backlink-profile-review-2026-q3",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "Texts say hut-to-hut, Dolomites hut guides.",
+      "added": "wp0"
+    },
+    {
+      "id": "Q140",
+      "query": "capi in lana che non puzzano",
+      "lang": "it",
+      "category": "synonym",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "product-lines/rifugio",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "products/bsl-w-601-rifugio-merino-base-w",
+          "grade": 1
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "products/bsl-m-605-rifugio-merino-long-m",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "'puzzano' never occurs; the line says 'nessun odore'. Product sheets say 'Capo in lana merino'.",
+      "added": "wp0"
+    },
+    {
+      "id": "Q141",
+      "query": "referring domains count",
+      "lang": "en",
+      "category": "freshness",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "seo-findings/backlink-profile-review-2026-q3",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "seo-findings/backlink-profile-review-2026-q2",
+          "grade": 1
+        }
+      ],
+      "distractors": [
+        {
+          "bundle": "alpinaria",
+          "id": "seo-findings/backlink-profile-review-2026-q2",
+          "reason": "stale (stale_after 2026-08-31), superseded"
+        }
+      ],
+      "notes": "Both reviews state a count; the fresh one should lead.",
+      "added": "wp0"
+    },
+    {
+      "id": "Q142",
+      "query": "pagina categoria scarponi donna attuale",
+      "lang": "it",
+      "category": "freshness",
+      "split": "heldout",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "landing-pages/it-scarponi-da-trekking-donna",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "landing-pages/it-scarponi-da-trekking-donna-old",
+          "grade": 1
+        }
+      ],
+      "distractors": [
+        {
+          "bundle": "alpinaria",
+          "id": "landing-pages/it-scarponi-da-trekking-donna-old",
+          "reason": "deprecated page, redirected"
+        }
+      ],
+      "notes": "'attuale' is not in either page.",
+      "added": "wp0"
+    },
+    {
+      "id": "Q143",
+      "query": "current LCP on mobile product pages",
+      "lang": "en",
+      "category": "freshness",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "seo-findings/core-web-vitals-mobile-2026-09",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "technical-issues/lcp-immagini-prodotto-mobile",
+          "grade": 1
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "seo-findings/core-web-vitals-mobile-2026-01",
+          "grade": 1
+        }
+      ],
+      "distractors": [
+        {
+          "bundle": "alpinaria",
+          "id": "seo-findings/core-web-vitals-mobile-2026-01",
+          "reason": "stale snapshot (stale_after 2026-04-30)"
+        }
+      ],
+      "notes": "The fresh snapshot's description starts with 'Current snapshot'.",
+      "added": "wp0"
+    },
+    {
+      "id": "Q144",
+      "query": "filtri taglia robots disallow",
+      "lang": "it",
+      "category": "freshness",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "decisions/faceted-parameters-robots",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "decisions/canonical-pagine-categoria-duplicate",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "technical-issues/parametri-filtri-indicizzati",
+          "grade": 1
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "decisions/noindex-filtri-colore-2026-03",
+          "grade": 1
+        }
+      ],
+      "distractors": [
+        {
+          "bundle": "alpinaria",
+          "id": "decisions/noindex-filtri-colore-2026-03",
+          "reason": "deprecated decision mentioning the size filter"
+        }
+      ],
+      "notes": "",
+      "added": "wp0"
+    },
+    {
+      "id": "Q145",
+      "query": "noindex sulle URL con parametri",
+      "lang": "it",
+      "category": "freshness",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "decisions/canonical-pagine-categoria-duplicate",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "decisions/faceted-parameters-robots",
+          "grade": 1
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "technical-issues/parametri-filtri-indicizzati",
+          "grade": 1
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "decisions/noindex-filtri-colore-2026-03",
+          "grade": 1
+        }
+      ],
+      "distractors": [
+        {
+          "bundle": "alpinaria",
+          "id": "decisions/noindex-filtri-colore-2026-03",
+          "reason": "deprecated decision that literally applied noindex"
+        }
+      ],
+      "notes": "The deprecated decision matches the words best; the current one replaced noindex with canonical.",
+      "added": "wp0"
+    },
+    {
+      "id": "Q146",
+      "query": "backlink gap to Cimalta",
+      "lang": "en",
+      "category": "freshness",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "seo-findings/backlink-profile-review-2026-q3",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "competitors/cimalta",
+          "grade": 1
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "seo-findings/backlink-profile-review-2026-q2",
+          "grade": 1
+        }
+      ],
+      "distractors": [
+        {
+          "bundle": "alpinaria",
+          "id": "seo-findings/backlink-profile-review-2026-q2",
+          "reason": "stale review with the old Cimalta number"
+        }
+      ],
+      "notes": "",
+      "added": "wp0"
+    },
+    {
+      "id": "Q147",
+      "query": "mobile CLS value",
+      "lang": "en",
+      "category": "freshness",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "seo-findings/core-web-vitals-mobile-2026-09",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "experiments/lazy-load-hero-image",
+          "grade": 1
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "seo-findings/core-web-vitals-mobile-2026-01",
+          "grade": 1
+        }
+      ],
+      "distractors": [
+        {
+          "bundle": "alpinaria",
+          "id": "seo-findings/core-web-vitals-mobile-2026-01",
+          "reason": "stale snapshot with the old CLS"
+        }
+      ],
+      "notes": "",
+      "added": "wp0"
+    },
+    {
+      "id": "Q148",
+      "query": "draft redesign of the women's winter page",
+      "lang": "en",
+      "category": "disambig",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "landing-pages/en-womens-winter-hiking-boots-draft-v2",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "landing-pages/en-womens-winter-hiking-boots",
+          "grade": 1
+        }
+      ],
+      "distractors": [
+        {
+          "bundle": "alpinaria",
+          "id": "landing-pages/en-womens-winter-hiking-boots",
+          "reason": "live page with the same URL; the question asks for the draft"
+        }
+      ],
+      "notes": "Inverse of the freshness case: the draft is the right answer.",
+      "added": "wp0"
+    },
+    {
+      "id": "Q149",
+      "query": "pagina italiana delle giacche hardshell",
+      "lang": "it",
+      "category": "disambig",
+      "split": "heldout",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "landing-pages/it-giacche-impermeabili",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "landing-pages/en-hardshell-jackets",
+          "grade": 1
+        }
+      ],
+      "distractors": [
+        {
+          "bundle": "alpinaria",
+          "id": "landing-pages/en-hardshell-jackets",
+          "reason": "English twin"
+        }
+      ],
+      "notes": "The Italian page's title tag says 'Hardshell'.",
+      "added": "wp0"
+    },
+    {
+      "id": "Q150",
+      "query": "approach shoes category in Italian",
+      "lang": "en",
+      "category": "disambig",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "landing-pages/it-scarpe-da-avvicinamento",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "landing-pages/en-approach-shoes",
+          "grade": 1
+        }
+      ],
+      "distractors": [
+        {
+          "bundle": "alpinaria",
+          "id": "landing-pages/en-approach-shoes",
+          "reason": "English twin"
+        }
+      ],
+      "notes": "English query asking for the Italian page.",
+      "added": "wp0"
+    },
+    {
+      "id": "Q151",
+      "query": "cluster transazionale scarponi uomo",
+      "lang": "it",
+      "category": "disambig",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "keyword-clusters/scarponi-trekking-uomo-transazionale",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "landing-pages/it-scarponi-da-trekking-uomo",
+          "grade": 1
+        }
+      ],
+      "distractors": [
+        {
+          "bundle": "alpinaria",
+          "id": "keyword-clusters/scarponi-trekking-donna-transazionale",
+          "reason": "same intent, other gender"
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "keyword-clusters/scarponi-trekking-informazionale",
+          "reason": "same head term, informational intent"
+        }
+      ],
+      "notes": "",
+      "added": "wp0"
+    },
+    {
+      "id": "Q152",
+      "query": "informational cluster about hiking boot sizing",
+      "lang": "en",
+      "category": "disambig",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "keyword-clusters/boot-sizing-guide-en",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "landing-pages/en-boot-sizing-guide",
+          "grade": 1
+        }
+      ],
+      "distractors": [
+        {
+          "bundle": "alpinaria",
+          "id": "keyword-clusters/misura-scarponi-trekking",
+          "reason": "Italian twin cluster"
+        }
+      ],
+      "notes": "",
+      "added": "wp0"
+    },
+    {
+      "id": "Q153",
+      "query": "cluster taglie scarponi in italiano",
+      "lang": "it",
+      "category": "disambig",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "keyword-clusters/misura-scarponi-trekking",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "content-briefs/guida-taglie-scarponi",
+          "grade": 1
+        }
+      ],
+      "distractors": [
+        {
+          "bundle": "alpinaria",
+          "id": "keyword-clusters/boot-sizing-guide-en",
+          "reason": "English twin cluster"
+        }
+      ],
+      "notes": "'taglie' vs the indexed 'taglia'.",
+      "added": "wp0"
+    },
+    {
+      "id": "Q154",
+      "query": "Q2 backlink review numbers",
+      "lang": "en",
+      "category": "disambig",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "seo-findings/backlink-profile-review-2026-q2",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "seo-findings/backlink-profile-review-2026-q3",
+          "grade": 1
+        }
+      ],
+      "distractors": [
+        {
+          "bundle": "alpinaria",
+          "id": "seo-findings/backlink-profile-review-2026-q3",
+          "reason": "fresh twin; the question asks for the Q2 history"
+        }
+      ],
+      "notes": "A freshness prior must not hide an explicitly requested stale snapshot.",
+      "added": "wp0"
+    },
+    {
+      "id": "Q155",
+      "query": "men's hiking boots English category page",
+      "lang": "en",
+      "category": "disambig",
+      "split": "heldout",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "landing-pages/en-mens-hiking-boots",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "keyword-clusters/mens-hiking-boots-waterproof",
+          "grade": 1
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "landing-pages/it-scarponi-da-trekking-uomo",
+          "grade": 1
+        }
+      ],
+      "distractors": [
+        {
+          "bundle": "alpinaria",
+          "id": "landing-pages/it-scarponi-da-trekking-uomo",
+          "reason": "Italian twin"
+        }
+      ],
+      "notes": "",
+      "added": "wp0"
+    },
+    {
+      "id": "Q156",
+      "query": "shipping costs to Germany",
+      "lang": "en",
+      "category": "no-answer",
+      "split": "heldout",
+      "expected": [],
+      "distractors": [],
+      "notes": "Shipping is mentioned only as a dynamic IP banner; no costs concept.",
+      "added": "wp0"
+    },
+    {
+      "id": "Q157",
+      "query": "taglie dei guanti",
+      "lang": "it",
+      "category": "no-answer",
+      "split": "heldout",
+      "expected": [],
+      "distractors": [],
+      "notes": "No gloves in the catalogue; 'taglie' matches the sizing cluster.",
+      "added": "wp0"
+    },
+    {
+      "id": "Q158",
+      "query": "Google Ads budget for brand campaigns",
+      "lang": "en",
+      "category": "no-answer",
+      "split": "dev",
+      "expected": [],
+      "distractors": [],
+      "notes": "Keyword Planner is a source, not a concept; 'brand' matches brand voice.",
+      "added": "wp0"
+    },
+    {
+      "id": "Q159",
+      "query": "recensioni negative sul servizio clienti",
+      "lang": "it",
+      "category": "no-answer",
+      "split": "dev",
+      "expected": [],
+      "distractors": [],
+      "notes": "Reviews appear as a ranking signal; no customer-service concept.",
+      "added": "wp0"
+    },
+    {
+      "id": "Q160",
+      "query": "newsletter signup conversion rate",
+      "lang": "en",
+      "category": "no-answer",
+      "split": "heldout",
+      "expected": [],
+      "distractors": [],
+      "notes": "'conversion rate' is in two landing pages; no newsletter concept.",
+      "added": "wp0"
+    },
+    {
+      "id": "Q161",
+      "query": "garanzia di due anni sugli scarponi",
+      "lang": "it",
+      "category": "no-answer",
+      "split": "heldout",
+      "expected": [],
+      "distractors": [],
+      "notes": "No warranty concept; 'scarponi' matches dozens.",
+      "added": "wp0"
+    },
+    {
+      "id": "Q162",
+      "query": "competitor Decathlon",
+      "lang": "en",
+      "category": "no-answer",
+      "split": "dev",
+      "expected": [],
+      "distractors": [],
+      "notes": "Not a tracked competitor; 'competitor' matches the type.",
+      "added": "wp0"
+    },
+    {
+      "id": "Q163",
+      "query": "pagina categoria zaini",
+      "lang": "it",
+      "category": "no-answer",
+      "split": "dev",
+      "expected": [],
+      "distractors": [],
+      "notes": "No backpacks; 'pagina categoria' matches every Italian landing page.",
+      "added": "wp0"
+    },
+    {
+      "id": "Q164",
+      "query": "TikTok content strategy",
+      "lang": "en",
+      "category": "no-answer",
+      "split": "dev",
+      "expected": [],
+      "distractors": [],
+      "notes": "No social concepts.",
+      "added": "wp0"
+    },
+    {
+      "id": "Q165",
+      "query": "giacca in piumino",
+      "lang": "it",
+      "category": "no-answer",
+      "split": "dev",
+      "expected": [],
+      "distractors": [],
+      "notes": "No down jackets; 'giacca' matches the Vetta concepts.",
+      "added": "wp0"
+    },
+    {
+      "id": "Q166",
+      "query": "robots.txt rule for the staging subdomain",
+      "lang": "en",
+      "category": "no-answer",
+      "split": "dev",
+      "expected": [],
+      "distractors": [],
+      "notes": "'robots.txt' and 'subdomain' each occur; no staging concept.",
+      "added": "wp0"
+    },
+    {
+      "id": "Q167",
+      "query": "collaborazione con influencer",
+      "lang": "it",
+      "category": "no-answer",
+      "split": "dev",
+      "expected": [],
+      "distractors": [],
+      "notes": "No influencer or PR concepts.",
+      "added": "wp0"
+    },
+    {
+      "id": "Q168",
+      "query": "GA4 event tracking setup",
+      "lang": "en",
+      "category": "no-answer",
+      "split": "dev",
+      "expected": [],
+      "distractors": [],
+      "notes": "GA4 appears only in source URLs, which are not indexed text.",
+      "added": "wp0"
+    },
+    {
+      "id": "Q169",
+      "query": "numero di negozi fisici",
+      "lang": "it",
+      "category": "no-answer",
+      "split": "dev",
+      "expected": [],
+      "distractors": [],
+      "notes": "No store concepts.",
+      "added": "wp0"
+    },
+    {
+      "id": "Q170",
+      "query": "how do we tell transactional from informational clusters?",
+      "lang": "en",
+      "category": "playbook",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "playbook",
+          "id": "guidelines/search-intent-taxonomy",
+          "grade": 2
+        }
+      ],
+      "distractors": [],
+      "notes": "Natural-language question; the definition lives in the playbook.",
+      "added": "wp0"
+    },
+    {
+      "id": "Q171",
+      "query": "guideline cadenza refresh contenuti",
+      "lang": "mixed",
+      "category": "playbook",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "playbook",
+          "id": "guidelines/content-refresh-cadence",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "content-briefs/en-what-to-pack-dolomites",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "'cadenza' vs 'cadence'; 'contenuti' vs 'content'.",
+      "added": "wp0"
+    },
+    {
+      "id": "Q172",
+      "query": "minimum experiment duration",
+      "lang": "en",
+      "category": "playbook",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "playbook",
+          "id": "guidelines/experiment-protocol",
+          "grade": 2
+        },
+        {
+          "bundle": "playbook",
+          "id": "guidelines/title-tag-length",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "",
+      "added": "wp0"
+    },
+    {
+      "id": "Q173",
+      "query": "when to use robots disallow instead of noindex",
+      "lang": "en",
+      "category": "playbook",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "playbook",
+          "id": "guidelines/canonicalization-rules",
+          "grade": 2
+        },
+        {
+          "bundle": "playbook",
+          "id": "guidelines/faceted-navigation",
+          "grade": 1
+        },
+        {
+          "bundle": "playbook",
+          "id": "guidelines/robots-txt-rules",
+          "grade": 1
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "decisions/faceted-parameters-robots",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "",
+      "added": "wp0"
+    },
+    {
+      "id": "Q174",
+      "query": "regole per i link interni dalle guide alle categorie",
+      "lang": "it",
+      "category": "playbook",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "playbook",
+          "id": "guidelines/internal-linking",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "decisions/blog-guides-under-guide-folder",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "Italian query; the guideline is English (internal linking rules, guides to categories).",
+      "added": "wp0"
+    },
+    {
+      "id": "Q175",
+      "query": "E-E-A-T author box on guides",
+      "lang": "en",
+      "category": "playbook",
+      "split": "heldout",
+      "expected": [
+        {
+          "bundle": "playbook",
+          "id": "guidelines/eeat-for-ecommerce",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "content-briefs/en-what-to-pack-dolomites",
+          "grade": 1
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "content-briefs/guida-vie-ferrate-scarpe",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "Hyphenated token splits into e / e / a / t.",
+      "added": "wp0"
+    }
   ]
 }
