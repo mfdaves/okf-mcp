@@ -7,17 +7,17 @@ const {
   parseMarkdownFile,
   parseMarkdownText,
   safeRelativePath,
-} = require("./parser");
+} = require("../parser");
 const {
   buildAssetRegistry,
   collectAssetReferences,
   isExternalReference,
   isLocalAssetReference,
   mimeIsText,
-} = require("./assets");
-const { DEFAULT_RELATION_TYPES, loadProjectConfig } = require("./project");
-const { fetchRemoteBundles } = require("./remote");
-const { validateIndex } = require("./validation");
+} = require("../assets");
+const { DEFAULT_RELATION_TYPES, loadProjectConfig } = require("../project");
+const { fetchRemoteBundles } = require("../remote");
+const { validateIndex } = require("../validation");
 
 function sanitizeBundleId(value, fallback) {
   const raw = String(value || fallback || "bundle").trim();

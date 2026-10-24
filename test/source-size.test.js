@@ -15,7 +15,7 @@ const LINE_CAP = 800;
 const GRANDFATHERED = {
   "authoring.js": 1092,
   "cli.js": 996,
-  "indexer.js": 1221,
+  "indexer/build.js": 1221,
   "migration.js": 865,
 };
 
