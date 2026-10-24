@@ -7,12 +7,20 @@
 // polled asynchronously until waitMs has passed, then the writer fails with
 // cache_locked. A lock older than staleMs belongs to a writer that crashed:
 // it is reclaimed by renaming it to lock.stale.<token>, which only one
-// reclaimer can win, and unlinking the renamed file; the reclaimer then
-// competes for a fresh lock like everyone else. Release reads the lock and
-// unlinks it only while it still holds the releaser's token, so a successor's
-// lock survives a late release. A crashed writer therefore blocks other
-// writers for up to staleMs; the deadline always ends in cache_locked, a
-// failed reclaim included.
+// reclaimer can win. The parked file is then read back: only when it still
+// carries the token that was observed stale, and is still stale, is it
+// removed; a fresh lock that slipped into the slot between the staleness
+// read and the rename is put back with link(parked, lock) and the slot is
+// treated as busy. Release reads the lock and unlinks it only while it still
+// holds the releaser's token, so a successor's lock survives a late release.
+//
+// Residual windows, documented rather than closed: a crashed writer blocks
+// other writers for up to staleMs; a write that outlasts staleMs can lose
+// its lock to a reclaimer; and when a third writer creates `lock` between a
+// mistaken park and the restoring link, the displaced fresh owner finishes
+// its write without the lock while its parked copy waits for collection.
+// The deadline always ends in cache_locked, a failed or undone reclaim
+// included.
 
 const crypto = require("node:crypto");
 const fs = require("node:fs");
@@ -66,26 +74,55 @@ function readLock(lockPath) {
   };
 }
 
-// Parks a stale lock under a name only this reclaimer uses; the rename is
-// the arbitration, the unlink is best effort (garbage collection finishes it).
-function reclaimStaleLock(lockPath, token, io) {
+// Puts a mistakenly parked fresh lock back. link() refuses when the slot has
+// been taken meanwhile (EEXIST); then the parked copy stays for collection
+// and its owner's release finds no token of its own and leaves things alone.
+function restoreParkedLock(lockPath, parked, io) {
+  try {
+    io.link(parked, lockPath);
+  } catch (error) {
+    if (error?.code === "EEXIST") return;
+    try {
+      if (!fs.existsSync(lockPath)) io.rename(parked, lockPath);
+    } catch {
+      // Left parked; collected by age.
+    }
+    return;
+  }
+  try {
+    io.remove(parked);
+  } catch {
+    // Left parked; collected by age.
+  }
+}
+
+// Parks the lock under a name only this reclaimer uses (the rename is the
+// arbitration), then checks that what was parked is the stale lock that was
+// observed. Returns true only when a stale lock was removed.
+function reclaimStaleLock(lockPath, observed, token, staleMs, io) {
   const parked = `${lockPath}.stale.${token}`;
   try {
     io.rename(lockPath, parked);
   } catch {
     return false;
   }
-  try {
-    io.remove(parked);
-  } catch {
-    // Left behind for garbage collection.
+  const moved = readLock(parked);
+  if (moved && moved.token === observed.token && moved.ageMs > staleMs) {
+    try {
+      io.remove(parked);
+    } catch {
+      // Left behind for garbage collection.
+    }
+    return true;
   }
-  return true;
+  restoreParkedLock(lockPath, parked, io);
+  return false;
 }
 
-// io: { verify(), rename(from, to), remove(target) }. verify() runs before
-// every attempt so a directory swapped while waiting fails the wait instead
-// of placing the lock, and later the files, somewhere else.
+// io: { verify(), rename(from, to), remove(target), link(from, to) }. The
+// store's io verifies the directory inside every operation; verify() also
+// runs before every attempt, so a directory swapped while waiting fails the
+// wait instead of placing the lock, and later the files, somewhere else.
 async function acquireLock(dir, options) {
   const { token, generation, waitMs, staleMs, io } = options;
   const lockPath = path.join(dir, LOCK_FILE);
@@ -105,7 +142,7 @@ async function acquireLock(dir, options) {
     }
     if (created) return lockPath;
     const holder = readLock(lockPath);
-    if (holder && holder.ageMs > staleMs) reclaimStaleLock(lockPath, token, io);
+    if (holder && holder.ageMs > staleMs) reclaimStaleLock(lockPath, holder, token, staleMs, io);
     if (Date.now() >= deadline) {
       throw new VectorCacheError(
         "The vector cache is being written by another process.",
@@ -117,9 +154,7 @@ async function acquireLock(dir, options) {
   }
 }
 
-// Unlinks the lock only while it still carries this writer's token. The read
-// and the unlink are two steps; a successor can slip in between only after a
-// write that outlasted staleMs, which is the documented residual window.
+// Unlinks the lock only while it still carries this writer's token.
 function releaseLock(lockPath, token, io) {
   const holder = readLock(lockPath);
   if (!holder || holder.token !== token) return false;

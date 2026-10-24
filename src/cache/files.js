@@ -22,16 +22,28 @@ function writeAll(fd, content) {
   }
 }
 
+// Errors that mean "this platform or filesystem does not sync directories";
+// anything else (EIO, ENOSPC, ...) is a real failure and propagates.
+const UNSUPPORTED_DIRECTORY_SYNC = new Set([
+  "EINVAL",
+  "ENOTSUP",
+  "EOPNOTSUPP",
+  "EPERM",
+  "EISDIR",
+  "EBADF",
+]);
+
 // Makes a rename durable: the directory entry is flushed where the platform
-// allows it; elsewhere, or on filesystems that refuse, this is a no-op.
-function syncDirectory(dir) {
+// allows it. options.fsync exists for tests.
+function syncDirectory(dir, options) {
   if (!O_DIRECTORY) return;
+  const fsyncImpl = options?.fsync || fs.fsyncSync;
   let fd = null;
   try {
     fd = fs.openSync(dir, fs.constants.O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
-    fs.fsyncSync(fd);
-  } catch {
-    // Unsupported here; the rename itself is still atomic.
+    fsyncImpl(fd);
+  } catch (error) {
+    if (!UNSUPPORTED_DIRECTORY_SYNC.has(error?.code)) throw error;
   } finally {
     if (fd !== null) fs.closeSync(fd);
   }

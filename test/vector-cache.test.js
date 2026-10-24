@@ -893,6 +893,187 @@ test("a data file swapped for a link fails closed instead of being read", {
   }
 });
 
+test("a fresh lock that slips in before the reclaim rename is put back or left for its owner", async (t) => {
+  const dir = path.join(tempDir(t, "okf-vector-cache-"), "cache");
+  const cache = open(dir, { lockWaitMs: 150 });
+  await cache.putMany([entry("a", [1, 1, 1, 1])]);
+  const lockPath = path.join(dir, "lock");
+  const stale = () => JSON.stringify({ token: "gone", pid: 1, createdAt: ago(11 * MINUTES) });
+  const fresh = (token) => JSON.stringify({ token, pid: 2, createdAt: ago(0) });
+
+  // The staleness read sees "gone"; before our rename runs, a fresh foreign
+  // lock takes the slot. The rename parks that fresh lock, the token check
+  // notices, and link() puts it back.
+  let interleaved = 0;
+  cache.renameFile = (from, to) => {
+    if (path.basename(from) === "lock" && interleaved === 0) {
+      interleaved += 1;
+      writeLock(dir, fresh("fresh"));
+    }
+    fs.renameSync(from, to);
+  };
+  writeLock(dir, stale());
+  await assert.rejects(
+    cache.putMany([entry("b", [2, 2, 2, 2])]),
+    (error) => error.code === "cache_locked",
+  );
+  assert.equal(interleaved, 1);
+  assert.equal(readLockFile(dir).token, "fresh", "the fresh lock was restored");
+  assert.deepEqual(
+    dataFiles(dir).filter((name) => name.startsWith("lock.stale.")),
+    [],
+    "the parked copy is gone",
+  );
+  assert.equal(manifestOf(dir).count, 1, "nothing was written");
+
+  // When a third writer takes the slot before the restoring link, the parked
+  // copy stays for collection and the slot is treated as busy.
+  fs.unlinkSync(lockPath);
+  writeLock(dir, stale());
+  interleaved = 0;
+  cache.linkFile = () => {
+    writeLock(dir, fresh("third"));
+    const error = new Error("file exists");
+    error.code = "EEXIST";
+    throw error;
+  };
+  await assert.rejects(
+    cache.putMany([entry("c", [3, 3, 3, 3])]),
+    (error) => error.code === "cache_locked",
+  );
+  assert.equal(readLockFile(dir).token, "third", "the third writer's lock is untouched");
+  const parked = dataFiles(dir).filter((name) => name.startsWith("lock.stale."));
+  assert.equal(parked.length, 1, "the displaced lock waits for collection");
+  assert.equal(JSON.parse(fs.readFileSync(path.join(dir, parked[0]), "utf8")).token, "fresh");
+  assert.equal(manifestOf(dir).count, 1);
+});
+
+test("a directory swapped between the two data writes stops before the vectors land", {
+  skip: POSIX_ONLY,
+}, async (t) => {
+  const base = tempDir(t, "okf-vector-cache-");
+  const elsewhere = path.join(base, "elsewhere");
+  fs.mkdirSync(elsewhere);
+  const dir = path.join(base, "parent", "cache");
+  const cache = open(dir);
+  await cache.putMany([entry("a", [1, 1, 1, 1])]);
+  let swapped = false;
+  cache.writeFile = (target, content) => {
+    VectorCache.prototype.writeFile.call(cache, target, content);
+    if (!swapped && /units\.[^/\\]+\.json$/.test(target)) {
+      swapped = true;
+      fs.renameSync(path.join(base, "parent"), path.join(base, "parent-old"));
+      fs.symlinkSync(elsewhere, path.join(base, "parent"));
+    }
+  };
+  await assert.rejects(
+    cache.putMany([entry("b", [2, 2, 2, 2])]),
+    (error) => error.code === "invalid_cache_dir",
+  );
+  assert.equal(swapped, true);
+  assert.deepEqual(fs.readdirSync(elsewhere), [], "nothing landed at the new target");
+  const old = path.join(base, "parent-old", "cache");
+  const names = fs.readdirSync(old);
+  assert.equal(names.filter((name) => name.startsWith("vectors.")).length, 1, "no vectors written");
+  assert.equal(names.filter((name) => name.startsWith("units.")).length, 2);
+  assert.equal(JSON.parse(fs.readFileSync(path.join(old, "manifest.json"), "utf8")).count, 1);
+});
+
+test("garbage collection after a swap unlinks nothing", { skip: POSIX_ONLY }, async (t) => {
+  const base = tempDir(t, "okf-vector-cache-");
+  const elsewhere = path.join(base, "elsewhere");
+  fs.mkdirSync(elsewhere);
+  const dir = path.join(base, "parent", "cache");
+  const cache = open(dir);
+  await cache.putMany([entry("a", [1, 1, 1, 1])]);
+  const first = manifestOf(dir);
+  let swapped = false;
+  cache.writeFile = (target, content) => {
+    VectorCache.prototype.writeFile.call(cache, target, content);
+    if (!swapped && target.endsWith("manifest.json")) {
+      swapped = true;
+      fs.renameSync(path.join(base, "parent"), path.join(base, "parent-old"));
+      fs.symlinkSync(elsewhere, path.join(base, "parent"));
+    }
+  };
+  // The commit landed before the swap, so the write succeeds; collection and
+  // release find a directory that no longer verifies and touch nothing.
+  await cache.putMany([entry("b", [2, 2, 2, 2])]);
+  const old = path.join(base, "parent-old", "cache");
+  assert.equal(fs.existsSync(path.join(old, first.files.units)), true, "nothing was collected");
+  assert.equal(fs.existsSync(path.join(old, first.files.vectors)), true);
+  assert.equal(JSON.parse(fs.readFileSync(path.join(old, "manifest.json"), "utf8")).count, 2);
+  assert.deepEqual(fs.readdirSync(elsewhere), []);
+});
+
+test("never forgets a retired generation younger than the grace period", async (t) => {
+  const dir = path.join(tempDir(t, "okf-vector-cache-"), "cache");
+  const cache = open(dir);
+  await cache.putMany([entry("seed", [0, 0, 0, 0])]);
+  const foreign = [];
+  for (let index = 0; index < 70; index += 1) {
+    const generation = `f${index.toString(36).padStart(7, "0")}-${index.toString(16).padStart(8, "0")}`;
+    const current = manifestOf(dir);
+    const digests = writeGeneration(
+      dir,
+      generation,
+      [{ id: `x${index}`, hash: hash(`x${index}`) }],
+      [1, 2, 3, 4],
+    );
+    // A long-running foreign writer: old files, committed just now.
+    ageFile(path.join(dir, `units.${generation}.json`), 16 * MINUTES);
+    ageFile(path.join(dir, `vectors.${generation}.f32`), 16 * MINUTES);
+    writeManifest(dir, {
+      ...current,
+      generation,
+      files: { units: `units.${generation}.json`, vectors: `vectors.${generation}.f32` },
+      digests,
+    });
+    await cache.putMany([entry(`own${index}`, [1, 1, 1, 1])]);
+    foreign.push(generation);
+  }
+  const final = manifestOf(dir);
+  assert.equal(final.retired.length, 70, "every young retirement is still recorded");
+  for (const generation of foreign) {
+    assert.equal(fs.existsSync(path.join(dir, `units.${generation}.json`)), true, generation);
+  }
+
+  // Past the grace period the cap applies and the forgotten entries' files
+  // go in the same step as the remembered ones.
+  writeManifest(dir, {
+    ...final,
+    retired: final.retired.map((item) => ({ ...item, retiredAt: ago(16 * MINUTES) })),
+  });
+  await cache.putMany([entry("last", [2, 2, 2, 2])]);
+  for (const generation of foreign) {
+    assert.equal(fs.existsSync(path.join(dir, `units.${generation}.json`)), false, generation);
+  }
+  assert.ok(manifestOf(dir).retired.length <= 64);
+  await cache.putMany([entry("after", [3, 3, 3, 3])]);
+  assert.deepEqual(manifestOf(dir).retired, []);
+});
+
+test("directory fsync swallows only unsupported errors", { skip: POSIX_ONLY }, (t) => {
+  const { syncDirectory } = require("../src/cache/files");
+  const dir = tempDir(t, "okf-vector-cache-");
+  const failing = (code) => () => {
+    const error = new Error(code);
+    error.code = code;
+    throw error;
+  };
+  for (const code of ["EINVAL", "ENOTSUP", "EOPNOTSUPP", "EPERM", "EISDIR", "EBADF"]) {
+    assert.doesNotThrow(() => syncDirectory(dir, { fsync: failing(code) }), code);
+  }
+  for (const code of ["EIO", "ENOSPC", "EROFS"]) {
+    assert.throws(
+      () => syncDirectory(dir, { fsync: failing(code) }),
+      (error) => error.code === code,
+      code,
+    );
+  }
+  syncDirectory(dir);
+});
+
 test("resolveCacheDir derives a location outside the root and follows the platform", (t) => {
   const base = tempDir(t, "okf-vector-cache-");
   const root = path.join(base, "bundle");

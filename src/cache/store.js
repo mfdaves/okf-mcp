@@ -69,7 +69,11 @@ const GENERATION_FILE = /^(units|vectors)\.([0-9a-z]{1,16}-[0-9a-f]{8})\.(json|f
 const LOCK_STALE_MS = 10 * 60 * 1000;
 const LOCK_WAIT_MS = 2000;
 const GC_GRACE_MS = 15 * 60 * 1000;
+// The retired list keeps every entry younger than the grace period; the cap
+// applies only to entries past it, which are collectable anyway. The parse
+// bound guards against a pathological manifest, not against young entries.
 const MAX_RETIRED = 64;
+const MAX_RETIRED_PARSE = 4096;
 const HASH_PATTERN = /^[a-f0-9]{64}$/;
 const MAX_DIMENSION = 65536;
 const MIN_CAPACITY_ROWS = 64;
@@ -101,7 +105,7 @@ function parseRetired(value) {
         Number.isFinite(Date.parse(entry.retiredAt)),
     )
     .map((entry) => ({ generation: entry.generation, retiredAt: entry.retiredAt }))
-    .slice(-MAX_RETIRED);
+    .slice(-MAX_RETIRED_PARSE);
 }
 
 function parseManifest(buffer, embedderId, dimension) {
@@ -441,6 +445,32 @@ class VectorCache {
     fs.renameSync(from, to);
   }
 
+  linkFile(from, to) {
+    fs.linkSync(from, to);
+  }
+
+  // Every mutation of the directory goes through these: each verifies the
+  // location first, so no call site can skip the check.
+  guardedWrite(target, content) {
+    this.verifyLocation();
+    return this.writeFile(target, content);
+  }
+
+  guardedRemove(target) {
+    this.verifyLocation();
+    this.removeFile(target);
+  }
+
+  guardedRename(from, to) {
+    this.verifyLocation();
+    this.renameFile(from, to);
+  }
+
+  guardedLink(from, to) {
+    this.verifyLocation();
+    this.linkFile(from, to);
+  }
+
   hasGenerationFiles(entry) {
     return (
       fs.existsSync(path.join(this.dir, `units.${entry.generation}.json`)) ||
@@ -475,8 +505,9 @@ class VectorCache {
     const token = newLockToken();
     const io = {
       verify: () => this.verifyLocation(),
-      rename: (from, to) => this.renameFile(from, to),
-      remove: (target) => this.removeFile(target),
+      rename: (from, to) => this.guardedRename(from, to),
+      remove: (target) => this.guardedRemove(target),
+      link: (from, to) => this.guardedLink(from, to),
     };
     const lockPath = await acquireLock(this.dir, {
       token,
@@ -490,8 +521,18 @@ class VectorCache {
       this.ownGenerations.add(generation);
       const previous = this.committedState();
       const now = new Date().toISOString();
-      const retired = previous.retired
-        .filter((entry) => entry.generation !== generation && this.hasGenerationFiles(entry))
+      const cutoff = Date.now() - GC_GRACE_MS;
+      const kept = previous.retired.filter(
+        (entry) => entry.generation !== generation && this.hasGenerationFiles(entry),
+      );
+      // Entries younger than the grace period are never forgotten; the cap
+      // applies to entries past it, and a forgotten entry's files are
+      // collected in this same step.
+      const past = kept.filter((entry) => Date.parse(entry.retiredAt) < cutoff);
+      const forgotten = past.slice(0, Math.max(0, past.length - MAX_RETIRED));
+      const retired = past
+        .slice(forgotten.length)
+        .concat(kept.filter((entry) => Date.parse(entry.retiredAt) >= cutoff))
         .concat(
           // An own generation is collected right after this commit, so only
           // a foreign one is worth recording.
@@ -500,16 +541,15 @@ class VectorCache {
             !this.ownGenerations.has(previous.generation)
             ? [{ generation: previous.generation, retiredAt: now }]
             : [],
-        )
-        .slice(-MAX_RETIRED);
+        );
       const count = this.rows.length;
       const files = { units: `units.${generation}.json`, vectors: `vectors.${generation}.f32` };
       const unitBytes = Buffer.from(`${JSON.stringify(this.rows)}\n`, "utf8");
       const vectorBytes = littleEndian(
         Buffer.from(this.data.buffer, this.data.byteOffset, count * this.dimension * 4),
       );
-      await this.writeFile(path.join(this.dir, files.units), unitBytes);
-      await this.writeFile(path.join(this.dir, files.vectors), vectorBytes);
+      await this.guardedWrite(path.join(this.dir, files.units), unitBytes);
+      await this.guardedWrite(path.join(this.dir, files.vectors), vectorBytes);
       const manifest = {
         format: VECTOR_CACHE_FORMAT,
         formatVersion: VECTOR_CACHE_FORMAT_VERSION,
@@ -522,16 +562,14 @@ class VectorCache {
         retired,
         updatedAt: now,
       };
-      this.verifyLocation();
-      await this.writeFile(
+      await this.guardedWrite(
         path.join(this.dir, MANIFEST_FILE),
         Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`, "utf8"),
       );
       this.generation = generation;
-      this.verifyLocation();
-      this.collectGarbage(retired);
+      this.collectGarbage(retired.concat(forgotten));
     } finally {
-      if (this.locationIntact()) releaseLock(lockPath, token, io);
+      releaseLock(lockPath, token, io);
     }
   }
 
@@ -539,18 +577,19 @@ class VectorCache {
   // reference them, and readers hold their rows in memory. A retired foreign
   // generation goes once its retirement is older than the grace period; a
   // never-committed orphan, a stale temporary file or a parked stale lock
-  // once its files are. Best effort; a failure here never fails the write
-  // that just completed.
+  // once its files are. Best effort: a failure here never fails the write
+  // that just completed, and a directory that no longer verifies stops the
+  // collection before anything is unlinked.
   collectGarbage(retired) {
     let entries;
     try {
+      this.verifyLocation();
       entries = fs.readdirSync(this.dir, { withFileTypes: true });
     } catch {
       return;
     }
     const locked = readLock(path.join(this.dir, LOCK_FILE))?.generation || null;
-    const now = Date.now();
-    const cutoff = now - GC_GRACE_MS;
+    const cutoff = Date.now() - GC_GRACE_MS;
     const retiredAt = new Map(
       retired.map((entry) => [entry.generation, Date.parse(entry.retiredAt)]),
     );
@@ -570,8 +609,9 @@ class VectorCache {
       }
       if (!remove) continue;
       try {
-        this.removeFile(target);
-      } catch {
+        this.guardedRemove(target);
+      } catch (error) {
+        if (error instanceof VectorCacheError) return;
         // Another process may have removed it first; the next write retries.
       }
     }
