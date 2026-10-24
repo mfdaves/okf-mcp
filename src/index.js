@@ -20,4 +20,9 @@ module.exports = {
   ...require("./store"),
   ...require("./http-server"),
   ...require("./mcp-server"),
+  ...require("./embed/interface"),
+  ...require("./embed/units"),
+  ...require("./embed/openai"),
+  ...require("./embed/prepare"),
+  ...require("./cache/store"),
 };
