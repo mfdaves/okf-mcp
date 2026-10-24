@@ -23,11 +23,13 @@
 // `text` is the section's plain text: the heading once, then paragraphs, list
 // items, code blocks and tables flattened one block or row per line, links
 // and images reduced to their text, inline HTML dropped, whitespace runs
-// collapsed. `hash` is the SHA-256 of that text, the same function as
+// collapsed. `hash` is the SHA-256 of that text from `hashUnitText` in
 // src/embed/units.js, so `sectionUnits` can replace the concept units in
-// `prepareEmbeddings` (WP3c) and identical sections share one cache row (R-9).
+// `prepareEmbeddings` (WP3c: `units: sectionUnits`) and identical sections
+// share one cache row (R-9). Section units cover valid concepts only, the set
+// search ranks (`index.concepts`); concept units also embed invalid ones.
 
-const crypto = require("node:crypto");
+const { hashUnitText } = require("../embed/units");
 const { markdownStructure, sectionNodes } = require("../markdown");
 
 // Parsed document -> its sections. Documents are shared unchanged across
@@ -46,10 +48,6 @@ function headingSlug(heading) {
     .toLowerCase()
     .replace(/[^\p{L}\p{N}\s-]/gu, "")
     .replace(/\s/g, "-");
-}
-
-function hashText(text) {
-  return crypto.createHash("sha256").update(String(text), "utf8").digest("hex");
 }
 
 // One line per block, no empty lines, whitespace runs collapsed.
@@ -149,7 +147,7 @@ function makeSection(doc, fields, parts) {
     Object.assign({ uri: doc.uri }, fields, {
       text,
       charCount: text.length,
-      hash: hashText(text),
+      hash: hashUnitText(text),
     }),
   );
 }
