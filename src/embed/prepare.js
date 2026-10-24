@@ -118,7 +118,12 @@ async function prepareEmbeddings(index, embedder, cache, options) {
       next += 1;
       try {
         calls += 1;
-        const vectors = await embedder.embed(batch.map((unit) => unit.text));
+        // One request bound for the whole run: this pool is the parallelism,
+        // so each call runs its own requests one at a time.
+        const vectors = await embedder.embed(
+          batch.map((unit) => unit.text),
+          { concurrency: 1 },
+        );
         if (!Array.isArray(vectors) || vectors.length !== batch.length) {
           throw new EmbedderError(
             "The embedder returned a different number of vectors than inputs.",

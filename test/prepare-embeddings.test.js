@@ -388,6 +388,76 @@ test("calls embed() with at most maxBatch units and at most concurrency calls in
   assert.equal(other.size, 8);
 });
 
+test("keeps the requests in flight at the prepare concurrency when calls split into requests", async (t) => {
+  const work = tempDir(t, "okf-embed-prepare-");
+  const server = await startFakeEmbeddingsServer({ apiKey: KEY, dimension: 4, delayMs: 20 });
+  t.after(() => server.close());
+  const embedder = createOpenAiEmbedder({
+    baseUrl: server.baseUrl,
+    model: "fake-embed",
+    apiKeyEnv: "OKF_TEST_EMBED_KEY",
+    env: { OKF_TEST_EMBED_KEY: KEY },
+    dimensions: 4,
+    batchSize: 8,
+    concurrency: 2,
+    maxInputChars: 400,
+    maxRequestTokens: 200,
+  });
+  // 100 tokens per unit and a 200-token budget: every call of 8 units splits
+  // into 4 requests, and two calls run at once.
+  const units = Array.from({ length: 40 }, (_, position) => {
+    const text = `${position}`.padEnd(400, "x");
+    return { id: `okf://b/${position}`, text, hash: hashUnitText(text) };
+  });
+  const cache = openVectorCache(path.join(work, "cache"), {
+    embedderId: embedder.id,
+    dimension: 4,
+  });
+  const receipt = await prepareEmbeddings({}, embedder, cache, { units: () => units });
+  assert.equal(receipt.embedded, 40);
+  assert.equal(receipt.requests, 20);
+  assert.equal(server.requests.length, 20);
+  assert.ok(
+    server.stats.maxInFlight <= 2,
+    `at most two requests in flight, saw ${server.stats.maxInFlight}`,
+  );
+});
+
+test("a failing call lets the in-flight call settle before the error surfaces", async (t) => {
+  const work = tempDir(t, "okf-embed-prepare-");
+  let calls = 0;
+  const settled = [];
+  const stub = {
+    id: "settle:test:4",
+    dimension: 4,
+    languages: [],
+    remote: false,
+    maxBatch: 8,
+    maxInputChars: 1000,
+    concurrency: 2,
+    async embed(texts) {
+      calls += 1;
+      const call = calls;
+      if (call === 1) throw new Error("first call failed");
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      settled.push(call);
+      return texts.map((text) => vectorFor(text, 4));
+    },
+  };
+  const units = Array.from({ length: 24 }, (_, position) => {
+    const text = `unit ${position}`;
+    return { id: `okf://b/${position}`, text, hash: hashUnitText(text) };
+  });
+  const cache = openVectorCache(path.join(work, "cache"), { embedderId: stub.id, dimension: 4 });
+  await assert.rejects(
+    prepareEmbeddings({}, stub, cache, { units: () => units }),
+    /first call failed/,
+  );
+  assert.equal(calls, 2, "no call was started after the failure");
+  assert.deepEqual(settled, [2], "the in-flight call finished before the rejection");
+  assert.equal(cache.size, 8, "its batch was persisted");
+});
+
 test("unit hashes are stable for identical text and change with any character", () => {
   const text = "Title\nDescription\n# Body";
   assert.equal(hashUnitText(text), crypto.createHash("sha256").update(text).digest("hex"));
