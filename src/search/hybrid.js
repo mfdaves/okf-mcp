@@ -122,6 +122,7 @@ class EmbeddingRuntime {
     this.queryVectors = new Map();
     this.syncedIndex = null;
     this.syncing = null;
+    this.syncingIndex = null;
     this.syncQueue = Promise.resolve();
     this.lastSync = null;
     this.syncError = null;

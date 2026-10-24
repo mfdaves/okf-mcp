@@ -8,7 +8,7 @@
 //
 //   node --expose-gc scripts/index-benchmark.js --sizes 5000,20000 --rounds 5 \
 //     --search-module scripts/hybrid-bench-module.js \
-//     --search-options '{"dimension":512,"unitsPerConcept":4,"alpha":0.5}'
+//     --search-options '{"dimension":512,"unitsPerConcept":4,"alpha":0.4}'
 //
 // unitsPerConcept > 1 stands in for section units (`uri#s<n>`): 5,000 concepts x 4 units is
 // 20,000 vectors. The stand-in implements only what dense scoring reads from a cache
@@ -17,6 +17,7 @@
 const crypto = require("node:crypto");
 
 const { hashUnitText } = require("../src/embed/units");
+const { DEFAULT_FUSION_ALPHA } = require("../src/search/fusion");
 const { searchConcepts } = require("../src/search/query");
 
 const STATE = new WeakMap();
@@ -48,7 +49,7 @@ function settings(options) {
   return {
     dimension: Number.isSafeInteger(config.dimension) ? config.dimension : 512,
     unitsPerConcept: Number.isSafeInteger(config.unitsPerConcept) ? config.unitsPerConcept : 1,
-    alpha: typeof config.alpha === "number" ? config.alpha : 0.5,
+    alpha: typeof config.alpha === "number" ? config.alpha : DEFAULT_FUSION_ALPHA,
   };
 }
 
