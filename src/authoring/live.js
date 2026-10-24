@@ -12,6 +12,7 @@ const {
   renderConceptMarkdown,
 } = require("../authoring");
 const {
+  IndexCache,
   attachProject,
   buildIndex,
   bundleAllowsPath,
@@ -62,15 +63,37 @@ const { assertRevisions, rollback, stageCandidates } = require("./staging");
 const MAX_CHANGES = 100;
 const MAX_COMMIT_MESSAGE_BYTES = 1024;
 
-function bundleSignature(additionalBundles) {
-  return (additionalBundles || []).map((bundle) => String(bundle?.id)).join("\u0000");
-}
-
 // The candidate as an index upsert: its rendered Markdown before it is
 // written, or a read-back of the target path once it is.
 function candidateUpsert(candidate, persisted) {
   const upsert = { bundleId: candidate.bundle, relativePath: candidate.path };
   return persisted ? upsert : Object.assign(upsert, { text: candidate.markdown });
+}
+
+// The receipt of a batch rolled back before publication: for a failure, one
+// whose files could not all be put back; without one, a batch whose
+// persisted state failed validation (rolled back completely or not).
+function rollbackReceipt(plan, rollback, error) {
+  const complete = !error && rollback.complete;
+  return {
+    applied: false,
+    readyToApply: false,
+    filesChanged: !complete,
+    status: complete ? "rolled_back" : "rollback_conflict",
+    snapshot: snapshotReceipt(plan),
+    preconditions: preconditionsReceipt(plan),
+    generated: plan.generated,
+    target: plan.target,
+    durability: durabilityReceipt(
+      null,
+      !complete,
+      complete ? "rolled_back" : "partial_filesystem_state",
+    ),
+    changes: plan.changes,
+    validation: plan.validation,
+    rollback,
+    ...(error ? { error: error.message ? error.message : String(error) } : {}),
+  };
 }
 
 class LiveAuthoringService {
@@ -82,17 +105,15 @@ class LiveAuthoringService {
     this.spawnSync = config.spawnSync || nodeSpawnSync;
     this.now = config.now || (() => new Date());
     this.git = new GitPublisher({ gitCommit: this.gitCommit, spawnSync: this.spawnSync });
-    // The current index is kept between batches and brought up to date from
-    // the bundle roots before each one, so a batch costs one incremental
-    // update instead of full builds (W-6). A host that already holds an index
-    // built with the same parameters hands it over through adoptIndex and
-    // takes the post-publication index back through takePublication.
-    this.indexCache = null;
+    // One index kept between batches and refreshed before each (W-6); a host
+    // holding one built with the same parameters hands it over through
+    // adoptIndex and takes the published one back through takePublication.
+    this.indexCache = new IndexCache({ now: this.now });
     this.publication = null;
   }
 
   adoptIndex(index, additionalBundles) {
-    this.indexCache = { signature: bundleSignature(additionalBundles), index, hostOwned: true };
+    this.indexCache.adopt(index, additionalBundles);
   }
 
   takePublication() {
@@ -102,24 +123,13 @@ class LiveAuthoringService {
   }
 
   currentIndex(additionalBundles) {
-    const signature = bundleSignature(additionalBundles);
-    const cache = this.indexCache;
-    if (cache && cache.signature === signature) {
-      const refreshed = refreshIndex(cache.index);
-      if (refreshed !== cache.index) {
-        this.indexCache = Object.assign({}, cache, { index: refreshed });
-      }
-      return refreshed;
-    }
-    const index = this.buildIndex(additionalBundles);
-    this.indexCache = { signature, index, hostOwned: false };
-    return index;
+    return this.indexCache.current(additionalBundles, () => this.buildIndex(additionalBundles));
   }
 
   // Called when the files on disk are no longer known to match any index the
   // service holds (an incomplete rollback, a diverged worktree).
   forgetIndex() {
-    this.indexCache = null;
+    this.indexCache.forget();
   }
 
   getBundle(id) {
@@ -246,7 +256,19 @@ class LiveAuthoringService {
     const indexedRevision = revisionFor(existing.text);
     const diskRevision = revisionFor(originalText);
     if (indexedRevision !== diskRevision) {
-      throw new Error(`Concept changed after it was indexed; retry the update: ${existing.uri}`);
+      // planChanges re-reads the document and plans again once; a second
+      // mismatch is a conflict the caller sees with the revision now on disk.
+      throw new AuthoringPolicyError(
+        `Concept changed after it was indexed; retry the update: ${existing.uri}`,
+        "concept_changed",
+        {
+          uri: existing.uri,
+          bundleId: existing.bundle,
+          relativePath: existing.path,
+          indexedRevision,
+          revision: diskRevision,
+        },
+      );
     }
     const frontmatter = Object.assign({}, existing.frontmatter);
     Object.assign(frontmatter, validateMetadata(change.metadata, "changes[].metadata"));
@@ -398,6 +420,29 @@ class LiveAuthoringService {
     };
   }
 
+  buildCandidates(changes, bundle, currentIndex, generated) {
+    return changes.map((change, index) => {
+      if (!isPlainObject(change)) {
+        throw new AuthoringPolicyError(`changes[${index}] must be an object.`);
+      }
+      try {
+        if (change.op === "create") {
+          return this.createCandidate(change, bundle, currentIndex, generated);
+        }
+        if (change.op === "update") {
+          return this.updateCandidate(change, bundle, currentIndex, generated);
+        }
+        throw new AuthoringPolicyError(`changes[${index}].op must be create or update.`);
+      } catch (error) {
+        if (error instanceof AuthoringPolicyError || error instanceof AuthoringOperationalError) {
+          throw error;
+        }
+        if (error?.code) throw error;
+        throw new AuthoringPolicyError(error?.message ? error.message : String(error));
+      }
+    });
+  }
+
   planChanges(input, context) {
     if (!isPlainObject(input)) {
       throw new AuthoringPolicyError("okf_apply_changes requires an object argument.");
@@ -421,27 +466,21 @@ class LiveAuthoringService {
     const generated = this.generatedStamp();
     const additionalBundles =
       context && Array.isArray(context.additionalBundles) ? context.additionalBundles : [];
-    const currentIndex = this.currentIndex(additionalBundles);
-    const candidates = input.changes.map((change, index) => {
-      if (!isPlainObject(change)) {
-        throw new AuthoringPolicyError(`changes[${index}] must be an object.`);
-      }
+    let currentIndex = this.currentIndex(additionalBundles);
+    let candidates = null;
+    for (let attempt = 0; candidates === null; attempt += 1) {
       try {
-        if (change.op === "create") {
-          return this.createCandidate(change, bundle, currentIndex, generated);
-        }
-        if (change.op === "update") {
-          return this.updateCandidate(change, bundle, currentIndex, generated);
-        }
-        throw new AuthoringPolicyError(`changes[${index}].op must be create or update.`);
+        candidates = this.buildCandidates(input.changes, bundle, currentIndex, generated);
       } catch (error) {
-        if (error instanceof AuthoringPolicyError || error instanceof AuthoringOperationalError) {
-          throw error;
-        }
-        if (error?.code) throw error;
-        throw new AuthoringPolicyError(error?.message ? error.message : String(error));
+        if (error?.code !== "concept_changed" || attempt > 0) throw error;
+        // The index missed an edit the refresh cannot see (same size and
+        // mtime): take that document from disk and plan again, once.
+        const { bundleId, relativePath } = error.details;
+        currentIndex = this.indexCache.update(currentIndex, {
+          upserts: [{ bundleId, relativePath }],
+        });
       }
-    });
+    }
     const targetPaths = new Set();
     candidates.forEach((candidate) => {
       const key = path.resolve(candidate.target.absolutePath);
@@ -499,9 +538,11 @@ class LiveAuthoringService {
     }
     const message = this.commitMessage(input, candidates);
     const validation = this.validationResult(
-      updateIndex(currentIndex, {
-        upserts: candidates.map((candidate) => candidateUpsert(candidate, false)),
-      }),
+      updateIndex(
+        currentIndex,
+        { upserts: candidates.map((candidate) => candidateUpsert(candidate, false)) },
+        this.indexCache.options(),
+      ),
       candidates,
     );
     const gitPreflight = this.git.prepareGit(bundle, candidates);
@@ -638,21 +679,7 @@ class LiveAuthoringService {
       const rollback = this.rollback(applied, staged, transaction.createdDirectories);
       if (!rollback.complete) {
         this.forgetIndex();
-        return {
-          applied: false,
-          readyToApply: false,
-          filesChanged: true,
-          status: "rollback_conflict",
-          snapshot: snapshotReceipt(plan),
-          preconditions: preconditionsReceipt(plan),
-          generated: plan.generated,
-          target: plan.target,
-          durability: durabilityReceipt(null, true, "partial_filesystem_state"),
-          changes: plan.changes,
-          validation: plan.validation,
-          rollback,
-          error: error?.message ? error.message : String(error),
-        };
+        return rollbackReceipt(plan, rollback, error);
       }
       throw error;
     }
@@ -660,30 +687,19 @@ class LiveAuthoringService {
     let persistedIndex;
     try {
       // Validate the bytes that landed on disk, read back from the targets,
-      // applied to the index the batch was planned against.
-      persistedIndex = updateIndex(plan.currentIndex, {
-        upserts: plan.candidates.map((candidate) => candidateUpsert(candidate, true)),
-      });
+      // applied to the index the batch was planned against after a refresh,
+      // so a dependency that changed or vanished since planning counts too.
+      persistedIndex = updateIndex(
+        refreshIndex(plan.currentIndex, this.indexCache.options()),
+        { upserts: plan.candidates.map((candidate) => candidateUpsert(candidate, true)) },
+        this.indexCache.options(),
+      );
       persistedValidation = this.validationResult(persistedIndex, plan.candidates);
     } catch (error) {
       const rollback = this.rollback(applied, staged, transaction.createdDirectories);
       if (!rollback.complete) {
         this.forgetIndex();
-        return {
-          applied: false,
-          readyToApply: false,
-          filesChanged: true,
-          status: "rollback_conflict",
-          snapshot: snapshotReceipt(plan),
-          preconditions: preconditionsReceipt(plan),
-          generated: plan.generated,
-          target: plan.target,
-          durability: durabilityReceipt(null, true, "partial_filesystem_state"),
-          changes: plan.changes,
-          validation: plan.validation,
-          rollback,
-          error: error?.message ? error.message : String(error),
-        };
+        return rollbackReceipt(plan, rollback, error);
       }
       throw error;
     }
@@ -692,24 +708,9 @@ class LiveAuthoringService {
       if (!rollback.complete) {
         this.forgetIndex();
       }
-      return {
-        applied: false,
-        readyToApply: false,
-        filesChanged: !rollback.complete,
-        status: rollback.complete ? "rolled_back" : "rollback_conflict",
-        snapshot: snapshotReceipt(plan),
-        preconditions: preconditionsReceipt(plan),
-        generated: plan.generated,
-        target: plan.target,
-        durability: durabilityReceipt(
-          null,
-          !rollback.complete,
-          rollback.complete ? "rolled_back" : "partial_filesystem_state",
-        ),
-        changes: plan.changes,
+      return Object.assign(rollbackReceipt(plan, rollback, null), {
         validation: persistedValidation,
-        rollback,
-      };
+      });
     }
     let git;
     try {
@@ -756,10 +757,8 @@ class LiveAuthoringService {
       }
       persistedValidation = currentValidation;
     } else {
-      const shared = this.indexCache?.index === plan.currentIndex;
-      if (shared) {
-        this.indexCache = Object.assign({}, this.indexCache, { index: persistedIndex });
-      }
+      const shared = this.indexCache.index === plan.currentIndex;
+      this.indexCache.replace(plan.currentIndex, persistedIndex);
       this.publication = {
         index: persistedIndex,
         hostOwned: Boolean(shared && this.indexCache.hostOwned),

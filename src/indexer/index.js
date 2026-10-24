@@ -3,15 +3,18 @@
 // The indexer's public surface. build.js loads bundles and builds a complete
 // index, edges.js derives one document's outbound graph, resolve.js turns
 // locators into concepts, assemble.js registers documents and assembles the
-// index object for both paths, and update.js applies changes to an existing
-// index and keeps derived views. Internal helpers stay on their modules; only
-// the names listed here are part of the package API.
+// index object for both paths, update.js applies changes to an existing
+// index and keeps derived views, and cache.js keeps one index current for a
+// host that writes. Internal helpers stay on their modules; only the names
+// listed here are part of the package API.
 const build = require("./build");
+const cache = require("./cache");
 const edges = require("./edges");
 const resolve = require("./resolve");
 const update = require("./update");
 
 module.exports = {
+  IndexCache: cache.IndexCache,
   buildIndex: build.buildIndex,
   buildProjectIndex: build.buildProjectIndex,
   buildProjectIndexAsync: build.buildProjectIndexAsync,

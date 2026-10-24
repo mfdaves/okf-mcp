@@ -8,6 +8,7 @@ const {
   indexUpdateStats,
   loadProjectBundles,
   parseBundleArg,
+  refreshIndex,
   updateIndex,
 } = require("../indexer");
 const { fetchRemoteBundles } = require("../remote");
@@ -68,8 +69,10 @@ function shareIndexWithLiveAuthoring(state) {
 
 // After a live batch the service hands over what it published: the server
 // adopts the service's index when the two share one, applies the batch to its
-// own index otherwise, and only rebuilds from scratch when there is no batch
-// to apply (producer runs, proposals, remote loads, a stale concept file).
+// own index otherwise (brought up to date with the files first, as the
+// service's own index was), and only rebuilds from scratch when there is no
+// batch to apply (producer runs, proposals, remote loads, a stale concept
+// file).
 function rebuildStateIndex(state) {
   const service = state.liveAuthoringService;
   const publication =
@@ -80,7 +83,7 @@ function rebuildStateIndex(state) {
       return state.index;
     }
     if (indexUpdateStats(state.index)) {
-      state.index = updateIndex(state.index, publication.changes);
+      state.index = updateIndex(refreshIndex(state.index), publication.changes);
       return state.index;
     }
   }
