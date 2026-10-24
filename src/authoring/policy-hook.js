@@ -1,7 +1,8 @@
 "use strict";
 
-const { renderConceptMarkdown } = require("./render");
+const { normalizeSlashes, splitFrontmatter } = require("../parser");
 const { evaluateWritePolicy, isWritePolicy, parseWritePolicy } = require("../policy/write-policy");
+const { renderConceptMarkdown } = require("./render");
 const { revisionFor } = require("./shared");
 
 // Where the live authoring service meets the write policy (plan W-1, W-2).
@@ -98,6 +99,16 @@ function violationMessage(violation) {
   return `Write policy ${rule} denies this write (${violation.reason}): ${subject}`;
 }
 
+function policyDiagnostics(violations) {
+  return violations.map((violation) =>
+    Object.assign({}, violation, {
+      severity: "error",
+      layer: "policy",
+      message: violationMessage(violation),
+    }),
+  );
+}
+
 // Violations join the batch's validation result as policy-layer diagnostics:
 // they invalidate the batch the way a graph error does, so valid,
 // readyToApply, status and the apply refusal follow one code path.
@@ -105,13 +116,7 @@ function withPolicyViolations(validation, policy) {
   if (!policy?.violations.length) {
     return validation;
   }
-  const diagnostics = policy.violations.map((violation) =>
-    Object.assign({}, violation, {
-      severity: "error",
-      layer: "policy",
-      message: violationMessage(violation),
-    }),
-  );
+  const diagnostics = policyDiagnostics(policy.violations);
   return Object.assign({}, validation, {
     valid: false,
     validForProject: false,
@@ -120,8 +125,90 @@ function withPolicyViolations(validation, policy) {
   });
 }
 
+// Proposals are writes too (plan W-1): a proposal is judged when it is
+// created, against the proposing actor, and again when it is accepted,
+// against the actor recorded on it (else the accepting one). Without any
+// actor the write is unattributed and the default effect decides. Returns
+// null without a policy, else { violations, defaultStatus }.
+function evaluateProposal(policy, actor, proposal) {
+  if (!policy) {
+    return null;
+  }
+  const frontmatter =
+    proposal.frontmatter && typeof proposal.frontmatter === "object" ? proposal.frontmatter : {};
+  const evaluation = evaluateWritePolicy(policy, {
+    actor: actor || null,
+    changes: [
+      {
+        op: proposal.op === "create" || proposal.op === "create_computation" ? "create" : "update",
+        bundleId: proposal.bundle,
+        path: proposal.path,
+        type: typeof frontmatter.type === "string" ? frontmatter.type : null,
+        frontmatter,
+        uri: proposal.uri || proposal.targetUri || null,
+      },
+    ],
+  });
+  return {
+    violations: evaluation.violations,
+    defaultStatus: evaluation.decisions[0]?.defaultStatus || null,
+  };
+}
+
+// A proposal validation refused by the policy: invalid, with the
+// violations as policy-layer errors beside the structured list.
+function refusedProposal(result, validation, violations) {
+  const errors = policyDiagnostics(violations);
+  return Object.assign(result, {
+    validation: Object.assign({}, validation, {
+      valid: false,
+      errors: (validation.errors || []).concat(errors),
+    }),
+    policyViolations: violations,
+  });
+}
+
+// Producers publish under process:<name> and are exempt unless the policy
+// sets applyToProducers. Created and updated concept files are judged as one
+// batch; unchanged and deleted paths, and the reserved index.md and log.md
+// documents, are not writes of a concept. Returns null when the policy does
+// not apply, else the violations.
+function evaluateProducerFiles(policy, instance, files, changes) {
+  if (!policy?.applyToProducers) {
+    return null;
+  }
+  const created = new Set(changes.create);
+  const written = new Set(changes.create.concat(changes.update));
+  const described = files
+    .filter((file) => written.has(file.path) && /\.md$/i.test(file.path))
+    .filter((file) => !/(^|\/)(index|log)\.md$/i.test(normalizeSlashes(file.path)))
+    .map((file) => {
+      let frontmatter = {};
+      try {
+        frontmatter = splitFrontmatter(file.content).frontmatter || {};
+      } catch {
+        // Unparseable output fails producer validation on its own.
+      }
+      const relative = normalizeSlashes(file.path);
+      return {
+        op: created.has(file.path) ? "create" : "update",
+        bundleId: instance.bundle,
+        path: relative,
+        type: typeof frontmatter.type === "string" ? frontmatter.type : null,
+        frontmatter,
+        uri: `okf://${instance.bundle}/${relative.replace(/\.md$/i, "")}`,
+      };
+    });
+  return evaluateWritePolicy(policy, { actor: `process:${instance.name}`, changes: described })
+    .violations;
+}
+
 module.exports = {
   enforceWritePolicy,
+  evaluateProducerFiles,
+  evaluateProposal,
+  policyDiagnostics,
+  refusedProposal,
   resolveWritePolicy,
   withPolicyViolations,
 };

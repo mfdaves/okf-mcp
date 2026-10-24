@@ -414,6 +414,7 @@ class FileConceptStore {
         : [],
       migrationId: input.migrationId || null,
       prerequisites: Array.isArray(input.prerequisites) ? input.prerequisites : [],
+      ...(input.proposedBy ? { proposedBy: input.proposedBy } : {}),
       createdAt: timestamp,
       updatedAt: timestamp,
     };

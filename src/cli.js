@@ -401,17 +401,17 @@ function parseArgs(argv) {
   if (write && !actor) {
     throw usageError("--write requires --actor <human:id|process:id|provider/model>.");
   }
-  if (write && !validActor(actor)) {
+  if (actor && !validActor(actor)) {
     throw usageError("--actor must use human:<id>, process:<id>, or provider/model syntax.");
   }
-  if (actor && !write) {
-    throw usageError("--actor requires --write.");
+  if (actor && !write && !authoring) {
+    throw usageError("--actor requires --write or --authoring.");
   }
   if (gitCommit && !write) {
     throw usageError("--git-commit requires --write.");
   }
-  if (policy && !write) {
-    throw usageError("--policy requires --write.");
+  if (policy && !write && !authoring) {
+    throw usageError("--policy requires --write or --authoring.");
   }
   return {
     bundles,
@@ -489,9 +489,9 @@ function usage() {
     "  --repo <concept-id=path>    Map a Git Repository concept to a checkout or bare repo; repeatable.",
     "  --authoring                 Enable MCP proposal authoring tools.",
     "  --write                     Enable direct validated-batch MCP concept writes (requires --actor).",
-    "  --actor <actor>             Stamp live writes and producer runs with human:id, process:id, or provider/model.",
+    "  --actor <actor>             Stamp live writes, proposals, and producer runs with human:id, process:id, or provider/model.",
     "  --git-commit                Commit each live write batch when the catalog is in a clean Git repo.",
-    "  --policy <file>             Write policy (YAML) for --root live writes; a project workspace declares writePolicy in okf.project.yaml.",
+    "  --policy <file>             Write policy (YAML) for --root writes and proposals; a project declares writePolicy in okf.project.yaml.",
     "  --allow-remote-tool         Enable runtime remote-bundle loading over MCP.",
     "  --allow-computation-authoring Enable coordinated computation proposals (also requires --authoring).",
     "  --strict-links              Treat broken internal Markdown links as project-invalid.",
@@ -599,9 +599,9 @@ function stdioServerOptions(args) {
   if (args.authoring && args.allowComputationAuthoring) {
     options.allowComputationAuthoring = true;
   }
+  if (args.actor) options.actor = args.actor;
   if (args.write) {
     options.allowWrite = true;
-    options.actor = args.actor;
     if (args.gitCommit) {
       options.gitCommit = true;
     }

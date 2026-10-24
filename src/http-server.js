@@ -144,7 +144,12 @@ async function runHttpServer(options) {
           strictLinks: config.strictLinks,
         })
       : FileConceptStore.fromProject(config.projectPath, { proposalRoot: config.proposalRoot }));
-  const service = config.service || new ConceptAuthoringService(store);
+  // HTTP calls carry no actor: proposals are unattributed unless a host
+  // passes one, and the write policy (writePolicy in okf.project.yaml, or a
+  // parsed policy from the host) still applies to them.
+  const service =
+    config.service ||
+    new ConceptAuthoringService(store, { actor: config.actor, writePolicy: config.writePolicy });
   const server = http.createServer(createHttpHandler(service, { writeToken: config.writeToken }));
   const host = config.host || "127.0.0.1";
   const port = config.port === undefined || config.port === "" ? 8765 : Number(config.port);

@@ -4,6 +4,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { createRequire } = require("node:module");
 
+const { evaluateProducerFiles, policyDiagnostics } = require("./authoring/policy-hook");
 const { attachProject, buildIndex } = require("./indexer");
 const { splitFrontmatter } = require("./parser");
 const {
@@ -368,6 +369,9 @@ function producerReceipt(receipt, detail) {
     counts: receipt.counts || { create: 0, update: 0, delete: 0, unchanged: 0 },
     summary: receipt.summary || {},
     diagnostics: Array.isArray(receipt.diagnostics) ? receipt.diagnostics.slice(0, 100) : [],
+    ...(Array.isArray(receipt.policyViolations)
+      ? { policyViolations: receipt.policyViolations.slice(0, 100) }
+      : {}),
   };
   if (detail === "full" && receipt.changes) {
     result.changes = {};
@@ -574,17 +578,27 @@ class ProducerService {
       instance,
       files.map((file) => file.path),
     );
+    // Opt-in only (writePolicy.applyToProducers): preview reports the
+    // violations read-only and run refuses before publication.
+    const policyViolations = evaluateProducerFiles(
+      this.project.writePolicy,
+      instance,
+      files,
+      inspection.changes,
+    );
+    const allowed = !policyViolations?.length;
     return {
       instance,
       descriptor,
       files,
       changes: inspection.changes,
       counts: countsFor(inspection.changes),
-      valid: validation.valid,
-      readyToApply: validation.valid,
+      valid: validation.valid && allowed,
+      readyToApply: validation.valid && allowed,
       conformant: validation.conformant,
       validForProject: validation.validForProject,
-      diagnostics: validation.diagnostics,
+      diagnostics: validation.diagnostics.concat(policyDiagnostics(policyViolations || [])),
+      ...(policyViolations ? { policyViolations } : {}),
       summary,
       generatedAt,
     };

@@ -456,6 +456,27 @@ test("evaluateWritePolicy honours defaultEffect both ways and tolerates no polic
   assert.throws(() => evaluate({ rules: [] }, "human:x", [change()]), /from parseWritePolicy/);
 });
 
+test("an unattributed write matches no rule and applyToProducers is an explicit boolean", () => {
+  // Even a catch-all rule does not match a write without an actor.
+  const catchAll = policyOf({ defaultEffect: "deny", rules: [{ actors: ["**"] }] });
+  assert.deepEqual(reasons(evaluate(catchAll, null, [change()])), [[null, "actor_denied", null]]);
+  assert.deepEqual(
+    evaluate(policyOf({ rules: [{ actors: ["**"], effect: "deny" }] }), null, [change()])
+      .violations,
+    [],
+  );
+  assert.throws(() => evaluate(catchAll, undefined, [change()]), /requires an actor/);
+
+  assert.equal(policyOf({}).applyToProducers, false);
+  assert.equal(policyOf({ applyToProducers: true }).applyToProducers, true);
+  const parsed = parseWritePolicy({ applyToProducers: "yes" });
+  assert.equal(parsed.policy, null);
+  assert.deepEqual(
+    parsed.errors.map((entry) => entry.field),
+    ["writePolicy.applyToProducers"],
+  );
+});
+
 test("updates resolve through the index and existing content is never retro-validated", (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "okf-write-policy-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));

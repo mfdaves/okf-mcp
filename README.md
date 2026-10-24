@@ -454,7 +454,7 @@ Add `--git-commit` as server policy to create one commit per successful batch. A
 
 ### Write policy
 
-A write policy narrows what each actor may write through `okf_validate_changes` and `okf_apply_changes`. It is trusted configuration: declare it as `writePolicy` in `okf.project.yaml`, or pass `--policy <file>` (the same mapping as a YAML file) with `--root` and `--write`. Tool arguments cannot name, replace, or relax it.
+A write policy narrows what each actor may write through live batches and proposals. It is trusted configuration: declare it as `writePolicy` in `okf.project.yaml`, or pass `--policy <file>` (the same mapping as a YAML file) with `--root` and `--write` or `--authoring`. Tool and HTTP arguments cannot name, replace, or relax it.
 
 ```yaml
 writePolicy:
@@ -474,11 +474,14 @@ writePolicy:
       actors: ["**"]
       paths: ["drafts/**"]
       effect: deny
+  applyToProducers: false      # true also judges producer runs
 ```
 
 For each concept in a batch, the first rule whose `actors` match the configured `--actor` and whose other selectors (when present) match decides. `effect` is `allow` by default; `requiredFields`, `defaultStatus`, and `maxConceptsPerBatch` apply to allow rules. Patterns use a fixed glob subset: `*` within one segment, `**` as a whole segment for any depth, and literal segments. They are never compiled to regular expressions, and absolute, empty, `.` and `..` segments are rejected when the policy loads. A malformed policy is a project error, so no writable server starts on it. The policy judges only the concepts a batch creates or updates; existing content is never retro-validated.
 
 Violations are structured: `{ code: "policy_violation", rule, reason, field?, path?, bundleId?, uri?, limit?, count? }`, where `rule` is the rule's `name`, else its index, and `null` when `defaultEffect` decided. `reason` is one of `actor_denied`, `bundle_denied`, `path_denied`, `type_denied`, `missing_required_field`, or `batch_too_large`. `okf_validate_changes` reports them read-only in `policyViolations` and as `layer: "policy"` diagnostics; `okf_apply_changes` refuses such a batch with status `rejected` before staging or touching any file. Receipts carry `policyViolations` only when a policy is configured; messages name rules, paths, and URIs, never catalog text.
+
+Scope. Live batches (`okf_validate_changes`, `okf_apply_changes`) are judged against `--actor`. Proposals are judged twice: when `okf_propose_concept`, `okf_propose_update`, `okf_propose_attested_computation` or their HTTP equivalents would store one, against the proposing actor (`--actor`, which `--authoring` also accepts; a refused proposal returns `created: false` with `policyViolations` and is not stored), and again when `okf_accept_proposal` or `POST /v1/proposals/<id>/accept` would write it, against the actor recorded on the proposal (`proposedBy`), else the accepting actor; a refusal returns `accepted: false` before any file is written. A write with no actor, such as an HTTP call, matches no rule, so `defaultEffect` decides it. Producers publish under `process:<producer name>` and are exempt unless `applyToProducers: true`, in which case `okf_preview_producer` reports the violations of the created and updated concept files read-only and `okf_run_producer` / `producer run` refuse before publication. The reserved `index.md` and `log.md` files of a producer bundle are not judged.
 
 ## Authoring Concepts
 

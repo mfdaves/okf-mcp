@@ -14,7 +14,7 @@ const { normalizeSlashes, parseFrontmatterYaml } = require("../parser");
 
 const EFFECTS = new Set(["allow", "deny"]);
 const STATUSES = new Set(["draft", "stable", "deprecated"]);
-const POLICY_KEYS = new Set(["defaultEffect", "rules"]);
+const POLICY_KEYS = new Set(["defaultEffect", "rules", "applyToProducers"]);
 const RULE_KEYS = new Set([
   "name",
   "actors",
@@ -357,6 +357,18 @@ function parseWritePolicy(raw) {
       ),
     );
   }
+  // Producers publish under their own process:<name> actor and are exempt
+  // unless the operator opts them in.
+  const applyToProducers = raw.applyToProducers === undefined ? false : raw.applyToProducers;
+  if (typeof applyToProducers !== "boolean") {
+    errors.push(
+      configError(
+        "invalid_write_policy",
+        "writePolicy.applyToProducers",
+        "applyToProducers must be true or false.",
+      ),
+    );
+  }
   let rules = [];
   if (raw.rules !== undefined) {
     if (!Array.isArray(raw.rules)) {
@@ -379,7 +391,7 @@ function parseWritePolicy(raw) {
   if (errors.length) {
     return { policy: null, errors };
   }
-  const policy = { defaultEffect, rules };
+  const policy = { defaultEffect, rules, applyToProducers };
   Object.defineProperty(policy, PARSED, { value: true });
   return { policy, errors };
 }
@@ -465,12 +477,14 @@ function appliesDefaultStatus(rule, change) {
 // First rule whose actors match and whose other selectors (when present)
 // match decides. Without a match the default effect applies; a default deny
 // names the first actor-matching allow rule and the selector it failed, so
-// the caller learns which rule nearly allowed the write.
+// the caller learns which rule nearly allowed the write. An unattributed
+// write (actor null: a proposal stored without an actor, an HTTP call)
+// matches no rule, so the default effect decides it.
 function decide(policy, actor, change) {
   let nearest = null;
   let nearestFailure = null;
   for (const rule of policy.rules) {
-    if (!matchesAny(rule.actors, actor)) continue;
+    if (actor === null || !matchesAny(rule.actors, actor)) continue;
     const failure = failingSelector(rule, change);
     if (failure) {
       if (!nearest && rule.effect === "allow") {
@@ -521,8 +535,8 @@ function violation(ruleId, reason, change, extra) {
 // should stamp on a created concept that set none.
 function evaluateWritePolicy(policy, input) {
   const actor = input?.actor;
-  if (typeof actor !== "string" || !actor.trim()) {
-    throw new TypeError("evaluateWritePolicy requires an actor string.");
+  if (actor !== null && (typeof actor !== "string" || !actor.trim())) {
+    throw new TypeError("evaluateWritePolicy requires an actor string, or null when unattributed.");
   }
   if (!input || !Array.isArray(input.changes)) {
     throw new TypeError("evaluateWritePolicy requires a changes array.");

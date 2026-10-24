@@ -12,6 +12,12 @@ const {
   semanticReferences,
 } = require("./indexer");
 const { deriveConceptPathSuggestion, normalizeConceptPath, slug } = require("./authoring/paths");
+const {
+  evaluateProposal,
+  policyDiagnostics,
+  refusedProposal,
+  resolveWritePolicy,
+} = require("./authoring/policy-hook");
 const { renderConceptMarkdown, renderFrontmatter } = require("./authoring/render");
 const { isExternalReference, isLocalAssetReference, resolveBundleAssetPath } = require("./assets");
 const { displayIdentifier } = require("./catalog-text");
@@ -71,8 +77,48 @@ function relationFrom(value, doc) {
 }
 
 class ConceptAuthoringService {
-  constructor(store) {
+  constructor(store, options) {
     this.store = store;
+    // Trusted host configuration only (B-5): the write policy (writePolicy
+    // in okf.project.yaml, or a parsed --policy) and the actor proposals are
+    // attributed to. Tool and HTTP arguments can name neither.
+    this.writePolicy = resolveWritePolicy(options, store);
+    this.actor = options?.actor || null;
+  }
+
+  attribution() {
+    return this.actor ? { proposedBy: this.actor } : {};
+  }
+
+  // Validates a proposal about to be stored and applies the write policy to
+  // it (plan W-1): { refused } when invalid or denied; otherwise the request
+  // and its validation, re-validated once with the default status a matching
+  // rule stamps on a create that set none.
+  checkProposal(op, input, validate) {
+    const validation = validate(input);
+    if (!validation.valid) {
+      return { refused: { created: false, validation } };
+    }
+    const policy = evaluateProposal(this.writePolicy, this.actor, {
+      op,
+      bundle: validation.bundle,
+      path: validation.path,
+      uri: validation.uri,
+      frontmatter: input.frontmatter,
+    });
+    if (policy?.violations.length) {
+      return { refused: refusedProposal({ created: false }, validation, policy.violations) };
+    }
+    if (!policy?.defaultStatus) {
+      return { request: input, validation };
+    }
+    const request = Object.assign({}, input, {
+      frontmatter: Object.assign({}, input.frontmatter, { status: policy.defaultStatus }),
+    });
+    const stamped = validate(request);
+    return stamped.valid
+      ? { request, validation: stamped }
+      : { refused: { created: false, validation: stamped } };
   }
 
   getBundle(id) {
@@ -406,20 +452,24 @@ class ConceptAuthoringService {
   }
 
   async proposeConcept(input) {
-    const validation = this.validateConcept(input || {});
-    if (!validation.valid) {
-      return { created: false, validation };
+    const checked = this.checkProposal("create", input || {}, (candidate) =>
+      this.validateConcept(candidate),
+    );
+    if (checked.refused) {
+      return checked.refused;
     }
+    const { request, validation } = checked;
     const proposal = await this.store.saveProposal({
       op: "create",
       bundle: validation.bundle,
       path: validation.path,
-      frontmatter: Object.assign({}, input.frontmatter || {}),
-      body: String(input.body || ""),
+      frontmatter: Object.assign({}, request.frontmatter || {}),
+      body: String(request.body || ""),
       markdown: validation.markdown,
-      message: input.message || "",
-      migrationId: input.migrationId || null,
+      message: request.message || "",
+      migrationId: request.migrationId || null,
       validation,
+      ...this.attribution(),
     });
     return { created: true, proposal };
   }
@@ -542,6 +592,16 @@ class ConceptAuthoringService {
     if (!validation.valid) {
       return { created: false, op: "update", validation };
     }
+    const policy = evaluateProposal(this.writePolicy, this.actor, {
+      op: "update",
+      bundle: validation.bundle,
+      path: validation.path,
+      uri: existing.uri,
+      frontmatter,
+    });
+    if (policy?.violations.length) {
+      return refusedProposal({ created: false, op: "update" }, validation, policy.violations);
+    }
     const proposal = await this.store.saveProposal({
       op: "update",
       targetUri: existing.uri,
@@ -555,6 +615,7 @@ class ConceptAuthoringService {
       message: input.message || "",
       migrationId: input.migrationId || null,
       validation,
+      ...this.attribution(),
     });
     return { created: true, op: "update", proposal };
   }
@@ -766,26 +827,28 @@ class ConceptAuthoringService {
   }
 
   async proposeAttestedComputation(input) {
-    const validation = this.validateAttestedComputation(input || {}, {
-      assetFiles:
-        input && input.computationPath
-          ? [{ path: input.computationPath, content: String(input.computationContent || "") }]
-          : [],
-    });
-    if (!validation.valid) {
-      return { created: false, validation };
+    const assetFiles = input?.computationPath
+      ? [{ path: input.computationPath, content: String(input.computationContent || "") }]
+      : [];
+    const checked = this.checkProposal("create_computation", input || {}, (candidate) =>
+      this.validateAttestedComputation(candidate, { assetFiles }),
+    );
+    if (checked.refused) {
+      return checked.refused;
     }
+    const { request, validation } = checked;
     const proposal = await this.store.saveProposal({
       op: "create_computation",
       bundle: validation.bundle,
       path: validation.path,
-      frontmatter: Object.assign({}, input.frontmatter || {}),
-      body: String(input.body || ""),
+      frontmatter: Object.assign({}, request.frontmatter || {}),
+      body: String(request.body || ""),
       markdown: validation.markdown,
       assetFiles: validation.assetFiles,
       dependencyRevisions: validation.dependencyRevisions,
-      message: input.message || "",
+      message: request.message || "",
       validation,
+      ...this.attribution(),
     });
     return { created: true, proposal };
   }
@@ -923,6 +986,7 @@ class ConceptAuthoringService {
           validation,
           migrationId: manifest.id,
           prerequisites: children.map((proposal) => proposal.id),
+          ...this.attribution(),
         });
         children.push(proposal);
       }
@@ -950,7 +1014,24 @@ class ConceptAuthoringService {
     return this.store.getProposal(input && input.proposalId);
   }
 
+  // A stored proposal is judged again before acceptance writes anything,
+  // against the actor recorded on it, else the accepting one (plan W-1).
   async acceptProposal(input) {
+    if (this.writePolicy) {
+      const proposal = await this.store.getProposal(input?.proposalId);
+      const policy =
+        proposal.status === "proposed"
+          ? evaluateProposal(this.writePolicy, proposal.proposedBy || this.actor, proposal)
+          : null;
+      if (policy?.violations.length) {
+        return {
+          accepted: false,
+          proposal,
+          policyViolations: policy.violations,
+          errors: policyDiagnostics(policy.violations),
+        };
+      }
+    }
     return this.store.acceptProposal(input && input.proposalId, this, {
       allowComputation: Boolean(input && input.allowComputation),
     });

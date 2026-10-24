@@ -223,7 +223,12 @@ async function createStateAsync(bundleArgs, options) {
     const store =
       options.authoringStore ||
       FileConceptStore.fromProject(options.projectPath, { proposalRoot: options.proposalRoot });
-    const authoringService = options.authoringService || new ConceptAuthoringService(store);
+    const authoringService =
+      options.authoringService ||
+      new ConceptAuthoringService(store, {
+        actor: options.actor,
+        writePolicy: options.writePolicy,
+      });
     const liveAuthoringService =
       options.liveAuthoringService ||
       (options.allowWrite
@@ -267,7 +272,12 @@ async function createStateAsync(bundleArgs, options) {
         proposalRoot: options.proposalRoot,
         strictLinks: options.strictLinks,
       });
-    const authoringService = options.authoringService || new ConceptAuthoringService(store);
+    const authoringService =
+      options.authoringService ||
+      new ConceptAuthoringService(store, {
+        actor: options.actor,
+        writePolicy: options.writePolicy,
+      });
     const liveAuthoringService =
       options.liveAuthoringService ||
       (options.allowWrite
