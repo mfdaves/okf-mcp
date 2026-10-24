@@ -165,12 +165,18 @@ function classifyServerError(status, bodyText) {
   } catch {
     // A body that is not JSON contributes nothing.
   }
-  if (status === 401 || code === "invalid_api_key") return "invalid_api_key";
+  // Quota exhaustion arrives as a 429 and is the more useful answer; after
+  // that the status decides (a 5xx is a server failure whatever the body
+  // claims), then the code, then the type.
   if (code === "insufficient_quota" || type === "insufficient_quota") return "insufficient_quota";
-  if (status === 429 || code === "rate_limit_exceeded") return "rate_limited";
-  if (code === "model_not_found") return "model_not_found";
-  if (status >= 400 && status < 500) return "invalid_request";
+  if (status === 401) return "invalid_api_key";
+  if (status === 404) return "model_not_found";
+  if (status === 429) return "rate_limited";
   if (status >= 500 && status < 600) return "server_error";
+  if (code === "invalid_api_key" || type === "authentication_error") return "invalid_api_key";
+  if (code === "model_not_found" || type === "not_found_error") return "model_not_found";
+  if (code === "rate_limit_exceeded" || type === "rate_limit_error") return "rate_limited";
+  if (status >= 400 && status < 500) return "invalid_request";
   return "unknown";
 }
 

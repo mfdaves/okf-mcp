@@ -439,17 +439,25 @@ test("returns constant-shaped errors whatever an error body contains", async (t)
   assert.equal(shapes.size, 1, "every adversarial body produced the same error shape");
 
   // The server code is one of our constants, chosen from status and code.
+  // Status first, then code, then type; quota exhaustion wins over its 429.
+  const typed = (type, code) => JSON.stringify({ error: { type, code, message: "m" } });
   const cases = [
-    [401, JSON.stringify({ error: { code: null } }), "invalid_api_key"],
-    [400, JSON.stringify({ error: { code: "invalid_api_key" } }), "invalid_api_key"],
+    [401, typed("invalid_request_error", null), "invalid_api_key"],
+    [404, typed("invalid_request_error", null), "model_not_found"],
+    [429, typed("invalid_request_error", null), "rate_limited"],
     [429, "", "rate_limited"],
-    [400, JSON.stringify({ error: { code: "rate_limit_exceeded" } }), "rate_limited"],
-    [429, JSON.stringify({ error: { type: "insufficient_quota" } }), "insufficient_quota"],
-    [404, JSON.stringify({ error: { code: "model_not_found" } }), "model_not_found"],
-    [404, JSON.stringify({ error: { message: "Invalid URL" } }), "invalid_request"],
+    [400, typed("invalid_request_error", "invalid_api_key"), "invalid_api_key"],
+    [400, typed("invalid_request_error", "model_not_found"), "model_not_found"],
+    [400, typed("invalid_request_error", "rate_limit_exceeded"), "rate_limited"],
+    [400, typed("authentication_error", null), "invalid_api_key"],
+    [400, typed("not_found_error", null), "model_not_found"],
+    [400, typed("rate_limit_error", null), "rate_limited"],
+    [429, typed("insufficient_quota", null), "insufficient_quota"],
+    [429, typed("insufficient_quota", "insufficient_quota"), "insufficient_quota"],
     [418, "teapot", "invalid_request"],
+    [422, typed("invalid_request_error", "context_length_exceeded"), "invalid_request"],
     [500, "<html>gateway exploded</html>", "server_error"],
-    [503, JSON.stringify({ error: { code: KEY } }), "server_error"],
+    [503, typed("authentication_error", KEY), "server_error"],
   ];
   for (const [status, body, expected] of cases) {
     server.script({ status, body });
