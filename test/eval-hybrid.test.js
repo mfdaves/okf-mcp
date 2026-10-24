@@ -1,10 +1,12 @@
 "use strict";
 
 const assert = require("node:assert/strict");
+const childProcess = require("node:child_process");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const test = require("node:test");
+const { promisify } = require("node:util");
 
 const { parseHybridArgs, runHybridEvaluation } = require("../scripts/eval-hybrid");
 const { runEvaluation } = require("../scripts/eval-search");
@@ -149,4 +151,31 @@ test("an unreachable embedder degrades the harness to the lexical run", async (t
   assert.equal(hybrid.queries.encoded, 0);
   const lexical = runEvaluation({ fixtures: ["atlas"], split: "all", bootstrap: 20 });
   assert.equal(report.fixtures.atlas.overall.recallAt5, lexical.fixtures.atlas.overall.recallAt5);
+});
+
+test("node scripts/eval-search.js --embedder runs the hybrid harness end to end", async (t) => {
+  const { dir, embedderFile } = await harness(t);
+  const out = path.join(dir, "report");
+  const args = [
+    path.join(__dirname, "..", "scripts", "eval-search.js"),
+    "--embedder",
+    embedderFile,
+    "--fixture",
+    "atlas",
+    "--split",
+    "dev",
+    "--bootstrap",
+    "10",
+    "--out",
+    out,
+  ];
+  // Asynchronous on purpose: the fake server answers from this process.
+  const { stdout } = await promisify(childProcess.execFile)(process.execPath, args, {
+    env: { ...process.env, XDG_CACHE_HOME: path.join(dir, "xdg-cli") },
+  });
+  const summary = JSON.parse(stdout);
+  assert.equal(summary.fixtures.atlas.embedder.degraded, false);
+  assert.equal(summary.fixtures.atlas.documents.requests, 1);
+  assert.match(fs.readFileSync(`${out}.md`, "utf8"), /## Hybrid run/);
+  assert.ok(JSON.parse(fs.readFileSync(`${out}.json`, "utf8")).hybrid.fixtures.atlas);
 });

@@ -887,8 +887,9 @@ function main(argv) {
 }
 
 if (require.main === module && process.argv.includes("--embedder")) {
-  // Hybrid runs are asynchronous (embedding requests): scripts/eval-hybrid.js drives them.
-  require("./eval-hybrid").cli(process.argv.slice(2));
+  // Hybrid runs are asynchronous (embedding requests): scripts/eval-hybrid.js drives them,
+  // once this module's exports are complete (the two require each other).
+  process.nextTick(() => require("./eval-hybrid").cli(process.argv.slice(2)));
 } else if (require.main === module) {
   try {
     main(process.argv.slice(2));
