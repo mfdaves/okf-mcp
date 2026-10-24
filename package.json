@@ -66,6 +66,8 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.15",
-    "@modelcontextprotocol/client": "2.0.0"
+    "@modelcontextprotocol/client": "2.0.0",
+    "@nlpjs/lang-en-min": "4.26.1",
+    "@nlpjs/lang-it": "4.26.1"
   }
 }
