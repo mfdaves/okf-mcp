@@ -27,4 +27,5 @@ module.exports = {
   ...require("./cache/store"),
   ...require("./policy/write-policy"),
   ...require("./context/sections"),
+  ...require("./context/assemble"),
 };
