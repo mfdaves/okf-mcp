@@ -179,7 +179,11 @@ FIXTURES.forEach((fixture) => {
         return;
       }
       const primary = (query.expected || []).find((entry) => entry.grade === 2);
-      assert.equal(`${primary.bundle}/${primary.id}`, query.family, `${query.id} family differs from its primary target`);
+      assert.equal(
+        `${primary.bundle}/${primary.id}`,
+        query.family,
+        `${query.id} family differs from its primary target`,
+      );
       if (!familySplits.has(query.family)) {
         familySplits.set(query.family, new Set());
       }

@@ -1,7 +1,7 @@
 {
-  "$comment": "Pre-registered retrieval thresholds (docs/plan-1.0.md section 8, WP0, WP1, WP3a). `target` values come from the plan and were written before any tuning; they are never adjusted to pass. `baseline` is the shipped 0.9.1 search (src/search.js, AND semantics) measured by `npm run eval:search` on 2026-10-24 with --split all, minus the 95% bootstrap half-width per metric (1,000 samples, seed 20261024); test/retrieval-eval.test.js asserts it as a regression floor. zeroResultRateMax is measured plus the half-width.",
+  "$comment": "Pre-registered retrieval thresholds (docs/plan-1.0.md section 8, WP0, WP1, WP3a). `target` values come from the plan and were written before any tuning; they are never adjusted to pass. `baseline` is the shipped 0.9.1 search (src/search.js, AND semantics) measured by `node scripts/eval-search.js --fixture alpinaria --fixture atlas --split all --out test/fixtures/retrieval/reports/baseline-2026-10-24` on 2026-10-24, minus the 95% bootstrap half-width per metric (1,000 samples, seed 20261024), rounded down to 3 decimals; zeroResultRateMax is measured plus the half-width, rounded up. `baseline.bySplit` holds the same floors per split; test/retrieval-eval.test.js asserts the overall floors on both fixtures and the held-out floors on every fixture with at least 150 queries (section 8: a held-out drop larger than the held-out CI blocks a merge). Splits are family-aware: a paraphrase family never spans dev and heldout.",
   "alpinaria": {
-    "gate": "full set (203 queries, above the 150 threshold): pre-registered targets on the full set, and a held-out drop larger than the bootstrap CI blocks a merge (section 8); tune only on split dev",
+    "gate": "full set (203 queries, above the 150 threshold): pre-registered targets on the full set, overall baseline floors, and held-out baseline floors (a held-out drop larger than the bootstrap CI blocks a merge, section 8); tune only on split dev",
     "target": {
       "source": "WP1 acceptance, measured with the shipped default languages: auto",
       "recallAt5": 0.72,
@@ -31,11 +31,35 @@
       "ndcgAt10": 0.265,
       "mrrAt10": 0.315,
       "p1": 0.314,
-      "zeroResultRateMax": 0.672
+      "zeroResultRateMax": 0.672,
+      "bySplit": {
+        "dev": {
+          "gated": false,
+          "queries": 129,
+          "measured": { "recallAt5": 0.2972, "mustRecallAt5": 0.345, "ndcgAt10": 0.3253, "mrrAt10": 0.3798, "p1": 0.3798, "zeroResultRate": 0.6047 },
+          "recallAt5": 0.225,
+          "mustRecallAt5": 0.263,
+          "ndcgAt10": 0.251,
+          "mrrAt10": 0.294,
+          "p1": 0.294,
+          "zeroResultRateMax": 0.687
+        },
+        "heldout": {
+          "gated": true,
+          "queries": 52,
+          "measured": { "recallAt5": 0.2872, "mustRecallAt5": 0.359, "ndcgAt10": 0.3353, "mrrAt10": 0.391, "p1": 0.3846, "zeroResultRate": 0.5962 },
+          "recallAt5": 0.179,
+          "mustRecallAt5": 0.229,
+          "ndcgAt10": 0.218,
+          "mrrAt10": 0.259,
+          "p1": 0.25,
+          "zeroResultRateMax": 0.731
+        }
+      }
     }
   },
   "atlas": {
-    "gate": "full set (94 queries, below the 150 threshold): pre-registered target on the full set with bootstrap CI; dev/heldout reported, not gated",
+    "gate": "full set (99 queries, below the 150 threshold): pre-registered target and overall baseline floors on the full set with bootstrap CI; dev/heldout are reported, not gated, until the set reaches 150",
     "target": {
       "source": "WP1 acceptance, second fixture",
       "recallAt5": 0.7,
@@ -46,22 +70,26 @@
       "measuredOn": "2026-10-24",
       "searchModule": "src/search.js (0.9.1, MiniSearch AND)",
       "split": "all",
-      "queries": 94,
+      "queries": 99,
       "measured": {
-        "recallAt5": 0.2687,
-        "mustRecallAt5": 0.2976,
-        "ndcgAt10": 0.2837,
-        "mrrAt10": 0.3095,
-        "p1": 0.3095,
-        "zeroResultRate": 0.6786,
+        "recallAt5": 0.2536,
+        "mustRecallAt5": 0.2809,
+        "ndcgAt10": 0.2678,
+        "mrrAt10": 0.2921,
+        "p1": 0.2921,
+        "zeroResultRate": 0.6966,
         "noAnswerReturnedAnyRate": 0
       },
-      "recallAt5": 0.179,
-      "mustRecallAt5": 0.202,
-      "ndcgAt10": 0.193,
-      "mrrAt10": 0.214,
-      "p1": 0.214,
-      "zeroResultRateMax": 0.774
+      "recallAt5": 0.165,
+      "mustRecallAt5": 0.185,
+      "ndcgAt10": 0.178,
+      "mrrAt10": 0.191,
+      "p1": 0.191,
+      "zeroResultRateMax": 0.798,
+      "bySplitReported": {
+        "dev": { "queries": 62, "recallAt5": 0.2333, "ndcgAt10": 0.2431 },
+        "heldout": { "queries": 27, "recallAt5": 0.3, "ndcgAt10": 0.3244 }
+      }
     }
   },
   "scale": {

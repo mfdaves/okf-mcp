@@ -40,6 +40,7 @@ const DEFAULT_LIMIT = 10;
 const DEFAULT_BOOTSTRAP = 1000;
 const DEFAULT_SEED = 20261024;
 const LOW_CONFIDENCE_COVERAGE = 0.5;
+const NDCG_CUTOFF = 10;
 const SPLITS = new Set(["dev", "heldout", "all"]);
 const MEAN_METRICS = [
   "recallAt5",
@@ -218,10 +219,12 @@ function loadSearchModule(modulePath, searchOptions) {
   };
 }
 
+// Duplicate URIs are dropped (first occurrence wins) before truncation and scoring, so a module
+// that returns the same concept several times cannot inflate any metric.
 function normalizeResponse(raw, limit) {
   const list = Array.isArray(raw) ? raw : raw && Array.isArray(raw.results) ? raw.results : [];
+  const seen = new Set();
   const results = list
-    .slice(0, limit)
     .map((entry) => {
       const uri =
         entry.uri ||
@@ -233,7 +236,14 @@ function normalizeResponse(raw, limit) {
         relevance: typeof entry.relevance === "number" ? entry.relevance : null,
       };
     })
-    .filter((entry) => entry.uri);
+    .filter((entry) => {
+      if (!entry.uri || seen.has(entry.uri)) {
+        return false;
+      }
+      seen.add(entry.uri);
+      return true;
+    })
+    .slice(0, limit);
   return {
     results,
     total: raw && typeof raw.total === "number" ? raw.total : list.length,
@@ -326,10 +336,11 @@ function evaluateQuery(index, module, query, context) {
   const inTop = (list, k) =>
     list.filter((entry) => ranked.slice(0, k).some((hit) => hit.uri === entry.uri)).length;
   const firstRelevant = ranked.find((hit) => hit.grade >= 1) || null;
+  // nDCG@10: both the DCG and the ideal DCG use ten positions regardless of --limit.
   const ideal = expected
     .map((entry) => entry.grade)
     .sort((left, right) => right - left)
-    .slice(0, context.limit);
+    .slice(0, NDCG_CUTOFF);
   const idealDcg = dcg(ideal);
   const mustRanks = must.map((entry) => {
     const hit = ranked.find((candidate) => candidate.uri === entry.uri);
@@ -352,7 +363,9 @@ function evaluateQuery(index, module, query, context) {
     mustCount: must.length,
     recallAt5: relevant.length ? inTop(relevant, 5) / relevant.length : 0,
     mustRecallAt5: must.length ? inTop(must, 5) / must.length : 0,
-    ndcgAt10: idealDcg ? round(dcg(ranked.slice(0, 10).map((hit) => hit.grade)) / idealDcg, 4) : 0,
+    ndcgAt10: idealDcg
+      ? round(dcg(ranked.slice(0, NDCG_CUTOFF).map((hit) => hit.grade)) / idealDcg, 4)
+      : 0,
     mrrAt10: firstRelevant && firstRelevant.rank <= 10 ? round(1 / firstRelevant.rank, 4) : 0,
     p1: top1 && top1.grade >= 1 ? 1 : 0,
     hitAt10: firstRelevant && firstRelevant.rank <= 10 ? 1 : 0,
@@ -518,11 +531,14 @@ function evaluateFixture(fixture, module, options) {
 
   const overall = aggregate(answerable);
   overall.ci = bootstrap(answerable, options.bootstrap, options.seed);
+  // Per-split aggregates carry their own bootstrap CIs: section 8 gates a fixture with 150 or
+  // more queries on a held-out drop larger than the held-out CI.
   const bySplit = {};
   ["dev", "heldout"].forEach((split) => {
     const subset = answerable.filter((entry) => entry.split === split);
     if (subset.length) {
       bySplit[split] = Object.assign(aggregate(subset), {
+        ci: bootstrap(subset, options.bootstrap, options.seed),
         noAnswer: noAnswerSummary(
           noAnswer.filter((entry) => entry.split === split),
           subset,
@@ -882,7 +898,9 @@ module.exports = {
   CI_METRICS,
   DEFAULT_SEARCH_MODULE,
   LOW_CONFIDENCE_COVERAGE,
+  NDCG_CUTOFF,
   evaluateFixture,
+  evaluateQuery,
   loadSearchModule,
   parseArgs,
   renderMarkdown,
