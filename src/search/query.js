@@ -5,6 +5,8 @@ const { normalizeV02Signals } = require("../v02");
 const { resolveConcept } = require("../indexer");
 const { foldDiacritics } = require("./languages");
 const { analyzeQuery, prepareSearchIndex, runQuery, searchLanguages } = require("./lexical");
+const { denseSearch } = require("./dense");
+const { fuseRankings, fusionAlpha } = require("./fusion");
 
 const MAX_COMPACT_TEXT = 500;
 // `auto` runs the all-term query and falls back to any-term when it returns
@@ -16,6 +18,9 @@ const LOW_CONFIDENCE_COVERAGE = 0.5;
 // R-6: optional score multipliers, off by default, applied only when the
 // signal is present on the document.
 const FRESHNESS_PRIOR = Object.freeze({ deprecated: 0.5, stale: 0.7, draft: 0.85 });
+// R-10: how many dense neighbours join the lexical hits before fusion (more
+// when the requested page reaches further).
+const DENSE_DEPTH = 100;
 
 function lower(value) {
   return String(value || "").toLowerCase();
@@ -286,7 +291,7 @@ function rankQuery(index, config, analysis, docsByUri) {
     }
   }
   const prior = config.freshnessPrior ? (doc) => priorFactor(doc, config.asOf) : () => 1;
-  let results = hits
+  const results = hits
     .filter((hit) => docsByUri.has(hit.id))
     .map((hit) => {
       const doc = docsByUri.get(hit.id);
@@ -297,12 +302,79 @@ function rankQuery(index, config, analysis, docsByUri) {
   results.forEach((entry) => {
     entry.relevance = top > 0 ? entry.score / top : 0;
   });
-  if (config.minCoverage > 0 || config.minRelevance > 0) {
-    results = results.filter(
-      (entry) => entry.coverage >= config.minCoverage && entry.relevance >= config.minRelevance,
-    );
+  return { results: applyFloors(results, config), mode, allTermsTotal, unfloored: results };
+}
+
+// The floors keep their lexical meaning under hybrid ranking too: coverage of
+// the query terms and the lexical score relative to the lexical top result.
+function applyFloors(results, config) {
+  if (!(config.minCoverage > 0 || config.minRelevance > 0)) {
+    return results;
   }
-  return { results, mode, allTermsTotal };
+  return results.filter(
+    (entry) =>
+      entry.coverage >= config.minCoverage &&
+      (entry.lexicalRelevance ?? entry.relevance) >= config.minRelevance,
+  );
+}
+
+// Hybrid ranking (R-10): the lexical hits, before floors, fused with the dense
+// ranking of the filtered candidates. An explicit mode "all" keeps its
+// meaning, every term required, so dense scores only re-rank the all-term
+// hits; under auto and any the dense neighbours join the candidates.
+function hybridRank(index, config, ranking, filteredDocs, depth) {
+  const lexical = ranking.unfloored;
+  const byUri = new Map(lexical.map((entry) => [entry.doc.uri, entry]));
+  const candidates = config.mode === "all" ? lexical.map((entry) => entry.doc) : filteredDocs;
+  const prior = config.freshnessPrior ? (doc) => priorFactor(doc, config.asOf) : null;
+  const docs = new Map(candidates.map((doc) => [doc.uri, doc]));
+  const dense = denseSearch(index, {
+    queryVector: config.queryVector,
+    cache: config.vectorCache,
+    units: config.embedUnits,
+    candidates,
+    limit: depth,
+  }).map((entry) => {
+    // R-6 multiplies scores; a negative cosine is divided so it still drops.
+    const factor = prior ? prior(docs.get(entry.id)) : 1;
+    const score = entry.score >= 0 ? entry.score * factor : entry.score / factor;
+    return { id: entry.id, score, unit: entry.unit };
+  });
+  const units = new Map(dense.map((entry) => [entry.id, entry.unit]));
+  const fused = fuseRankings({
+    lexical: lexical.map((entry) => ({ id: entry.doc.uri, score: entry.score })),
+    dense,
+    alpha: config.alpha,
+  });
+  const top = fused.length ? fused[0].fusedScore : 0;
+  const results = fused.map((entry) => {
+    const hit = byUri.get(entry.id);
+    const base = hit
+      ? Object.assign({}, hit, { lexicalRelevance: hit.relevance })
+      : { doc: docs.get(entry.id), positions: [], coverage: 0, lexicalRelevance: 0 };
+    return Object.assign(base, {
+      score: entry.fusedScore,
+      relevance: top > 0 ? entry.fusedScore / top : 0,
+      lexicalScore: entry.lexicalScore,
+      denseScore: entry.denseScore,
+      fusedScore: entry.fusedScore,
+      unit: units.get(entry.id),
+    });
+  });
+  return applyFloors(results, config);
+}
+
+function hybridFields(entry) {
+  const fields = {
+    lexicalScore: entry.lexicalScore,
+    denseScore: entry.denseScore,
+    fusedScore: entry.fusedScore,
+  };
+  // Section units cite the section that matched (`uri#anchor`).
+  if (entry.unit && entry.unit !== entry.doc.uri) {
+    fields.unit = entry.unit;
+  }
+  return fields;
 }
 
 function searchConcepts(index, options) {
@@ -320,15 +392,19 @@ function searchConcepts(index, options) {
   const filteredDocs = applyFilters(index, config);
   let results;
   let ranking = null;
+  let hybrid = false;
   if (analysis.query) {
     if (!analysis.tokens.length) {
       // Punctuation-only text: nothing to run, reported under the requested mode.
       results = [];
-      ranking = { mode: config.mode === "any" ? "any" : "all", allTermsTotal: 0 };
+      ranking = { mode: config.mode === "any" ? "any" : "all", allTermsTotal: 0, results };
     } else {
       const docsByUri = new Map(filteredDocs.map((doc) => [doc.uri, doc]));
       ranking = rankQuery(index, config, analysis, docsByUri);
-      results = ranking.results;
+      hybrid = config.hybrid === true && Boolean(config.queryVector && config.vectorCache);
+      results = hybrid
+        ? hybridRank(index, config, ranking, filteredDocs, Math.max(DENSE_DEPTH, offset + limit))
+        : ranking.results;
     }
   } else {
     results = filteredDocs.map((doc) => ({ doc, score: 0 }));
@@ -337,9 +413,10 @@ function searchConcepts(index, options) {
   const page = results.slice(offset, offset + limit).map((entry) => {
     if (config.detail === "compact") {
       const compact = compactConceptSummary(entry.doc);
-      return ranking
-        ? Object.assign(compact, { coverage: entry.coverage, relevance: entry.relevance })
-        : compact;
+      if (ranking) {
+        Object.assign(compact, { coverage: entry.coverage, relevance: entry.relevance });
+      }
+      return hybrid ? Object.assign(compact, hybridFields(entry)) : compact;
     }
     const summary = conceptSummary(entry.doc);
     if (config.asOf) {
@@ -356,26 +433,32 @@ function searchConcepts(index, options) {
       score: entry.score,
       snippet: snippetFor(entry.doc, analysis.tokens),
     });
-    return ranking
-      ? Object.assign(summary, {
-          matchedTerms: entry.positions.map((position) => analysis.tokens[position].raw),
-          coverage: entry.coverage,
-          relevance: entry.relevance,
-        })
-      : summary;
+    if (ranking) {
+      Object.assign(summary, {
+        matchedTerms: entry.positions.map((position) => analysis.tokens[position].raw),
+        coverage: entry.coverage,
+        relevance: entry.relevance,
+      });
+    }
+    return hybrid ? Object.assign(summary, hybridFields(entry)) : summary;
   });
   const response = { total: results.length, limit, offset };
   if (ranking) {
+    // lowConfidence keeps its lexical meaning: it reads the lexical ranking.
+    const lexicalResults = ranking.results;
     Object.assign(response, {
       mode: ranking.mode,
       allTermsTotal: ranking.allTermsTotal,
       lowConfidence:
         ranking.mode === "any" &&
-        results.length > 0 &&
-        results[0].coverage < LOW_CONFIDENCE_COVERAGE,
+        lexicalResults.length > 0 &&
+        lexicalResults[0].coverage < LOW_CONFIDENCE_COVERAGE,
       queryTerms: analysis.terms,
       droppedTerms: analysis.dropped,
     });
+    if (hybrid) {
+      Object.assign(response, { hybrid: true, alpha: fusionAlpha(config.alpha) });
+    }
   }
   response.results = page;
   return response;
