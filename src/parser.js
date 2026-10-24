@@ -25,6 +25,25 @@ function validOkfConceptUri(value) {
   );
 }
 
+// js-yaml's message ends with a code frame of the offending source lines,
+// and a few reasons quote tag names or handles taken from them. Frontmatter
+// is catalog text, which never reaches an error message (B-6, S-3): keep the
+// reason without its quoted parts, plus the position, which is enough to
+// find the problem; a reason that still carries source text is dropped.
+function yamlErrorDetail(error) {
+  const reason = (typeof error?.reason === "string" ? error.reason : "")
+    .replace(/\s*!<[^>]*>/g, "")
+    .replace(/\s*"[^"]*"/g, "")
+    .replace(/:\s.*$/s, "")
+    .trim();
+  const fixedWords = reason && !/[!"`<>:$\\]/.test(reason.replace(/'.'/g, ""));
+  const detail = fixedWords ? reason : "malformed YAML";
+  const mark = error?.mark;
+  return mark && Number.isInteger(mark.line) && Number.isInteger(mark.column)
+    ? `${detail} (${mark.line + 1}:${mark.column + 1})`
+    : detail;
+}
+
 function parseFrontmatterYaml(source) {
   let parsed;
   try {
@@ -33,8 +52,7 @@ function parseFrontmatterYaml(source) {
       json: false,
     });
   } catch (error) {
-    const detail = error && error.message ? error.message : String(error);
-    throw new Error(`Invalid YAML mapping: ${detail}`);
+    throw new Error(`Invalid YAML mapping: ${yamlErrorDetail(error)}`);
   }
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
     throw new Error("YAML document root must be a mapping.");
