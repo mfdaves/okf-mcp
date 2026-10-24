@@ -149,3 +149,19 @@ test("embedUnits resolves concepts by default and refuses unknown names", () => 
     (error) => error.code === "invalid_embed_units",
   );
 });
+
+test("the bounded top-k selection equals the head of the full ranking, ties by URI", async (t) => {
+  const { index, cache } = await preparedWorld(t);
+  // The constant component alone: every concept without a topic word ties.
+  for (const query of ["winter footwear", "nothing in common", "cost refund"]) {
+    const queryVector = topicVector(query);
+    const full = denseSearch(index, { queryVector, cache });
+    for (let limit = 1; limit <= full.length; limit += 1) {
+      assert.deepEqual(denseSearch(index, { queryVector, cache, limit }), full.slice(0, limit));
+    }
+    for (let position = 1; position < full.length; position += 1) {
+      const [left, right] = [full[position - 1], full[position]];
+      assert.ok(left.score > right.score || (left.score === right.score && left.id < right.id));
+    }
+  }
+});
