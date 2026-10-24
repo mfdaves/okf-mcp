@@ -58,7 +58,7 @@
   },
   "overrides": [
     {
-      "includes": ["src/search.js", "src/search-index.js", "scripts/search-benchmark.js"],
+      "includes": ["scripts/search-benchmark.js"],
       "formatter": {
         "enabled": false
       }
