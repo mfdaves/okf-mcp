@@ -1,6 +1,6 @@
 # okf-mcp 1.0 master plan: a knowledge runtime for autonomous agents
 
-Status: revision 4, 2026-10-24, updated after WP7 landed. Owner: maintainer. Readers: the maintainer and the agents assigned to work packages.
+Status: revision 6, 2026-10-24, after WP7 and WP0 landed; embeddings re-sequenced around an OpenAI-compatible client. Owner: maintainer. Readers: the maintainer and the agents assigned to work packages.
 
 ## 0. How to use this document
 
@@ -46,11 +46,12 @@ The reference deployment is an SEO agent (one agent per customer, one bundle per
 | R-1 | Query mode `auto` (all terms, fall back to any term), with `all` and `any` explicit. | Must | fixture Recall@5 0.43 → 0.72, zero-result 44% → 0%. `any` alone scores higher overall (0.81) but drops exact lookups 0.93 → 0.76, so `auto` is the default |
 | R-2 | Index-time stemming with the raw token kept and diacritics folded. `languages: auto \| [codes]` per project or bundle, supported set `en`, `it` at 1.0 (registry for more). `auto` = the bundle's language set: detect per document, take the union of languages present in at least 5% of documents, then stem every document and every query with all languages in that set (the measured `multi` configuration). WP1 acceptance must be met with this shipped default. | Must | multi over {it, en}: R@5 0.72 → 0.77, P@1 0.79 → 0.88; build 347 → 824 ms at 5k. Per-document detection was measured only on monolingual synthetic documents and collapses mixed documents to one language, so `auto` picks a bundle-level set instead of per-document stemming |
 | R-3 | Stop words (per configured language) and single letters removed from queries; the 16-term limit counted after removal. | Must | 13 fixture queries failed on question words |
-| R-4 | Per-result `matchedTerms`, `coverage`, `relevance` (score / top score); top-level `mode`, `queryTerms`, `droppedTerms`, `total` (under the mode used) and `allTermsTotal` (count under `all`, always known). `lowConfidence` flag when `mode === "any"` and top `coverage` is strictly below 0.5 (two fixture queries sit at exactly 0.5; the test pins the strict comparison). Floors `minCoverage`, `minRelevance` opt-in, default off. | Must | `seo-eval/measure-abstain-signal.js` → `results/abstain-signal.json`: flag on 5/8 no-answer, 0/57 answerable; hard score cut-offs lose true positives (proto sweep: 5/8 abstentions cost 5/57 answers) |
+| R-4 | Per-result `matchedTerms`, `coverage`, `relevance` (score / top score); top-level `mode`, `queryTerms`, `droppedTerms`, `total` (under the mode used) and `allTermsTotal` (count under `all`, always known). `lowConfidence` flag when `mode === "any"` and top `coverage` is strictly below 0.5 (two fixture queries sit at exactly 0.5; the test pins the strict comparison). Floors `minCoverage`, `minRelevance` opt-in, default off. | Must | `seo-eval/measure-abstain-signal.js` → `results/abstain-signal.json`: flag on 5/8 no-answer, 0/57 answerable on the original 65 queries. On the enlarged WP0 sets the prototype flags 12/22 (alpinaria) and 6/10 (atlas) no-answer queries and 5/181 and 1/84 answerable ones, so the acceptance criterion is "≤ 3% of answerable queries with a relevant top-1 flagged", fixed before WP1 began; hard score cut-offs lose true positives (proto sweep: 5/8 abstentions cost 5/57 answers) |
 | R-5 | Exact-match field (path, identifiers, aliases, raw title tokens) never stemmed or stop-worded. | Must | exact lookups 0.93 |
 | R-6 | Optional status/freshness prior (deprecated ×0.5, stale ×0.7, draft ×0.85), off by default; applies only when the signals exist on a document. | Should | fixed one distractor case, neutral elsewhere |
 | R-7 | Section-level retrieval units with a stable anchor `uri#heading-slug` (okf-mcp extension, B-2). | Must (0.11) | needed by C-1 and citations |
-| R-8 | Embedder interface in core: `embed(texts) → Float32Array[]`, `id`, `dimension`, `languages`, `remote: boolean`. Implementations are separate packages loaded like producers (exact bare package name, allowlisted in config). Default: none. | Must (0.11) | B-3, B-8 |
+| R-8 | Embedder interface in core: `embed(texts) → Float32Array[]`, `id`, `dimension`, `languages`, `remote: boolean`, `maxBatch`, `maxInputChars`. The first implementation ships in core: `openai`, a zero-dependency client (Node `fetch`) for the OpenAI embeddings API and compatible endpoints, off unless configured. Further implementations (local ONNX) are separate packages loaded like producers. Default: none. | Must (0.11) | B-3, B-8; an OpenAI-compatible endpoint also covers local servers (Ollama, vLLM, LM Studio), so one client serves both the hosted and the on-premise case |
+| R-8a | OpenAI-compatible client contract: `POST {baseUrl}/v1/embeddings` with `{ model, input: string[], encoding_format: "float", dimensions? }`. Configuration lives only in trusted project config (`embedder: { type: openai, baseUrl, model, apiKeyEnv, dimensions, batchSize, timeoutMs, maxRetries, concurrency }`), never in tool arguments; the API key is read from the named environment variable only. Batches respect the API limits (≤ 2,048 inputs and ≤ 300,000 tokens per request, ≤ 8,192 tokens per input; estimated at 4 chars per token, inputs truncated at `maxInputChars`). Retries with exponential backoff on 429 and 5xx honour `Retry-After`; order of outputs is checked against `index`; input text is never logged or echoed in errors; `usage.prompt_tokens` is recorded in receipts. Embedder id `openai:<origin host>:<model>:<dimensions>` keys the cache, so a model or provider change rebuilds it. On failure the search degrades to lexical-only and the receipt carries `embedder.degraded: true`. Recommended starting point for Italian and English: `text-embedding-3-small` with `dimensions: 512` (20k vectors ≈ 40 MB), chosen on the development set. | Must (0.11) | OpenAI API reference: 2,048 inputs and 300k tokens per request, 8,192 tokens per input; `dimensions` on text-embedding-3 models |
 | R-9 | Vector cache outside the bundle: `$XDG_CACHE_HOME/okf-mcp/<sha256(absolute root)>/` by default (`~/.cache/okf-mcp/` when unset, `%LOCALAPPDATA%\okf-mcp\` on Windows), `cacheDir` override; keyed by section content hash; manifest versioned by embedder id, dimension, and cache format; incremental on write; brute-force cosine; no ANN until measured need. Remote bundles are lexical-only in 1.0. | Must (0.11) | a cache inside the root dirties the worktree and blocks git-backed apply (`live-authoring.js:987–1017`); remote bundles have no root (`remote.js:349–353`) |
 | R-10 | Hybrid fusion by convex combination of min-max normalised lexical and dense scores (Bruch et al., arXiv:2210.11934); weight configurable, default tuned on the development queries. Lexical-only when no embedder. | Must (0.11) | |
 | R-11 | Search tool description asks the caller for keywords in the catalog's languages and quoted exact strings; no longer says "all terms must match". Applies to `search_concepts` and `list_concepts.query`. | Must | caller-side expansion is the largest documented gain (Query2doc) |
@@ -101,13 +102,13 @@ Performance budgets at 5,000 concepts (about 5 MB of Markdown) with two stemming
 
 | Metric | Budget | Measured today |
 |---|---|---|
-| Cold index build | ≤ 2.0 s (≤ 8 s); stemmed ÷ unstemmed ≤ 2.5× | 0.35–0.52 s unstemmed, 0.82 s stemmed (`search010/scale`) |
-| Lexical search p95 | ≤ 25 ms (≤ 120 ms) | 6–8 ms unstemmed, 16–20 ms stemmed |
+| Cold index build | ≤ 2.0 s (≤ 8 s); stemmed ÷ unstemmed ≤ 2.5× | 0.79 s at 5k and 2.76 s at 20k unstemmed (`npm run bench:index`); 0.82 s stemmed at 5k on the prototype |
+| Lexical search p95 | ≤ 25 ms (≤ 120 ms) | 8.7 ms at 5k and 60.7 ms at 20k unstemmed (`bench:index`); 16–20 ms stemmed at 5k on the prototype |
 | Hybrid search p95, 20k vectors, excluding query encoding | ≤ 60 ms; query encoding reported separately | not built; brute force estimated 5–15 ms |
 | Write batch of 5 concepts: validate + apply + index update, git commit on | ≤ 500 ms (≤ 2 s); incremental ÷ full ≤ 0.3× | 4–5 full builds per apply today |
-| Incremental embed on write, changed sections only, local small model | ≤ 2 s per batch | not built |
-| RSS without embedder | ≤ 300 MB (≤ 600 MB) | to be measured in WP0 |
-| Test suite | ≤ 60 s | 3.8 s |
+| Incremental embed on write, changed sections only | local model ≤ 2 s per batch; remote client one request per batch when the inputs fit, latency reported and not gated | not built |
+| RSS without embedder | ≤ 300 MB (≤ 600 MB) | 178 MB after build and 249 MB at end of run at 5k; 389 / 573 MB at 20k (close to the stretch ceiling) |
+| Test suite | ≤ 60 s | ≈ 9 s (195 tests, of which the retrieval eval takes 4.5 s) |
 
 Code quality:
 
@@ -144,6 +145,7 @@ src/
   search/    lexical.js  query.js  fusion.js  dense.js      R-1..R-10
   search/stem/ among.js base-stemmer.js it.js en.js        trimmed MIT derivative of @nlpjs (WP1)
   cache/     store.js                                       XDG cache, content-hash keyed (R-9, O-3)
+  embed/     interface.js  openai.js                        R-8, R-8a; zero dependencies, off unless configured
   context/   sections.js  assemble.js                       R-7, C-1, C-2
   policy/    write-policy.js  duplicates.js  suggest.js     W-1..W-5
   authoring/ live.js  git-publish.js  git-preflight.js  candidates.js  receipts.js  staging.js  shared.js   (WP7, done)
@@ -166,9 +168,10 @@ Write flow: candidate → policy → duplicate and relation advice → validatio
 
 Sizes: S ≤ 1 day of agent work, M ≤ 3, L ≤ 6. All Must for 1.0 unless marked.
 
-### WP0 Evaluation fixtures and harness (M; prerequisite)
+### WP0 Evaluation fixtures and harness (M; prerequisite; done)
 
-- Move the Alpinaria generator, bundles, `queries.json`, graded qrels, `run-eval.js`, and `measure-abstain-signal.js` into `test/fixtures/retrieval/alpinaria/`; keep the generator deterministic (`--seed`).
+- Done on branch `wp0/eval-fixtures`: `test/fixtures/retrieval/{alpinaria,atlas}/` with deterministic generators and golden tests, 203 + 94 pre-registered queries with a seeded dev/heldout split re-derived by test, `sectionAnchor` labels on 52 + 53 queries (section-targeted queries were added for this, still written before any search), `scripts/eval-search.js` (`npm run eval:search`, bootstrap CIs, `lowConfidence` metrics), `scripts/index-benchmark.js` (`npm run bench:index`), `thresholds.json`, `test/retrieval-eval.test.js` gating the baseline floors, and the committed baseline report. Atlas (94 queries) is gated on its full set. The original specification follows for reference.
+- Move the Alpinaria generator, bundles, `queries.json`, graded qrels, and the runner into `test/fixtures/retrieval/alpinaria/`; keep the generator deterministic (`--seed`).
 - Grow the query set to ≥ 150 by adding paraphrases and new no-answer queries per category, written before any tuning; then split development/held-out 70/30 stratified by category and language. Until the set reaches 150, CI gates on the full set with pre-registered thresholds and 1,000-sample bootstrap confidence intervals; development/held-out are reported, not gated.
 - Second fixture from a different domain (software architecture catalog: services, ADRs, incidents, runbooks; English plus one other language) with ≥ 60 queries and ≥ 8 no-answer, own thresholds, gated on its full set (no held-out split until it reaches 150). This is the agent-agnosticism check.
 - Label `sectionAnchor` on at least 40 development queries per fixture whose answer lives in one section; WP3a's acceptance is measured on this labelled subset.
@@ -182,7 +185,7 @@ Sizes: S ≤ 1 day of agent work, M ≤ 3, L ≤ 6. All Must for 1.0 unless mark
 - Language registry: stemmer plus stop list per code; `languages: auto` detection per document at index time.
 - MCP schema: `mode` enum, floors, confidence fields, `allTermsTotal`; description per R-11; CLI output additive.
 - Tests: adjust `test/search.test.js` only where it asserted all-term semantics under the default; new tests for stop words, stems, diacritics, exact field, confidence fields, floors, pagination and `allTermsTotal`.
-- Acceptance (pre-registered on the full Alpinaria set, later on held-out; measured with the shipped default `languages: auto`): Recall@5 ≥ 0.72, nDCG@10 ≥ 0.78, zero-result rate 0 on answerable queries, `lowConfidence` on ≥ 50% of no-answer queries with 0 flags on answerable top-1 hits; second fixture: Recall@5 ≥ 0.70; p95 ≤ 25 ms and stemmed ÷ unstemmed ≤ 2.5× at 5k.
+- Acceptance (pre-registered in `test/fixtures/retrieval/thresholds.json`; point estimates on the full sets, 95% bootstrap CI reported; the 0.9.1 baseline on the enlarged sets is Recall@5 0.29 alpinaria and 0.27 atlas; measured with the shipped default `languages: auto`): alpinaria Recall@5 ≥ 0.72, nDCG@10 ≥ 0.78, zero-result rate 0 on answerable queries, `lowConfidence` recall ≥ 50% on no-answer queries with ≤ 3% of answerable queries with a relevant top-1 flagged; atlas Recall@5 ≥ 0.70; p95 ≤ 25 ms and stemmed ÷ unstemmed ≤ 2.5× at 5k.
 
 ### WP2 Functional index update and write-path performance (M)
 
@@ -197,12 +200,21 @@ Sizes: S ≤ 1 day of agent work, M ≤ 3, L ≤ 6. All Must for 1.0 unless mark
 - Tests: packing never exceeds `budgetTokens`; deterministic order; anchors stable across whitespace-only edits; sentinel test (S-3) extended to `get_context`.
 - Acceptance: `get_context` returns the labelled `sectionAnchor` within its packed sections for ≥ 80% of the labelled development queries on both fixtures (WP0 labels).
 
-### WP3b Embedder, cache, hybrid (L)
+### WP3b Embedding client and vector cache (M; may start in Group B)
 
-- R-8, R-9, R-10, O-3. Interface in core; `@mfdaves/okf-embed-onnx` (candidate models multilingual-e5-small and Arctic-Embed 2.0-M, int8; choose on the development set) and `@mfdaves/okf-embed-http` (allowlisted endpoint, key from env) as separate packages.
-- Cache: JSON manifest plus a float32 binary file and a sidecar of section ids and hashes under the XDG directory; rebuild on any mismatch.
-- Tests: cache invalidation on content and embedder change; deletion mid-run; lexical-only fallback; git-backed apply succeeds with a populated cache (the blocker found in review); `embedder.remote` in receipts; package smoke with and without the optional packages.
-- Acceptance (pre-registered): synonym category Recall@5 ≥ 0.70 (from 0.50) and mixed-language ≥ 0.85 on Alpinaria; no category regresses by more than its bootstrap CI; second fixture improves or holds; hybrid p95 ≤ 60 ms at 20k vectors excluding encoding; incremental embed ≤ 2 s per batch.
+- R-8, R-8a, R-9, O-3, without any search wiring: `src/embed/interface.js` (the embedder contract and a validator for implementations), `src/embed/openai.js` (the OpenAI-compatible client), `src/cache/store.js` (JSON manifest plus a float32 binary file and a sidecar of section ids and content hashes under the XDG directory; rebuild on any mismatch; delete-safe), and a `prepareEmbeddings(index, embedder, cache)` function that embeds only sections whose hash is missing.
+- Tests, all offline: a fake OpenAI-compatible server on `node:http` returning deterministic hash-derived vectors, exercising batching at the input and token limits, `dimensions`, output order by `index`, 429 and 5xx retries with `Retry-After`, timeouts, key-from-env, refusal of a base URL that is not in project config, error masking (no input text in any error), and `usage` accounting; cache invalidation on content and embedder change; deletion mid-run; git-backed apply succeeds with a populated cache (the blocker found in review). A live smoke script (`scripts/embed-smoke.js`) runs only when `OKF_EMBED_SMOKE=1` and the key variable are set; never in CI.
+- Acceptance: all tests offline; `prepareEmbeddings` on the alpinaria fixture against the fake server issues the minimum number of requests for the configured batch size and re-embeds only changed sections after an edit.
+
+### WP3c Hybrid retrieval (M)
+
+- R-7 consumers, R-10, C-1 integration: `src/search/dense.js` (brute-force cosine over the cache), `src/search/fusion.js` (convex combination with min-max normalisation), config wiring in `src/project.js` (`embedder`, `cacheDir`, `fusion.alpha`), `search_concepts` and `get_context` options, `embedder.remote` and `embedder.degraded` in receipts, and `scripts/eval-search.js --embedder <config>` so the harness can score hybrid runs (the fake server is enough for plumbing; quality numbers need a real endpoint and are recorded with the model id).
+- Tests: lexical-only fallback when the embedder fails or is absent; fusion weight edge cases (0 and 1 reduce to lexical and dense); deterministic ordering; budget packing unchanged.
+- Acceptance (pre-registered, measured once with a real endpoint on the development set and reported on held-out): synonym category Recall@5 ≥ 0.70 (from 0.00 baseline, 0.50 lexical prototype) and mixed-language ≥ 0.85 on alpinaria; no category regresses by more than its bootstrap CI; atlas improves or holds; hybrid p95 ≤ 60 ms at 20k vectors excluding query encoding, query-encoding latency reported separately.
+
+### WP3d Local ONNX embedder package (M; Should)
+
+- `@mfdaves/okf-embed-onnx` as a separate package implementing the same interface (candidate models multilingual-e5-small and Arctic-Embed 2.0-M, int8; choose on the development set), loaded like a producer. For deployments where text may not leave the machine and no local OpenAI-compatible server is available. Acceptance: passes the core interface validator and the WP3c tests with the package swapped in; incremental embed ≤ 2 s per batch.
 
 ### WP4 Write policy (M)
 
@@ -236,7 +248,7 @@ Sizes: S ≤ 1 day of agent work, M ≤ 3, L ≤ 6. All Must for 1.0 unless mark
 - Freeze: tool names and schemas, CLI commands, exit codes and JSON shapes, project config keys, policy schema, Producer API v1, embedder interface, library exports, REST authoring API, `.okf-proposals` schema, `server.json`. Deprecation list (section 10), SemVer policy, migration note; tag.
 - Acceptance: 0.9.1's MCP and CLI contract tests run against 1.0 and pass except for section 10 entries; the export-subset test passes.
 
-Release mapping: 0.10 = WP7, WP0, WP1; 0.11 = WP2, WP3a, WP3b; 0.12 = WP4, WP5; 0.13 = WP6, WP8; 1.0 = WP9.
+Release mapping: 0.10 = WP7, WP0, WP1; 0.11 = WP2, WP3a, WP3b, WP3c; 0.12 = WP4, WP5; 0.13 = WP6, WP8, WP3d (if taken); 1.0 = WP9.
 
 ## 8. Test strategy
 
@@ -248,6 +260,7 @@ Release mapping: 0.10 = WP7, WP0, WP1; 0.11 = WP2, WP3a, WP3b; 0.12 = WP4, WP5; 
 | Retrieval quality | both fixtures, pre-registered thresholds, bootstrap CIs; development/held-out reported | `npm run eval:search` |
 | Performance | build, search, write, hybrid; ratio gates and ceilings | `scripts/*-benchmark.js`, CI job |
 | Security | sentinel test for B-6 across the listed surfaces; secrets in cache manifests; traversal into cache and policy paths | `mcp-hardening`, new cases |
+| Network boundary | fake OpenAI-compatible embeddings server: batching and token limits, retries with `Retry-After`, timeouts, base URL only from project config, key from env, error masking, usage accounting; live smoke opt-in via env, never in CI | `test/embed-openai.test.js`, `scripts/embed-smoke.js` |
 | Soak | 48-hour synthetic agent loop on both fixtures: read, write under policy, re-read, weekly-style `catalog_report`; zero repairs, no growth in orphans or near-duplicates | `scripts/soak.js`, run before each release, not in PR CI |
 | Package | `npm pack` smoke with and without optional packages, on Linux and Windows | `scripts/package-smoke.js` |
 
@@ -286,9 +299,9 @@ File ownership while a WP is open: a file has one owner; others wait or send a p
 
 | Group | WPs | May start when | Owns |
 |---|---|---|---|
-| A | WP7 (done), then WP0 and WP8 scaffolding | now | WP7: both large files, `test/mcp-contract-snapshot.test.js`, `test/snapshots/`; WP0: `test/fixtures/`, `scripts/`, `eval:search` |
-| B | WP1, WP2 | WP7 merged, WP0 baseline committed | WP1: `src/search/`, `src/search-index.js`, `src/search.js`, `mcp/tools/search.js`; WP2: `src/indexer/`, `authoring/live.js`, `mcp/server.js` state |
-| C | WP3a, WP3b, WP4 | WP1 and WP2 merged | WP3a: `src/context/`; WP3b: `src/cache/`, `src/search/dense.js`, `fusion.js`; WP4: `src/policy/write-policy.js` |
+| A | WP7 (done), WP0 (done), WP8 scaffolding | now | WP7: both large files, `test/mcp-contract-snapshot.test.js`, `test/snapshots/`; WP0: `test/fixtures/`, `scripts/`, `eval:search` |
+| B | WP1, WP2, WP3b | WP7 merged, WP0 baseline committed | WP1: `src/search/`, `src/search-index.js`, `src/search.js`, `mcp/tools/search.js`; WP2: `src/indexer/`, `authoring/live.js`, `mcp/server.js` state; WP3b: `src/embed/`, `src/cache/`, `scripts/embed-smoke.js`, its tests (no `project.js`, no search files) |
+| C | WP3a, WP3c, WP4 | WP1, WP2 and WP3b merged | WP3a: `src/context/`; WP3c: `src/search/dense.js`, `fusion.js`, `scripts/eval-search.js --embedder`; WP4: `src/policy/write-policy.js` |
 | D | WP6, then WP5 | Group C merged | WP6: `mcp/http.js`, `authoring/sync.js`; WP5 (after WP6): `src/policy/duplicates.js`, `suggest.js`, receipts |
 | E | WP9 | everything merged | release files |
 
@@ -297,12 +310,13 @@ Shared files have one owner per group; everyone else sends a patch to the owner'
 | File | Group A | Group B | Group C | Group D |
 |---|---|---|---|---|
 | `src/cli.js` | WP7 | WP1 (`search` output) | WP4 (`--policy`) | WP6 (`serve`, `--git-sync`); WP5's `report` goes in after WP6 |
-| `src/project.js` | WP7 | WP1 (`languages`) | WP3b (`embedder`, `cacheDir`) first, then WP4 (`policy`) | WP6 |
+| `src/project.js` | WP7 | WP1 (`languages`) | WP3c (`embedder`, `cacheDir`, `fusion`) first, then WP4 (`policy`) | WP6 |
 | `.github/workflows/ci.yml` | WP7 first, WP8 after WP7 merges | WP0 (`eval:search` job) | — | WP8 (ratio gates) |
-| `mcp/tools/search.js` | WP7 (move only) | WP1 | WP3b (hybrid options) | — |
+| `mcp/tools/search.js` | WP7 (move only) | WP1 | WP3c (hybrid options) | — |
 | `mcp/tools/context.js` | — | — | WP3a | — |
 | `mcp/tools/live-authoring.js`, `mcp/tools/proposals.js` | WP7 (done) | WP2 (index refresh) | WP4 (error shapes) | WP5 (advice) after WP6 |
 | `mcp/server.js` | WP7 | WP2 (state) | — | WP6 (HTTP, call queue) |
+| `package.json` (scripts, devDependencies; append-only, the later merger resolves conflicts) | WP7, WP0 (test glob `test/*.test.js`, eval and bench scripts) | WP1, WP2, WP3b | WP3c, WP4 | WP6 |
 
 Brief template for an agent:
 
@@ -324,3 +338,7 @@ Revision 1 was reviewed independently on 2026-10-24. Blockers fixed in revision 
 The confirmation pass on revision 2 returned "ready after listed fixes"; revision 3 applies them: shared-file ownership (section 12), held-out gating rule consistent with WP0 (section 8, section 11), `languages: auto` defined at bundle level and acceptance measured with the shipped default (R-2, WP1), `resources/list` kept unchanged and exempt under B-6 (S-3), `sectionAnchor` labels for WP3a (WP0), `.okf-proposals/` location rule (B-5), cache fallbacks and Windows location (R-9), strict comparison in the confidence flag (R-4).
 
 Revision 4 records WP7 as landed (branch `wp7/code-structure`, 11 commits, 193 tests, MCP contract and tool-order snapshots byte-identical to 0.9.1). An independent Codex review of the branch found one Windows CI failure (fixed by a `win32` skip), the `LiveAuthoringService` surface change (now a section 10 entry), and the unordered snapshot comparison (fixed with ordered snapshots). Sections 6, 10, 12 and Q-1, Q-4, Q-7 updated to match what was built.
+
+Revision 5 records WP0 as landed and fills in the measured scaling numbers (section 4.6). The enlarged query sets lowered the 0.9.1 baseline to Recall@5 0.29 (alpinaria) and 0.27 (atlas) while the lexical prototype still measures 0.76 and 0.77, so the WP1 targets stand. The `lowConfidence` acceptance moved from "zero answerable flags" to "≤ 3% of answerable queries with a relevant top-1", because the strict rule flags 5/181 and 1/84 on the larger sets; this was changed before WP1 started (R-4, WP1).
+
+Revision 6 re-sequences embeddings at the maintainer's request: the first embedder is an OpenAI-compatible client that ships in core with zero dependencies (R-8, R-8a), which also serves local OpenAI-compatible servers; the former WP3b is split into WP3b (client and cache, may start in Group B because it touches no search or config file), WP3c (hybrid retrieval and config wiring) and WP3d (local ONNX package, Should). Sections 4.6, 6, 8 and 12 updated accordingly.
