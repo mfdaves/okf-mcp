@@ -18,13 +18,13 @@
 // merged in), so both ends reduce to a single retriever. Ties are broken by
 // the dominant side's rank, then the other side's, then id, so the order is deterministic.
 
-// Both chosen on the development split of both fixtures with text-embedding-3-small at 512
-// dimensions and section units: the pre-registered rule over alpha 0..1 under minmax, tmm and
-// lexical-tmm (best mean dev Recall@5, ties within 0.005 by mean nDCG@10, then smaller alpha)
-// (test/fixtures/retrieval/reports/hybrid-0.11-2026-10-24.md).
-const DEFAULT_FUSION_ALPHA = 0.5;
+// Chosen with the default concept units on the development split of both fixtures with
+// text-embedding-3-small at 512 dimensions: the pre-registered rule over alpha 0..1 under
+// minmax, tmm and lexical-tmm (best mean dev Recall@5, ties within 0.005 by mean nDCG@10,
+// then the smaller alpha) (test/fixtures/retrieval/reports/hybrid-0.11-2026-10-24.md).
+const DEFAULT_FUSION_ALPHA = 0.4;
 const FUSION_NORMALIZATIONS = Object.freeze(["minmax", "tmm", "lexical-tmm"]);
-const DEFAULT_FUSION_NORMALIZATION = "lexical-tmm";
+const DEFAULT_FUSION_NORMALIZATION = "tmm";
 // Theoretical lower bounds per side, used by "tmm" and "lexical-tmm".
 const THEORETICAL_MIN = Object.freeze({ lexical: 0, dense: -1 });
 

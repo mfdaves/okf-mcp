@@ -15,10 +15,11 @@
 const { EmbedderError } = require("../embed/interface");
 const { conceptUnits } = require("../embed/units");
 
-// `embedUnits` names: sections (default; src/context/sections.js, one unit per
-// section anchored `uri#slug`, the lead as `uri`) or whole concepts (src/embed/units.js).
+// `embedUnits` names: whole concepts (default, chosen on the dev split) or sections
+// (src/context/sections.js, one unit per section anchored `uri#slug`, the lead as `uri`;
+// better on synonym queries, worse on keyword ones in the WP3c measurement).
 const EMBED_UNITS = Object.freeze(["concepts", "sections"]);
-const DEFAULT_EMBED_UNITS = "sections";
+const DEFAULT_EMBED_UNITS = "concepts";
 
 // index -> Map(units function -> memo)
 const UNIT_MEMOS = new WeakMap();

@@ -137,10 +137,10 @@ test("denseSearch refuses a mismatched query vector and returns nothing on an em
   assert.deepEqual(denseSearch(index, { queryVector: new Float32Array(7), cache }), []);
 });
 
-test("embedUnits resolves sections by default, concepts on request, and refuses others", () => {
+test("embedUnits resolves concepts by default, sections on request, and refuses others", () => {
   const { conceptUnits } = require("../src/embed/units");
   const { resolveUnits } = require("../src/search/dense");
-  assert.equal(resolveUnits(), require("../src/context/sections").sectionUnits);
+  assert.equal(resolveUnits(), conceptUnits);
   assert.equal(resolveUnits("sections"), require("../src/context/sections").sectionUnits);
   assert.equal(resolveUnits("concepts"), conceptUnits);
   const custom = () => [];

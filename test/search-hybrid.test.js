@@ -46,8 +46,8 @@ test("hybrid search finds a concept that shares no word with the query", async (
   assert.equal(lexical.total, 0, "no lexical match for the Italian synonym");
   const hybrid = searchConcepts(index, hybridOptions(cache, "spedizione"));
   assert.equal(hybrid.hybrid, true);
-  assert.equal(hybrid.alpha, 0.5);
-  assert.equal(hybrid.normalization, "lexical-tmm");
+  assert.equal(hybrid.alpha, 0.4);
+  assert.equal(hybrid.normalization, "tmm");
   assert.equal(hybrid.results[0].uri, "okf://shop/delivery");
   const top = hybrid.results[0];
   assert.equal(top.lexicalScore, null);
