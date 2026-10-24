@@ -707,6 +707,34 @@ latency, Recall@10, MRR@10, and representative rankings. Search indexes are
 process-local and keyed to the parsed OKF index, so remote loads and accepted
 proposals receive a fresh index automatically.
 
+### Budgeted context and section anchors (0.11)
+
+`get_context` (MCP, read-only) and `okf context <query> [--budget <tokens>]
+[--limit <n>]` (CLI, JSON) answer a question with the sections that matter
+instead of whole concepts. Candidates come from the same search as
+`search_concepts` (same filters, `mode`, `lowConfidence`, `queryTerms`); the
+sections of those candidates are then ranked against the query, deduplicated,
+and packed in rank order while they fit `budgetTokens` (default 1,200, never
+exceeded; tokens are estimated as `ceil(characters / 4)` and the estimator is
+named in the response). Each section carries `uri`, `anchor`, `heading`,
+`title`, `text`, `tokens`, `score`, `relevance`, `coverage`, `matchedTerms`
+and the concept's provenance (`status`, `staleAfter`, `freshness`,
+`trustTier`, `verified`, `generated`, `sources`). The library exposes
+`assembleContext(index, options)`, `conceptSections(doc)` and
+`sectionUnits(index)`.
+
+Section anchors are an okf-mcp extension; OKF v0.2 defines none and nothing
+in a bundle needs them. A concept is cut at its document-level headings: the
+text before the first heading (with the title and description) is addressed
+by the concept URI alone, every other section by `uri#slug`, where the slug
+follows GitHub's heading rule (lower-cased, punctuation removed, spaces
+turned into hyphens, accents kept) and a repeated heading takes `-1`, `-2`,
+... in document order. A reader that drops the fragment still lands on the
+concept. An anchor depends only on the heading texts up to its own: edits to
+any section body, whitespace-only edits and edits to later sections leave it
+unchanged, while renaming the heading, or adding a heading with the same text
+before it, changes it.
+
 ## Embeddings (0.11, opt-in)
 
 Dense retrieval is off unless configured, and the default install makes no network calls. 0.11 ships the embedder interface, a zero-dependency client for the OpenAI embeddings API and compatible servers (Ollama, vLLM, LM Studio), and a vector cache kept outside the bundle under `$XDG_CACHE_HOME/okf-mcp/<sha256 of the root>/` (`~/.cache/okf-mcp/` or `%LOCALAPPDATA%\okf-mcp\`), so a populated cache never dirties a Git worktree and can be deleted at any time. Project configuration will enable it with `embedder: { type: openai, baseUrl, model, apiKeyEnv, dimensions, batchSize, timeoutMs, maxRetries, concurrency }` plus an optional `cacheDir`; the API key is read only from the environment variable named by `apiKeyEnv`, and receipts report `embedder.remote: true` whenever text leaves the machine. The cache is keyed by the embedder identity `openai:<endpoint>:<model>:<dimension>:<maxInputChars>`, so a change of endpoint, model, dimension or truncation length rebuilds it. Hybrid search wiring follows in the next release; the library already exposes `createOpenAiEmbedder`, `openVectorCache`, `resolveCacheDir`, and `prepareEmbeddings`.
