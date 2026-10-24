@@ -8,7 +8,7 @@
 //
 //   node --expose-gc scripts/index-benchmark.js --sizes 5000,20000 --rounds 5 \
 //     --search-module scripts/hybrid-bench-module.js \
-//     --search-options '{"dimension":512,"unitsPerConcept":4,"alpha":0.4}'
+//     --search-options '{"dimension":512,"unitsPerConcept":4}'
 //
 // unitsPerConcept > 1 stands in for section units (`uri#s<n>`): 5,000 concepts x 4 units is
 // 20,000 vectors. The stand-in implements only what dense scoring reads from a cache

@@ -144,7 +144,7 @@ test("--embedder-config files hold a bare embedder block or the project keys", (
   assert.deepEqual(loadEmbeddingConfigFile(bare), {
     embedder: { type: "openai", baseUrl: "http://127.0.0.1:1", model: "m" },
     cacheDir: null,
-    fusion: { alpha: 0.4, normalization: "tmm" },
+    fusion: { alpha: 0.5, normalization: "lexical-tmm" },
     embedUnits: "sections",
   });
   const full = path.join(dir, "full.yaml");

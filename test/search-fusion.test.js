@@ -75,6 +75,7 @@ test("ties break by lexical rank, then dense rank, then id", () => {
       { id: "w", score: 0.1 },
     ],
     alpha: 0.5,
+    normalization: "minmax",
   });
   // x and y both fuse to 0.5; x ranks first lexically. z and w fuse to 0
   // with no lexical rank and the same dense score: dense rank decides.
@@ -89,6 +90,7 @@ test("ties break by lexical rank, then dense rank, then id", () => {
       { id: "p", score: 1 },
     ],
     alpha: 0.5,
+    normalization: "minmax",
   });
   // A list of equal scores normalises to 1.
   assert.deepEqual(

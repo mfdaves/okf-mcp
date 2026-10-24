@@ -19,11 +19,12 @@
 // the dominant side's rank, then the other side's, then id, so the order is deterministic.
 
 // Both chosen on the development split of both fixtures with text-embedding-3-small at 512
-// dimensions: the best mean dev Recall@5 over alpha 0..1 under minmax, tmm and lexical-tmm
+// dimensions and section units: the pre-registered rule over alpha 0..1 under minmax, tmm and
+// lexical-tmm (best mean dev Recall@5, ties within 0.005 by mean nDCG@10, then smaller alpha)
 // (test/fixtures/retrieval/reports/hybrid-0.11-2026-10-24.md).
-const DEFAULT_FUSION_ALPHA = 0.4;
+const DEFAULT_FUSION_ALPHA = 0.5;
 const FUSION_NORMALIZATIONS = Object.freeze(["minmax", "tmm", "lexical-tmm"]);
-const DEFAULT_FUSION_NORMALIZATION = "tmm";
+const DEFAULT_FUSION_NORMALIZATION = "lexical-tmm";
 // Theoretical lower bounds per side, used by "tmm" and "lexical-tmm".
 const THEORETICAL_MIN = Object.freeze({ lexical: 0, dense: -1 });
 
