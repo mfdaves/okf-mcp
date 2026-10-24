@@ -95,35 +95,54 @@ async function prepareEmbeddings(index, embedder, cache, options) {
     }
   }
 
-  // Chunks are sized so one embed() call can use the implementation's full
-  // concurrency, and each chunk is persisted before the next is requested.
+  // Each embed() call carries at most maxBatch units (the interface's limit
+  // per call); up to `concurrency` calls run at once, and every batch is
+  // persisted as it completes so an interrupted run keeps its progress.
   const parallel =
     Number.isSafeInteger(embedder.concurrency) && embedder.concurrency > 0
       ? embedder.concurrency
       : 1;
-  const chunkSize = embedder.maxBatch * parallel;
   const queue = Array.from(pending.values());
+  const batches = [];
+  for (let offset = 0; offset < queue.length; offset += embedder.maxBatch) {
+    batches.push(queue.slice(offset, offset + embedder.maxBatch));
+  }
   const usageBefore = usageSnapshot(embedder);
   let embedded = 0;
   let calls = 0;
-  for (let offset = 0; offset < queue.length; offset += chunkSize) {
-    const chunk = queue.slice(offset, offset + chunkSize);
-    const vectors = await embedder.embed(chunk.map((unit) => unit.text));
-    calls += 1;
-    if (!Array.isArray(vectors) || vectors.length !== chunk.length) {
-      throw new EmbedderError(
-        "The embedder returned a different number of vectors than inputs.",
-        "embedder_bad_output",
-      );
+  let next = 0;
+  let failure = null;
+  const worker = async () => {
+    while (next < batches.length && failure === null) {
+      const batch = batches[next];
+      next += 1;
+      try {
+        calls += 1;
+        const vectors = await embedder.embed(batch.map((unit) => unit.text));
+        if (!Array.isArray(vectors) || vectors.length !== batch.length) {
+          throw new EmbedderError(
+            "The embedder returned a different number of vectors than inputs.",
+            "embedder_bad_output",
+          );
+        }
+        cache.putMany(
+          batch.map((unit, position) => ({
+            id: unit.id,
+            hash: unit.hash,
+            vector: vectors[position],
+          })),
+        );
+        embedded += batch.length;
+        if (typeof config.onProgress === "function") {
+          config.onProgress({ embedded, total: queue.length, units: units.length });
+        }
+      } catch (error) {
+        if (failure === null) failure = error;
+      }
     }
-    cache.putMany(
-      chunk.map((unit, position) => ({ id: unit.id, hash: unit.hash, vector: vectors[position] })),
-    );
-    embedded += chunk.length;
-    if (typeof config.onProgress === "function") {
-      config.onProgress({ embedded, total: queue.length, units: units.length });
-    }
-  }
+  };
+  await Promise.all(Array.from({ length: Math.min(parallel, batches.length) }, worker));
+  if (failure !== null) throw failure;
   const pruned = cache.prune(keep);
   const usage = usageDelta(usageBefore, usageSnapshot(embedder));
 

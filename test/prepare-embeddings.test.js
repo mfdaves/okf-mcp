@@ -143,16 +143,13 @@ test("prepares the alpinaria fixture with the minimum requests and re-embeds onl
     reason: "missing",
   });
   assert.ok(first.durationMs >= 0);
-  // One event per persisted chunk of maxBatch x concurrency units.
-  const chunk = BATCH_SIZE * 2;
-  assert.deepEqual(
-    progress,
-    Array.from({ length: Math.ceil(concepts / chunk) }, (_, position) => ({
-      embedded: Math.min((position + 1) * chunk, concepts),
-      total: concepts,
-      units: concepts,
-    })),
-  );
+  // One event per persisted batch of at most maxBatch units, in completion order.
+  assert.equal(progress.length, Math.ceil(concepts / BATCH_SIZE));
+  assert.deepEqual(progress.at(-1), { embedded: concepts, total: concepts, units: concepts });
+  progress.forEach((event, position) => {
+    assert.ok(position === 0 || event.embedded > progress[position - 1].embedded);
+    assert.equal(event.total, concepts);
+  });
   assert.equal(cache.size, concepts);
   for (const unit of conceptUnits(index)) {
     assert.deepEqual(Array.from(cache.get(unit.hash)), Array.from(vectorFor(unit.text, 16)));
@@ -328,6 +325,67 @@ test("a populated cache outside the root leaves git-backed apply free to commit"
     /worktree must be completely clean/,
   );
   assert.equal(fs.existsSync(path.join(root, "gamma.md")), false);
+});
+
+test("calls embed() with at most maxBatch units and at most concurrency calls in flight", async (t) => {
+  const work = tempDir(t, "okf-embed-prepare-");
+  let inFlight = 0;
+  let maxInFlight = 0;
+  const sizes = [];
+  const strict = {
+    id: "strict:test:4",
+    dimension: 4,
+    languages: [],
+    remote: false,
+    maxBatch: 8,
+    maxInputChars: 1000,
+    concurrency: 3,
+    async embed(texts) {
+      if (texts.length > 8) throw new Error(`a conforming embedder rejects ${texts.length} inputs`);
+      sizes.push(texts.length);
+      inFlight += 1;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      await new Promise((resolve) => setImmediate(resolve));
+      inFlight -= 1;
+      return texts.map((text) => vectorFor(text, 4));
+    },
+  };
+  const units = Array.from({ length: 30 }, (_, position) => {
+    const text = `unit ${position}`;
+    return { id: `okf://b/${position}`, text, hash: hashUnitText(text) };
+  });
+  const cache = openVectorCache(path.join(work, "cache"), { embedderId: strict.id, dimension: 4 });
+  const progress = [];
+  const receipt = await prepareEmbeddings({}, strict, cache, {
+    units: () => units,
+    onProgress: (event) => progress.push(event.embedded),
+  });
+  assert.deepEqual([receipt.units, receipt.embedded, receipt.requests], [30, 30, 4]);
+  assert.deepEqual(
+    sizes.sort((left, right) => left - right),
+    [6, 8, 8, 8],
+  );
+  assert.equal(maxInFlight, 3);
+  assert.equal(progress.length, 4);
+  assert.equal(progress.at(-1), 30);
+  assert.equal(cache.size, 30);
+
+  // A failing call stops further calls, keeps the batches already persisted,
+  // and surfaces the error.
+  let calls = 0;
+  const flaky = {
+    ...strict,
+    concurrency: 1,
+    async embed(texts) {
+      calls += 1;
+      if (calls === 2) throw new Error("boom");
+      return texts.map((text) => vectorFor(text, 4));
+    },
+  };
+  const other = openVectorCache(path.join(work, "flaky"), { embedderId: strict.id, dimension: 4 });
+  await assert.rejects(prepareEmbeddings({}, flaky, other, { units: () => units }), /boom/);
+  assert.equal(calls, 2);
+  assert.equal(other.size, 8);
 });
 
 test("unit hashes are stable for identical text and change with any character", () => {
