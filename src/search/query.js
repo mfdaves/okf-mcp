@@ -10,6 +10,12 @@ const MAX_COMPACT_TEXT = 500;
 // `auto` runs the all-term query and falls back to any-term when it returns
 // nothing (R-1); it is the default since 0.10 (section 10).
 const SEARCH_MODES = Object.freeze(["auto", "all", "any"]);
+// R-4: a response is flagged when the any-term fallback produced it and its
+// top result matched strictly fewer than half of the query terms.
+const LOW_CONFIDENCE_COVERAGE = 0.5;
+// R-6: optional score multipliers, off by default, applied only when the
+// signal is present on the document.
+const FRESHNESS_PRIOR = Object.freeze({ deprecated: 0.5, stale: 0.7, draft: 0.85 });
 
 function lower(value) {
   return String(value || "").toLowerCase();
@@ -240,10 +246,37 @@ function searchMode(value) {
   return value;
 }
 
-// Runs the analysed query under `mode` over the filtered documents. Returns the
-// hits (doc, score, matchedTerms, coverage), the mode that produced them, and
-// the all-term count, which is the AND result size or, under `any`, the hits
-// that matched every token.
+function floorOption(value, name) {
+  if (value === undefined || value === null) {
+    return 0;
+  }
+  const number = Number(value);
+  if (!Number.isFinite(number) || number < 0 || number > 1) {
+    throw new TypeError(`${name} must be a number between 0 and 1.`);
+  }
+  return number;
+}
+
+function priorFactor(doc, asOf) {
+  const signals = signalsForDoc(doc, asOf);
+  let factor = 1;
+  if (signals.status === "deprecated") {
+    factor *= FRESHNESS_PRIOR.deprecated;
+  } else if (signals.status === "draft") {
+    factor *= FRESHNESS_PRIOR.draft;
+  }
+  if (signals.freshness === "stale") {
+    factor *= FRESHNESS_PRIOR.stale;
+  }
+  return factor;
+}
+
+// Runs the analysed query under `mode` over the filtered documents. Returns
+// the ranked results (doc, score, matchedTerms, coverage, relevance), the mode
+// that produced them, and the all-term count: the AND result size or, under
+// `any`, the hits that matched every token. The optional prior multiplies
+// scores before ranking; `relevance` is score over the run's top score, and
+// the floors drop results below either value after that.
 function rankQuery(index, config, analysis, docsByUri) {
   const searchIndex = prepareSearchIndex(index, config);
   const run = (combineWith) =>
@@ -267,15 +300,32 @@ function rankQuery(index, config, analysis, docsByUri) {
       mode = "any";
     }
   }
-  const results = hits
-    .map((hit) => Object.assign({ doc: docsByUri.get(hit.id) }, hit))
-    .filter((entry) => Boolean(entry.doc));
+  const prior = config.freshnessPrior ? (doc) => priorFactor(doc, config.asOf) : () => 1;
+  let results = hits
+    .filter((hit) => docsByUri.has(hit.id))
+    .map((hit) => {
+      const doc = docsByUri.get(hit.id);
+      return Object.assign({ doc }, hit, { score: hit.score * prior(doc) });
+    });
   results.sort((a, b) => b.score - a.score || compareDocs(a.doc, b.doc));
+  const top = results.length ? results[0].score : 0;
+  results.forEach((entry) => {
+    entry.relevance = top > 0 ? entry.score / top : 0;
+  });
+  if (config.minCoverage > 0 || config.minRelevance > 0) {
+    results = results.filter(
+      (entry) => entry.coverage >= config.minCoverage && entry.relevance >= config.minRelevance,
+    );
+  }
   return { results, mode, allTermsTotal };
 }
 
 function searchConcepts(index, options) {
-  const config = Object.assign({}, options || {}, { mode: searchMode(options?.mode) });
+  const config = Object.assign({}, options || {}, {
+    mode: searchMode(options?.mode),
+    minCoverage: floorOption(options?.minCoverage, "minCoverage"),
+    minRelevance: floorOption(options?.minRelevance, "minRelevance"),
+  });
   const query = String(config.query || "").trim();
   const analysis = analyzeQuery(query, {
     languages: query ? searchLanguages(index, config) : [],
@@ -284,12 +334,16 @@ function searchConcepts(index, options) {
   const offset = Math.max(0, Number(config.offset || 0));
   const filteredDocs = applyFilters(index, config);
   let results;
+  let ranking = null;
   if (analysis.query) {
     if (!analysis.tokens.length) {
+      // Punctuation-only text: nothing to run, reported under the requested mode.
       results = [];
+      ranking = { mode: config.mode === "any" ? "any" : "all", allTermsTotal: 0 };
     } else {
       const docsByUri = new Map(filteredDocs.map((doc) => [doc.uri, doc]));
-      results = rankQuery(index, config, analysis, docsByUri).results;
+      ranking = rankQuery(index, config, analysis, docsByUri);
+      results = ranking.results;
     }
   } else {
     results = filteredDocs.map((doc) => ({ doc, score: 0 }));
@@ -297,7 +351,10 @@ function searchConcepts(index, options) {
   }
   const page = results.slice(offset, offset + limit).map((entry) => {
     if (config.detail === "compact") {
-      return compactConceptSummary(entry.doc);
+      const compact = compactConceptSummary(entry.doc);
+      return ranking
+        ? Object.assign(compact, { coverage: entry.coverage, relevance: entry.relevance })
+        : compact;
     }
     const summary = conceptSummary(entry.doc);
     if (config.asOf) {
@@ -310,20 +367,38 @@ function searchConcepts(index, options) {
         trustTier: signals.trustTier,
       });
     }
-    return Object.assign(summary, {
+    Object.assign(summary, {
       score: entry.score,
       snippet: snippetFor(entry.doc, analysis.tokens),
     });
+    return ranking
+      ? Object.assign(summary, {
+          matchedTerms: entry.matchedTerms,
+          coverage: entry.coverage,
+          relevance: entry.relevance,
+        })
+      : summary;
   });
-  return {
-    total: results.length,
-    limit,
-    offset,
-    results: page,
-  };
+  const response = { total: results.length, limit, offset };
+  if (ranking) {
+    Object.assign(response, {
+      mode: ranking.mode,
+      allTermsTotal: ranking.allTermsTotal,
+      lowConfidence:
+        ranking.mode === "any" &&
+        results.length > 0 &&
+        results[0].coverage < LOW_CONFIDENCE_COVERAGE,
+      queryTerms: analysis.terms,
+      droppedTerms: analysis.dropped,
+    });
+  }
+  response.results = page;
+  return response;
 }
 
 module.exports = {
+  FRESHNESS_PRIOR,
+  LOW_CONFIDENCE_COVERAGE,
   SEARCH_MODES,
   applyFilters,
   searchConcepts,
