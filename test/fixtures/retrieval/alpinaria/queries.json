@@ -51,7 +51,12 @@
           "reason": "draft, not live"
         }
       ],
-      "notes": "Question words (which, for) are not in the page text."
+      "notes": "Question words (which, for) are not in the page text.",
+      "sectionAnchor": {
+        "uri": "okf://alpinaria/landing-pages/en-womens-winter-hiking-boots",
+        "heading": "Target cluster",
+        "slug": "target-cluster"
+      }
     },
     {
       "id": "Q02",
@@ -135,7 +140,12 @@
           "grade": 1
         }
       ],
-      "notes": "Apostrophe splits sull'impermeabilità; verb forms (possiamo, usare) absent."
+      "notes": "Apostrophe splits sull'impermeabilità; verb forms (possiamo, usare) absent.",
+      "sectionAnchor": {
+        "uri": "okf://alpinaria/policies/claim-impermeabile",
+        "heading": "Consentito",
+        "slug": "consentito"
+      }
     },
     {
       "id": "Q05",
@@ -162,7 +172,7 @@
       "query": "chi è il competitor più forte sugli scarponi da trekking?",
       "lang": "it",
       "category": "nl-task",
-      "split": "dev",
+      "split": "heldout",
       "expected": [
         {
           "bundle": "alpinaria",
@@ -252,7 +262,7 @@
       "query": "a che pubblico ci rivolgiamo con la linea Torrente?",
       "lang": "it",
       "category": "nl-task",
-      "split": "heldout",
+      "split": "dev",
       "expected": [
         {
           "bundle": "alpinaria",
@@ -302,7 +312,12 @@
           "reason": "deprecated page"
         }
       ],
-      "notes": "Head term; many product pages also match."
+      "notes": "Head term; many product pages also match.",
+      "sectionAnchor": {
+        "uri": "okf://alpinaria/keyword-clusters/scarponi-trekking-donna-transazionale",
+        "heading": "Parole chiave principali",
+        "slug": "parole-chiave-principali"
+      }
     },
     {
       "id": "Q12",
@@ -357,7 +372,12 @@
           "grade": 1
         }
       ],
-      "notes": ""
+      "notes": "",
+      "sectionAnchor": {
+        "uri": "okf://alpinaria/keyword-clusters/calze-trekking-merino",
+        "heading": "Parole chiave principali",
+        "slug": "parole-chiave-principali"
+      }
     },
     {
       "id": "Q14",
@@ -467,7 +487,12 @@
           "grade": 1
         }
       ],
-      "notes": "Singular 'giacca' vs plural 'giacche' in the landing page."
+      "notes": "Singular 'giacca' vs plural 'giacche' in the landing page.",
+      "sectionAnchor": {
+        "uri": "okf://alpinaria/keyword-clusters/giacca-impermeabile-montagna",
+        "heading": "Parole chiave principali",
+        "slug": "parole-chiave-principali"
+      }
     },
     {
       "id": "Q18",
@@ -507,7 +532,12 @@
           "grade": 1
         }
       ],
-      "notes": "Broad topical query; many relevant concepts."
+      "notes": "Broad topical query; many relevant concepts.",
+      "sectionAnchor": {
+        "uri": "okf://alpinaria/keyword-clusters/trail-running-shoes-eu",
+        "heading": "Head terms",
+        "slug": "head-terms"
+      }
     },
     {
       "id": "Q19",
@@ -576,7 +606,7 @@
       "query": "policy claim riciclato",
       "lang": "mixed",
       "category": "mixed-lang",
-      "split": "dev",
+      "split": "heldout",
       "expected": [
         {
           "bundle": "alpinaria",
@@ -584,14 +614,19 @@
           "grade": 2
         }
       ],
-      "notes": ""
+      "notes": "",
+      "sectionAnchor": {
+        "uri": "okf://alpinaria/policies/green-claims",
+        "heading": "Consentito / Allowed",
+        "slug": "consentito--allowed"
+      }
     },
     {
       "id": "Q23",
       "query": "brief guida scarponi invernali women",
       "lang": "mixed",
       "category": "mixed-lang",
-      "split": "heldout",
+      "split": "dev",
       "expected": [
         {
           "bundle": "alpinaria",
@@ -821,7 +856,12 @@
           "grade": 1
         }
       ],
-      "notes": "Singular 'scarpone'; cluster and page only use the plural 'scarponi'. Product sheets use the singular."
+      "notes": "Singular 'scarpone'; cluster and page only use the plural 'scarponi'. Product sheets use the singular.",
+      "sectionAnchor": {
+        "uri": "okf://alpinaria/keyword-clusters/scarponi-trekking-donna-transazionale",
+        "heading": "Parole chiave principali",
+        "slug": "parole-chiave-principali"
+      }
     },
     {
       "id": "Q32",
@@ -971,7 +1011,12 @@
           "grade": 1
         }
       ],
-      "notes": "Typed without the accent; all texts have 'impermeabilità'."
+      "notes": "Typed without the accent; all texts have 'impermeabilità'.",
+      "sectionAnchor": {
+        "uri": "okf://alpinaria/keyword-clusters/membrana-impermeabile-info",
+        "heading": "Parole chiave principali",
+        "slug": "parole-chiave-principali"
+      }
     },
     {
       "id": "Q38",
@@ -986,7 +1031,12 @@
           "grade": 2
         }
       ],
-      "notes": "Unaccented 'sostenibilita' vs indexed 'sostenibilità'."
+      "notes": "Unaccented 'sostenibilita' vs indexed 'sostenibilità'.",
+      "sectionAnchor": {
+        "uri": "okf://alpinaria/policies/green-claims",
+        "heading": "Vietato / Forbidden",
+        "slug": "vietato--forbidden"
+      }
     },
     {
       "id": "Q39",
@@ -1011,7 +1061,12 @@
           "grade": 1
         }
       ],
-      "notes": "Control: accent typed exactly as indexed."
+      "notes": "Control: accent typed exactly as indexed.",
+      "sectionAnchor": {
+        "uri": "okf://alpinaria/keyword-clusters/membrana-impermeabile-info",
+        "heading": "Parole chiave principali",
+        "slug": "parole-chiave-principali"
+      }
     },
     {
       "id": "Q40",
@@ -1051,7 +1106,12 @@
           "grade": 1
         }
       ],
-      "notes": "'rain' never occurs; texts say hardshell / waterproof / shell jacket."
+      "notes": "'rain' never occurs; texts say hardshell / waterproof / shell jacket.",
+      "sectionAnchor": {
+        "uri": "okf://alpinaria/keyword-clusters/hardshell-jacket",
+        "heading": "Head terms",
+        "slug": "head-terms"
+      }
     },
     {
       "id": "Q42",
@@ -1306,7 +1366,12 @@
           "reason": "same topic, transactional intent"
         }
       ],
-      "notes": "Informational vs transactional cluster on the same head term."
+      "notes": "Informational vs transactional cluster on the same head term.",
+      "sectionAnchor": {
+        "uri": "okf://alpinaria/keyword-clusters/scarponi-trekking-informazionale",
+        "heading": "Parole chiave principali",
+        "slug": "parole-chiave-principali"
+      }
     },
     {
       "id": "Q52",
@@ -1360,7 +1425,12 @@
           "reason": "same topic, informational intent"
         }
       ],
-      "notes": ""
+      "notes": "",
+      "sectionAnchor": {
+        "uri": "okf://alpinaria/keyword-clusters/womens-winter-hiking-boots-transactional",
+        "heading": "Head terms",
+        "slug": "head-terms"
+      }
     },
     {
       "id": "Q54",
@@ -1602,7 +1672,7 @@
       "query": "quali linee possono usare il claim Made in Italy?",
       "lang": "it",
       "category": "nl-task",
-      "split": "heldout",
+      "split": "dev",
       "expected": [
         {
           "bundle": "alpinaria",
@@ -1704,7 +1774,7 @@
       "query": "is the x-default supposed to point to the English or the Italian page?",
       "lang": "en",
       "category": "nl-task",
-      "split": "heldout",
+      "split": "dev",
       "expected": [
         {
           "bundle": "alpinaria",
@@ -1746,14 +1816,19 @@
       ],
       "distractors": [],
       "notes": "'migliore' vs the indexed 'miglior'; the English page says 'Best EN conversion rate'.",
-      "added": "wp0"
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://alpinaria/landing-pages/it-calze-merino",
+        "heading": "Note",
+        "slug": "note"
+      }
     },
     {
       "id": "Q74",
       "query": "when is the packing guide refresh due?",
       "lang": "en",
       "category": "nl-task",
-      "split": "heldout",
+      "split": "dev",
       "expected": [
         {
           "bundle": "alpinaria",
@@ -1780,7 +1855,7 @@
       "query": "quante immagini prodotto sono senza alt text?",
       "lang": "it",
       "category": "nl-task",
-      "split": "dev",
+      "split": "heldout",
       "expected": [
         {
           "bundle": "alpinaria",
@@ -1834,7 +1909,7 @@
       "query": "perché abbiamo interrotto il test delle emoji nelle meta description?",
       "lang": "it",
       "category": "nl-task",
-      "split": "heldout",
+      "split": "dev",
       "expected": [
         {
           "bundle": "alpinaria",
@@ -1856,7 +1931,7 @@
       "query": "which competitor sponsors the Lavaredo Ultra Trail?",
       "lang": "en",
       "category": "nl-task",
-      "split": "dev",
+      "split": "heldout",
       "expected": [
         {
           "bundle": "alpinaria",
@@ -1923,7 +1998,7 @@
       "query": "che numero consigliamo con le calze spesse?",
       "lang": "it",
       "category": "nl-task",
-      "split": "heldout",
+      "split": "dev",
       "expected": [
         {
           "bundle": "alpinaria",
@@ -2236,7 +2311,12 @@
       ],
       "distractors": [],
       "notes": "Place name present in many concepts (lines, brand voice, audiences).",
-      "added": "wp0"
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://alpinaria/keyword-clusters/italian-hiking-boots-brand",
+        "heading": "Head terms",
+        "slug": "head-terms"
+      }
     },
     {
       "id": "Q93",
@@ -2899,7 +2979,12 @@
       ],
       "distractors": [],
       "notes": "Both tokens are singular; the texts have 'scarponcini invernali' (product sheets: 'scarponcino invernali').",
-      "added": "wp0"
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://alpinaria/keyword-clusters/scarponcini-invernali-donna",
+        "heading": "Parole chiave principali",
+        "slug": "parole-chiave-principali"
+      }
     },
     {
       "id": "Q119",
@@ -3106,7 +3191,12 @@
       ],
       "distractors": [],
       "notes": "Unaccented 'stagionalita'.",
-      "added": "wp0"
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://alpinaria/keyword-clusters/scarponi-trekking-donna-transazionale",
+        "heading": "Note",
+        "slug": "note"
+      }
     },
     {
       "id": "Q127",
@@ -3243,7 +3333,12 @@
       ],
       "distractors": [],
       "notes": "'camminare' never occurs (camminata, camminatori).",
-      "added": "wp0"
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://alpinaria/keyword-clusters/scarpe-trekking-leggere",
+        "heading": "Parole chiave principali",
+        "slug": "parole-chiave-principali"
+      }
     },
     {
       "id": "Q133",
@@ -3326,7 +3421,12 @@
       ],
       "distractors": [],
       "notes": "'pulizia' vs 'pulire'; 'scarpe' vs 'scarponi'.",
-      "added": "wp0"
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://alpinaria/keyword-clusters/cura-manutenzione-scarponi",
+        "heading": "Parole chiave principali",
+        "slug": "parole-chiave-principali"
+      }
     },
     {
       "id": "Q137",
@@ -3693,7 +3793,12 @@
         }
       ],
       "notes": "Inverse of the freshness case: the draft is the right answer.",
-      "added": "wp0"
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://alpinaria/landing-pages/en-womens-winter-hiking-boots-draft-v2",
+        "heading": "Notes",
+        "slug": "notes"
+      }
     },
     {
       "id": "Q149",
@@ -3782,7 +3887,12 @@
         }
       ],
       "notes": "",
-      "added": "wp0"
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://alpinaria/keyword-clusters/scarponi-trekking-uomo-transazionale",
+        "heading": "Parole chiave principali",
+        "slug": "parole-chiave-principali"
+      }
     },
     {
       "id": "Q152",
@@ -3810,7 +3920,12 @@
         }
       ],
       "notes": "",
-      "added": "wp0"
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://alpinaria/keyword-clusters/boot-sizing-guide-en",
+        "heading": "Head terms",
+        "slug": "head-terms"
+      }
     },
     {
       "id": "Q153",
@@ -3838,7 +3953,12 @@
         }
       ],
       "notes": "'taglie' vs the indexed 'taglia'.",
-      "added": "wp0"
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://alpinaria/keyword-clusters/misura-scarponi-trekking",
+        "heading": "Parole chiave principali",
+        "slug": "parole-chiave-principali"
+      }
     },
     {
       "id": "Q154",
@@ -4196,6 +4316,677 @@
       "distractors": [],
       "notes": "Hyphenated token splits into e / e / a / t.",
       "added": "wp0"
+    },
+    {
+      "id": "Q176",
+      "query": "what are the head terms of the merino hiking socks cluster?",
+      "lang": "en",
+      "category": "nl-task",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "keyword-clusters/merino-hiking-socks",
+          "grade": 2
+        }
+      ],
+      "distractors": [],
+      "notes": "Answer is the Head terms list.",
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://alpinaria/keyword-clusters/merino-hiking-socks",
+        "heading": "Head terms",
+        "slug": "head-terms"
+      }
+    },
+    {
+      "id": "Q177",
+      "query": "quali sono le parole chiave principali del cluster pile?",
+      "lang": "it",
+      "category": "nl-task",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "keyword-clusters/pile-montagna",
+          "grade": 2
+        }
+      ],
+      "distractors": [],
+      "notes": "",
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://alpinaria/keyword-clusters/pile-montagna",
+        "heading": "Parole chiave principali",
+        "slug": "parole-chiave-principali"
+      }
+    },
+    {
+      "id": "Q178",
+      "query": "which page is mapped to the Dolomites packing cluster?",
+      "lang": "en",
+      "category": "nl-task",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "keyword-clusters/dolomites-hiking-gear",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "landing-pages/en-dolomites-packing-guide",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "",
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://alpinaria/keyword-clusters/dolomites-hiking-gear",
+        "heading": "Target page",
+        "slug": "target-page"
+      }
+    },
+    {
+      "id": "Q179",
+      "query": "a quale pagina è mappato il cluster scarpe trail running?",
+      "lang": "it",
+      "category": "nl-task",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "keyword-clusters/scarpe-trail-running",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "landing-pages/it-scarpe-trail-running",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "",
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://alpinaria/keyword-clusters/scarpe-trail-running",
+        "heading": "Pagina di destinazione",
+        "slug": "pagina-di-destinazione"
+      }
+    },
+    {
+      "id": "Q180",
+      "query": "what is forbidden under the Made in Italy policy?",
+      "lang": "en",
+      "category": "nl-task",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "policies/made-in-italy-claim",
+          "grade": 2
+        }
+      ],
+      "distractors": [],
+      "notes": "",
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://alpinaria/policies/made-in-italy-claim",
+        "heading": "Forbidden",
+        "slug": "forbidden"
+      }
+    },
+    {
+      "id": "Q181",
+      "query": "cosa è vietato dalla policy sull'impermeabilità?",
+      "lang": "it",
+      "category": "nl-task",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "policies/claim-impermeabile",
+          "grade": 2
+        }
+      ],
+      "distractors": [],
+      "notes": "",
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://alpinaria/policies/claim-impermeabile",
+        "heading": "Vietato",
+        "slug": "vietato"
+      }
+    },
+    {
+      "id": "Q182",
+      "query": "what comfort statements are allowed instead of medical claims?",
+      "lang": "en",
+      "category": "nl-task",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "policies/medical-health-claims",
+          "grade": 2
+        }
+      ],
+      "distractors": [],
+      "notes": "",
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://alpinaria/policies/medical-health-claims",
+        "heading": "Allowed",
+        "slug": "allowed"
+      }
+    },
+    {
+      "id": "Q183",
+      "query": "qual è la base normativa dei green claims?",
+      "lang": "it",
+      "category": "nl-task",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "policies/green-claims",
+          "grade": 2
+        },
+        {
+          "bundle": "playbook",
+          "id": "guidelines/claims-compliance-eu",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "",
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://alpinaria/policies/green-claims",
+        "heading": "Base normativa",
+        "slug": "base-normativa"
+      }
+    },
+    {
+      "id": "Q184",
+      "query": "in quali pagine si applicano le regole sui prezzi barrati?",
+      "lang": "it",
+      "category": "nl-task",
+      "split": "heldout",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "policies/price-promo-claims",
+          "grade": 2
+        }
+      ],
+      "distractors": [],
+      "notes": "",
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://alpinaria/policies/price-promo-claims",
+        "heading": "Ambito",
+        "slug": "ambito"
+      }
+    },
+    {
+      "id": "Q185",
+      "query": "quali parole dobbiamo evitare nei testi italiani?",
+      "lang": "it",
+      "category": "nl-task",
+      "split": "heldout",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "brand-voice/tono-di-voce-it",
+          "grade": 2
+        }
+      ],
+      "distractors": [],
+      "notes": "",
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://alpinaria/brand-voice/tono-di-voce-it",
+        "heading": "Da evitare",
+        "slug": "da-evitare"
+      }
+    },
+    {
+      "id": "Q186",
+      "query": "what should English product copy not say?",
+      "lang": "en",
+      "category": "nl-task",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "brand-voice/tone-of-voice-en",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "policies/medical-health-claims",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "",
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://alpinaria/brand-voice/tone-of-voice-en",
+        "heading": "Do not",
+        "slug": "do-not"
+      }
+    },
+    {
+      "id": "Q187",
+      "query": "lessico scarponi scarpe scarponcini",
+      "lang": "it",
+      "category": "keyword",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "brand-voice/tono-di-voce-it",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "brand-voice/glossario-terminologia",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "",
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://alpinaria/brand-voice/tono-di-voce-it",
+        "heading": "Lessico da usare",
+        "slug": "lessico-da-usare"
+      }
+    },
+    {
+      "id": "Q188",
+      "query": "which SKUs belong to the Nevaio line?",
+      "lang": "en",
+      "category": "nl-task",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "product-lines/nevaio",
+          "grade": 2
+        }
+      ],
+      "distractors": [],
+      "notes": "",
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://alpinaria/product-lines/nevaio",
+        "heading": "Modelli / Models",
+        "slug": "modelli--models"
+      }
+    },
+    {
+      "id": "Q189",
+      "query": "quali modelli fanno parte della linea Cresta?",
+      "lang": "it",
+      "category": "nl-task",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "product-lines/cresta",
+          "grade": 2
+        }
+      ],
+      "distractors": [],
+      "notes": "",
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://alpinaria/product-lines/cresta",
+        "heading": "Modelli / Models",
+        "slug": "modelli--models"
+      }
+    },
+    {
+      "id": "Q190",
+      "query": "che taglie ha la linea Vetta?",
+      "lang": "it",
+      "category": "nl-task",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "product-lines/vetta",
+          "grade": 2
+        }
+      ],
+      "distractors": [],
+      "notes": "",
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://alpinaria/product-lines/vetta",
+        "heading": "Note",
+        "slug": "note"
+      }
+    },
+    {
+      "id": "Q191",
+      "query": "is the Sentiero line made in Italy?",
+      "lang": "en",
+      "category": "nl-task",
+      "split": "heldout",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "product-lines/sentiero",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "policies/made-in-italy-claim",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "The line notes say Designed in Italy, never Made in Italy.",
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://alpinaria/product-lines/sentiero",
+        "heading": "Note",
+        "slug": "note"
+      }
+    },
+    {
+      "id": "Q192",
+      "query": "perché la pagina scarponi donna è salita di posizione?",
+      "lang": "it",
+      "category": "nl-task",
+      "split": "heldout",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "landing-pages/it-scarponi-da-trekking-donna",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "seo-findings/cannibalizzazione-scarponi-donna",
+          "grade": 1
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "decisions/redirect-vecchia-pagina-donna",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "",
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://alpinaria/landing-pages/it-scarponi-da-trekking-donna",
+        "heading": "Note",
+        "slug": "note"
+      }
+    },
+    {
+      "id": "Q193",
+      "query": "when do impressions peak for the women's winter page?",
+      "lang": "en",
+      "category": "nl-task",
+      "split": "heldout",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "landing-pages/en-womens-winter-hiking-boots",
+          "grade": 2
+        }
+      ],
+      "distractors": [],
+      "notes": "",
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://alpinaria/landing-pages/en-womens-winter-hiking-boots",
+        "heading": "Notes",
+        "slug": "notes"
+      }
+    },
+    {
+      "id": "Q194",
+      "query": "quanti prodotti ha la categoria scarponi uomo?",
+      "lang": "it",
+      "category": "nl-task",
+      "split": "heldout",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "landing-pages/it-scarponi-da-trekking-uomo",
+          "grade": 2
+        }
+      ],
+      "distractors": [],
+      "notes": "",
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://alpinaria/landing-pages/it-scarponi-da-trekking-uomo",
+        "heading": "Note",
+        "slug": "note"
+      }
+    },
+    {
+      "id": "Q195",
+      "query": "why does the men's hiking boots title say Made in Italy?",
+      "lang": "en",
+      "category": "nl-task",
+      "split": "heldout",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "landing-pages/en-mens-hiking-boots",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "experiments/en-title-italian-made",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "",
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://alpinaria/landing-pages/en-mens-hiking-boots",
+        "heading": "Notes",
+        "slug": "notes"
+      }
+    },
+    {
+      "id": "Q196",
+      "query": "quante parole ha la guida alla scelta degli scarponi?",
+      "lang": "it",
+      "category": "nl-task",
+      "split": "heldout",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "landing-pages/it-guida-scelta-scarponi",
+          "grade": 2
+        }
+      ],
+      "distractors": [],
+      "notes": "",
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://alpinaria/landing-pages/it-guida-scelta-scarponi",
+        "heading": "Note",
+        "slug": "note"
+      }
+    },
+    {
+      "id": "Q197",
+      "query": "where does the lightweight hiking shoes page sit in the crawl?",
+      "lang": "en",
+      "category": "nl-task",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "landing-pages/en-lightweight-hiking-shoes",
+          "grade": 2
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "seo-findings/mobile-menu-crawl-depth",
+          "grade": 1
+        },
+        {
+          "bundle": "alpinaria",
+          "id": "technical-issues/en-pages-crawl-depth",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "",
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://alpinaria/landing-pages/en-lightweight-hiking-shoes",
+        "heading": "Notes",
+        "slug": "notes"
+      }
+    },
+    {
+      "id": "Q198",
+      "query": "quale CTR ha la query di brand?",
+      "lang": "it",
+      "category": "nl-task",
+      "split": "heldout",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "keyword-clusters/alpinaria-brand",
+          "grade": 2
+        }
+      ],
+      "distractors": [],
+      "notes": "",
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://alpinaria/keyword-clusters/alpinaria-brand",
+        "heading": "Note",
+        "slug": "note"
+      }
+    },
+    {
+      "id": "Q199",
+      "query": "URL della scheda prodotto Torrente Rapido W",
+      "lang": "it",
+      "category": "nl-task",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "products/trl-w-401-torrente-rapido-w",
+          "grade": 2
+        }
+      ],
+      "distractors": [],
+      "notes": "",
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://alpinaria/products/trl-w-401-torrente-rapido-w",
+        "heading": "Note SEO",
+        "slug": "note-seo"
+      }
+    },
+    {
+      "id": "Q200",
+      "query": "product URL of Dolomiti AquaStop M",
+      "lang": "en",
+      "category": "nl-task",
+      "split": "heldout",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "products/trk-m-042-dolomiti-aquastop-m",
+          "grade": 2
+        }
+      ],
+      "distractors": [],
+      "notes": "",
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://alpinaria/products/trk-m-042-dolomiti-aquastop-m",
+        "heading": "SEO notes",
+        "slug": "seo-notes"
+      }
+    },
+    {
+      "id": "Q201",
+      "query": "head terms del cluster approach shoes",
+      "lang": "mixed",
+      "category": "mixed-lang",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "keyword-clusters/approach-shoes",
+          "grade": 2
+        }
+      ],
+      "distractors": [],
+      "notes": "",
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://alpinaria/keyword-clusters/approach-shoes",
+        "heading": "Head terms",
+        "slug": "head-terms"
+      }
+    },
+    {
+      "id": "Q202",
+      "query": "quando ha i picchi il cluster outlet scarponi?",
+      "lang": "it",
+      "category": "nl-task",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "keyword-clusters/saldi-scarponi",
+          "grade": 2
+        }
+      ],
+      "distractors": [],
+      "notes": "",
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://alpinaria/keyword-clusters/saldi-scarponi",
+        "heading": "Note",
+        "slug": "note"
+      }
+    },
+    {
+      "id": "Q203",
+      "query": "what is the average position of the men's waterproof boots cluster?",
+      "lang": "en",
+      "category": "nl-task",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "alpinaria",
+          "id": "keyword-clusters/mens-hiking-boots-waterproof",
+          "grade": 2
+        }
+      ],
+      "distractors": [],
+      "notes": "",
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://alpinaria/keyword-clusters/mens-hiking-boots-waterproof",
+        "heading": "Notes",
+        "slug": "notes"
+      }
     }
   ]
 }

@@ -8,6 +8,7 @@ const path = require("node:path");
 const test = require("node:test");
 
 const { buildProjectIndex } = require("../src/indexer");
+const { headingSlug, markdownHeadings } = require("./fixtures/retrieval/lib/slug");
 const { assignSplit, splitCounts, stratumKey } = require("./fixtures/retrieval/lib/split");
 
 const FIXTURES_ROOT = path.join(__dirname, "fixtures", "retrieval");
@@ -141,5 +142,29 @@ FIXTURES.forEach((fixture) => {
     const counts = splitCounts(sidecar.queries);
     const devShare = counts.dev / (counts.dev + counts.heldout);
     assert.ok(devShare >= 0.6 && devShare <= 0.8, `dev share ${devShare.toFixed(2)} is outside 60-80%`);
+  });
+
+  test(`${fixture}: sectionAnchor labels point at a real H2 of a grade-2 concept (WP3a)`, () => {
+    const sidecar = JSON.parse(fs.readFileSync(queriesPath, "utf8"));
+    const index = buildProjectIndex(projectPath);
+    let devLabelled = 0;
+    sidecar.queries.forEach((query) => {
+      if (!query.sectionAnchor) {
+        return;
+      }
+      const { uri, heading, slug } = query.sectionAnchor;
+      const doc = index.byUri.get(uri);
+      assert.ok(doc, `${query.id} anchors ${uri}, which is not indexed`);
+      const anchored = (query.expected || []).some((entry) => `okf://${entry.bundle}/${entry.id}` === uri && entry.grade === 2);
+      assert.ok(anchored, `${query.id} anchors a concept that is not one of its grade-2 answers`);
+      const h2 = markdownHeadings(doc.body).filter(([level]) => level === 2).map(([, text]) => text);
+      assert.ok(h2.includes(heading), `${query.id}: "${heading}" is not an H2 of ${uri} (${h2.join(" | ")})`);
+      assert.equal(slug, headingSlug(heading), `${query.id}: slug drifted from the heading rule`);
+      if (query.split === "dev") {
+        devLabelled += 1;
+      }
+    });
+    // WP3a's acceptance is measured on at least 40 labelled development queries per fixture.
+    assert.ok(devLabelled >= 40, `${devLabelled} labelled dev queries; WP3a needs at least 40`);
   });
 });

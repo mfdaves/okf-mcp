@@ -46,7 +46,12 @@
       ],
       "distractors": [],
       "notes": "The incident and post-mortem are Italian ('validatori', 'gennaio'); the service and ADR-020 mention the January outage in English.",
-      "added": "wp0"
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://atlas/incidents/inc-2026-001-validator-outage-bologna",
+        "heading": "Causa radice",
+        "slug": "causa-radice"
+      }
     },
     {
       "id": "A02",
@@ -73,7 +78,12 @@
       ],
       "distractors": [],
       "notes": "Italian question; the decision is English (offline validation window).",
-      "added": "wp0"
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://atlas/decisions/adr-010-offline-validation-window",
+        "heading": "Decision",
+        "slug": "decision"
+      }
     },
     {
       "id": "A03",
@@ -100,7 +110,12 @@
       ],
       "distractors": [],
       "notes": "The retention ADR is Italian; the ledger service states 24 months in English.",
-      "added": "wp0"
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://atlas/decisions/adr-019-data-retention-validations",
+        "heading": "Decisione",
+        "slug": "decisione"
+      }
     },
     {
       "id": "A04",
@@ -122,7 +137,12 @@
       ],
       "distractors": [],
       "notes": "'reperibile' vs 'on-call'; the team page has the PagerDuty rota.",
-      "added": "wp0"
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://atlas/teams/team-pagamenti",
+        "heading": "Lead and on-call",
+        "slug": "lead-and-on-call"
+      }
     },
     {
       "id": "A05",
@@ -149,14 +169,19 @@
       ],
       "distractors": [],
       "notes": "'caused' vs 'root cause'; 'renewals' vs 'renewed'.",
-      "added": "wp0"
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://atlas/incidents/inc-2026-027-subscription-renewal-duplicate",
+        "heading": "Root cause",
+        "slug": "root-cause"
+      }
     },
     {
       "id": "A06",
       "query": "come si riconciliano gli avvisi pagoPA non pagati?",
       "lang": "it",
       "category": "nl-task",
-      "split": "heldout",
+      "split": "dev",
       "expected": [
         {
           "bundle": "atlas",
@@ -203,14 +228,19 @@
       ],
       "distractors": [],
       "notes": "",
-      "added": "wp0"
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://atlas/decisions/adr-018-nexi-primary-psp",
+        "heading": "Decision",
+        "slug": "decision"
+      }
     },
     {
       "id": "A08",
       "query": "what is the error budget for the API gateway?",
       "lang": "en",
       "category": "nl-task",
-      "split": "heldout",
+      "split": "dev",
       "expected": [
         {
           "bundle": "atlas",
@@ -252,7 +282,12 @@
       ],
       "distractors": [],
       "notes": "The post-mortem is English, the incident Italian.",
-      "added": "wp0"
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://atlas/incidents/inc-2026-013-spid-login-down",
+        "heading": "Causa radice",
+        "slug": "causa-radice"
+      }
     },
     {
       "id": "A10",
@@ -274,14 +309,19 @@
       ],
       "distractors": [],
       "notes": "The ledger stores only a hash (ADR-014).",
-      "added": "wp0"
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://atlas/decisions/adr-014-emv-contactless-tokenization",
+        "heading": "Decision",
+        "slug": "decision"
+      }
     },
     {
       "id": "A11",
       "query": "what should happen before activating a new fare table?",
       "lang": "en",
       "category": "nl-task",
-      "split": "heldout",
+      "split": "dev",
       "expected": [
         {
           "bundle": "atlas",
@@ -308,7 +348,7 @@
       "query": "quale team possiede il warehouse?",
       "lang": "it",
       "category": "nl-task",
-      "split": "dev",
+      "split": "heldout",
       "expected": [
         {
           "bundle": "atlas",
@@ -367,7 +407,12 @@
       ],
       "distractors": [],
       "notes": "Algorithm name.",
-      "added": "wp0"
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://atlas/decisions/adr-005-raptor-trip-planner",
+        "heading": "Decision",
+        "slug": "decision"
+      }
     },
     {
       "id": "A15",
@@ -426,7 +471,12 @@
       ],
       "distractors": [],
       "notes": "",
-      "added": "wp0"
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://atlas/decisions/adr-012-outbox-pattern",
+        "heading": "Decision",
+        "slug": "decision"
+      }
     },
     {
       "id": "A17",
@@ -463,7 +513,12 @@
       ],
       "distractors": [],
       "notes": "",
-      "added": "wp0"
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://atlas/runbooks/feature-flag-kill-switch",
+        "heading": "Steps",
+        "slug": "steps"
+      }
     },
     {
       "id": "A18",
@@ -544,7 +599,12 @@
       ],
       "distractors": [],
       "notes": "Acronym present in several concepts.",
-      "added": "wp0"
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://atlas/incidents/inc-2026-018-clickhouse-disk-full",
+        "heading": "Root cause",
+        "slug": "root-cause"
+      }
     },
     {
       "id": "A21",
@@ -588,7 +648,12 @@
       ],
       "distractors": [],
       "notes": "'riconciliazione' vs 'reconciliation'.",
-      "added": "wp0"
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://atlas/runbooks/wallet-balance-reconciliation",
+        "heading": "Steps",
+        "slug": "steps"
+      }
     },
     {
       "id": "A23",
@@ -659,7 +724,12 @@
       ],
       "distractors": [],
       "notes": "",
-      "added": "wp0"
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://atlas/decisions/adr-017-retire-legacy-sbe",
+        "heading": "Decisione",
+        "slug": "decisione"
+      }
     },
     {
       "id": "A26",
@@ -764,7 +834,12 @@
       ],
       "distractors": [],
       "notes": "Flag name.",
-      "added": "wp0"
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://atlas/runbooks/notification-rate-limit",
+        "heading": "Steps",
+        "slug": "steps"
+      }
     },
     {
       "id": "A31",
@@ -781,7 +856,12 @@
       ],
       "distractors": [],
       "notes": "Oracle error code in the historical incident.",
-      "added": "wp0"
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://atlas/incidents/inc-2025-041-legacy-sbe-crash",
+        "heading": "Timeline",
+        "slug": "timeline"
+      }
     },
     {
       "id": "A32",
@@ -852,7 +932,12 @@
       ],
       "distractors": [],
       "notes": "'rotating' vs 'rotate' / 'rotation'.",
-      "added": "wp0"
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://atlas/runbooks/rotate-psp-credentials",
+        "heading": "Steps",
+        "slug": "steps"
+      }
     },
     {
       "id": "A35",
@@ -906,7 +991,12 @@
       ],
       "distractors": [],
       "notes": "'renewing' vs 'renewal'.",
-      "added": "wp0"
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://atlas/runbooks/certificate-renewal",
+        "heading": "Steps",
+        "slug": "steps"
+      }
     },
     {
       "id": "A37",
@@ -928,7 +1018,12 @@
       ],
       "distractors": [],
       "notes": "'tables' vs 'table'; 'partitioned' vs 'partitions' / 'partitioning'.",
-      "added": "wp0"
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://atlas/questions/q-006-postgres-partitioning-validations",
+        "heading": "Options",
+        "slug": "options"
+      }
     },
     {
       "id": "A38",
@@ -950,7 +1045,12 @@
       ],
       "distractors": [],
       "notes": "Singular; the incident says 'sanzioni duplicate'.",
-      "added": "wp0"
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://atlas/incidents/inc-2026-025-inspector-app-sync",
+        "heading": "Impatto",
+        "slug": "impatto"
+      }
     },
     {
       "id": "A39",
@@ -1043,7 +1143,12 @@
       ],
       "distractors": [],
       "notes": "Unaccented 'funzionalita'.",
-      "added": "wp0"
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://atlas/decisions/adr-017-retire-legacy-sbe",
+        "heading": "Decisione",
+        "slug": "decisione"
+      }
     },
     {
       "id": "A43",
@@ -1060,7 +1165,12 @@
       ],
       "distractors": [],
       "notes": "Control: accent typed exactly as the section heading.",
-      "added": "wp0"
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://atlas/services/pagopa-adapter",
+        "heading": "Proprietà e runtime",
+        "slug": "proprietà-e-runtime"
+      }
     },
     {
       "id": "A44",
@@ -1109,7 +1219,12 @@
       ],
       "distractors": [],
       "notes": "Italian paraphrase of the English kill switch runbook.",
-      "added": "wp0"
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://atlas/runbooks/feature-flag-kill-switch",
+        "heading": "Steps",
+        "slug": "steps"
+      }
     },
     {
       "id": "A46",
@@ -1136,7 +1251,12 @@
       ],
       "distractors": [],
       "notes": "'locations' vs 'positions'.",
-      "added": "wp0"
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://atlas/incidents/inc-2026-023-avl-feed-stale",
+        "heading": "Root cause",
+        "slug": "root-cause"
+      }
     },
     {
       "id": "A47",
@@ -1168,7 +1288,12 @@
       ],
       "distractors": [],
       "notes": "The open question is Italian; 'night' vs 'notturni'.",
-      "added": "wp0"
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://atlas/questions/q-007-on-call-compensation",
+        "heading": "Opzioni",
+        "slug": "opzioni"
+      }
     },
     {
       "id": "A48",
@@ -1222,7 +1347,12 @@
       ],
       "distractors": [],
       "notes": "'website' never occurs (storefront).",
-      "added": "wp0"
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://atlas/incidents/inc-2026-029-storefront-ddos",
+        "heading": "Root cause",
+        "slug": "root-cause"
+      }
     },
     {
       "id": "A50",
@@ -1250,7 +1380,12 @@
         }
       ],
       "notes": "",
-      "added": "wp0"
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://atlas/decisions/adr-015-polyrepo-per-team",
+        "heading": "Decision",
+        "slug": "decision"
+      }
     },
     {
       "id": "A51",
@@ -1288,7 +1423,12 @@
         }
       ],
       "notes": "",
-      "added": "wp0"
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://atlas/runbooks/on-call-escalation",
+        "heading": "Steps",
+        "slug": "steps"
+      }
     },
     {
       "id": "A52",
@@ -1377,7 +1517,12 @@
         }
       ],
       "notes": "",
-      "added": "wp0"
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://atlas/contracts/ticket-validated-v1",
+        "heading": "Notes",
+        "slug": "notes"
+      }
     },
     {
       "id": "A55",
@@ -1405,7 +1550,12 @@
         }
       ],
       "notes": "",
-      "added": "wp0"
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://atlas/runbooks/escalation-reperibilita-2025",
+        "heading": "Quando usarlo",
+        "slug": "quando-usarlo"
+      }
     },
     {
       "id": "A56",
@@ -1466,7 +1616,12 @@
         }
       ],
       "notes": "",
-      "added": "wp0"
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://atlas/postmortems/pm-2026-001-validator-outage",
+        "heading": "Sintesi",
+        "slug": "sintesi"
+      }
     },
     {
       "id": "A58",
@@ -1703,6 +1858,520 @@
       "distractors": [],
       "notes": "'live' vs 'lives'.",
       "added": "wp0"
+    },
+    {
+      "id": "A73",
+      "query": "what are the consequences of the outbox decision?",
+      "lang": "en",
+      "category": "nl-task",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "atlas",
+          "id": "decisions/adr-012-outbox-pattern",
+          "grade": 2
+        }
+      ],
+      "distractors": [],
+      "notes": "",
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://atlas/decisions/adr-012-outbox-pattern",
+        "heading": "Consequences",
+        "slug": "consequences"
+      }
+    },
+    {
+      "id": "A74",
+      "query": "quali sono le conseguenze dell'integrazione diretta con pagoPA?",
+      "lang": "it",
+      "category": "nl-task",
+      "split": "heldout",
+      "expected": [
+        {
+          "bundle": "atlas",
+          "id": "decisions/adr-009-pagopa-direct-integration",
+          "grade": 2
+        }
+      ],
+      "distractors": [],
+      "notes": "",
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://atlas/decisions/adr-009-pagopa-direct-integration",
+        "heading": "Conseguenze",
+        "slug": "conseguenze"
+      }
+    },
+    {
+      "id": "A75",
+      "query": "what went well during the wallet double charge incident?",
+      "lang": "en",
+      "category": "nl-task",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "atlas",
+          "id": "postmortems/pm-2026-004-wallet-double-charge",
+          "grade": 2
+        },
+        {
+          "bundle": "atlas",
+          "id": "incidents/inc-2026-004-wallet-double-charge",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "",
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://atlas/postmortems/pm-2026-004-wallet-double-charge",
+        "heading": "What went well",
+        "slug": "what-went-well"
+      }
+    },
+    {
+      "id": "A76",
+      "query": "action items from the Kafka lag post-mortem",
+      "lang": "en",
+      "category": "nl-task",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "atlas",
+          "id": "postmortems/pm-2026-011-kafka-lag",
+          "grade": 2
+        },
+        {
+          "bundle": "atlas",
+          "id": "incidents/inc-2026-011-kafka-partition-lag",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "",
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://atlas/postmortems/pm-2026-011-kafka-lag",
+        "heading": "Action items",
+        "slug": "action-items"
+      }
+    },
+    {
+      "id": "A77",
+      "query": "qual è la lezione del post-mortem pagoPA?",
+      "lang": "it",
+      "category": "nl-task",
+      "split": "heldout",
+      "expected": [
+        {
+          "bundle": "atlas",
+          "id": "postmortems/pm-2026-007-pagopa-timeout",
+          "grade": 2
+        }
+      ],
+      "distractors": [],
+      "notes": "",
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://atlas/postmortems/pm-2026-007-pagopa-timeout",
+        "heading": "Lezione",
+        "slug": "lezione"
+      }
+    },
+    {
+      "id": "A78",
+      "query": "how do I roll back a schema registry change?",
+      "lang": "en",
+      "category": "nl-task",
+      "split": "heldout",
+      "expected": [
+        {
+          "bundle": "atlas",
+          "id": "runbooks/schema-registry-rollback",
+          "grade": 2
+        },
+        {
+          "bundle": "atlas",
+          "id": "decisions/adr-011-avro-schema-registry",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "",
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://atlas/runbooks/schema-registry-rollback",
+        "heading": "Steps",
+        "slug": "steps"
+      }
+    },
+    {
+      "id": "A79",
+      "query": "what is the rollback for a fare table hotfix?",
+      "lang": "en",
+      "category": "nl-task",
+      "split": "heldout",
+      "expected": [
+        {
+          "bundle": "atlas",
+          "id": "runbooks/fare-table-hotfix",
+          "grade": 2
+        }
+      ],
+      "distractors": [],
+      "notes": "The runbook is Italian.",
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://atlas/runbooks/fare-table-hotfix",
+        "heading": "Rollback",
+        "slug": "rollback"
+      }
+    },
+    {
+      "id": "A80",
+      "query": "who do I escalate to when the validator queue is older than 48 hours?",
+      "lang": "en",
+      "category": "nl-task",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "atlas",
+          "id": "runbooks/validator-offline-queue-drain",
+          "grade": 2
+        }
+      ],
+      "distractors": [],
+      "notes": "The runbook is Italian; the escalation section names the SEV2 rule.",
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://atlas/runbooks/validator-offline-queue-drain",
+        "heading": "Escalation",
+        "slug": "escalation"
+      }
+    },
+    {
+      "id": "A81",
+      "query": "quali sono i prerequisiti per la riconciliazione pagoPA?",
+      "lang": "it",
+      "category": "nl-task",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "atlas",
+          "id": "runbooks/pagopa-reconciliation",
+          "grade": 2
+        }
+      ],
+      "distractors": [],
+      "notes": "",
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://atlas/runbooks/pagopa-reconciliation",
+        "heading": "Prerequisiti",
+        "slug": "prerequisiti"
+      }
+    },
+    {
+      "id": "A82",
+      "query": "when should I use the Kafka replay runbook?",
+      "lang": "en",
+      "category": "nl-task",
+      "split": "heldout",
+      "expected": [
+        {
+          "bundle": "atlas",
+          "id": "runbooks/replay-kafka-topic",
+          "grade": 2
+        }
+      ],
+      "distractors": [],
+      "notes": "",
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://atlas/runbooks/replay-kafka-topic",
+        "heading": "When to use",
+        "slug": "when-to-use"
+      }
+    },
+    {
+      "id": "A83",
+      "query": "what fields does the FareComputed event carry?",
+      "lang": "en",
+      "category": "nl-task",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "atlas",
+          "id": "contracts/fare-computed-v1",
+          "grade": 2
+        }
+      ],
+      "distractors": [],
+      "notes": "",
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://atlas/contracts/fare-computed-v1",
+        "heading": "Fields",
+        "slug": "fields"
+      }
+    },
+    {
+      "id": "A84",
+      "query": "what personal data is in AccountCreated?",
+      "lang": "en",
+      "category": "nl-task",
+      "split": "heldout",
+      "expected": [
+        {
+          "bundle": "atlas",
+          "id": "contracts/account-created-v1",
+          "grade": 2
+        }
+      ],
+      "distractors": [],
+      "notes": "",
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://atlas/contracts/account-created-v1",
+        "heading": "Personal data",
+        "slug": "personal-data"
+      }
+    },
+    {
+      "id": "A85",
+      "query": "per quanto si conservano gli esiti delle verifiche?",
+      "lang": "it",
+      "category": "nl-task",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "atlas",
+          "id": "contracts/inspection-result-v1",
+          "grade": 2
+        },
+        {
+          "bundle": "atlas",
+          "id": "decisions/adr-019-data-retention-validations",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "",
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://atlas/contracts/inspection-result-v1",
+        "heading": "Conservazione",
+        "slug": "conservazione"
+      }
+    },
+    {
+      "id": "A86",
+      "query": "how is the trip planner latency SLO alerted?",
+      "lang": "en",
+      "category": "nl-task",
+      "split": "heldout",
+      "expected": [
+        {
+          "bundle": "atlas",
+          "id": "slos/trip-planner-latency",
+          "grade": 2
+        }
+      ],
+      "distractors": [],
+      "notes": "",
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://atlas/slos/trip-planner-latency",
+        "heading": "Alerting",
+        "slug": "alerting"
+      }
+    },
+    {
+      "id": "A87",
+      "query": "what is the SLI for the login availability SLO?",
+      "lang": "en",
+      "category": "nl-task",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "atlas",
+          "id": "slos/identity-service-login-availability",
+          "grade": 2
+        }
+      ],
+      "distractors": [],
+      "notes": "",
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://atlas/slos/identity-service-login-availability",
+        "heading": "SLI",
+        "slug": "sli"
+      }
+    },
+    {
+      "id": "A88",
+      "query": "qual è l'obiettivo dello SLO di sincronizzazione dei controllori?",
+      "lang": "it",
+      "category": "nl-task",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "atlas",
+          "id": "slos/inspector-backend-sync-latency",
+          "grade": 2
+        }
+      ],
+      "distractors": [],
+      "notes": "",
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://atlas/slos/inspector-backend-sync-latency",
+        "heading": "Obiettivo",
+        "slug": "obiettivo"
+      }
+    },
+    {
+      "id": "A89",
+      "query": "what are the options for the multi-region question?",
+      "lang": "en",
+      "category": "nl-task",
+      "split": "heldout",
+      "expected": [
+        {
+          "bundle": "atlas",
+          "id": "questions/q-001-multi-region-active-active",
+          "grade": 2
+        }
+      ],
+      "distractors": [],
+      "notes": "",
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://atlas/questions/q-001-multi-region-active-active",
+        "heading": "Options",
+        "slug": "options"
+      }
+    },
+    {
+      "id": "A90",
+      "query": "qual è l'orientamento attuale sulla licenza di moneta elettronica?",
+      "lang": "it",
+      "category": "nl-task",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "atlas",
+          "id": "questions/q-002-wallet-emoney-licence",
+          "grade": 2
+        }
+      ],
+      "distractors": [],
+      "notes": "",
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://atlas/questions/q-002-wallet-emoney-licence",
+        "heading": "Orientamento attuale",
+        "slug": "orientamento-attuale"
+      }
+    },
+    {
+      "id": "A91",
+      "query": "when does support for Keycloak 25 end?",
+      "lang": "en",
+      "category": "nl-task",
+      "split": "heldout",
+      "expected": [
+        {
+          "bundle": "atlas",
+          "id": "dependencies/keycloak",
+          "grade": 2
+        }
+      ],
+      "distractors": [],
+      "notes": "",
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://atlas/dependencies/keycloak",
+        "heading": "Support end",
+        "slug": "support-end"
+      }
+    },
+    {
+      "id": "A92",
+      "query": "which services depend on Redis?",
+      "lang": "en",
+      "category": "nl-task",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "atlas",
+          "id": "dependencies/redis",
+          "grade": 2
+        }
+      ],
+      "distractors": [],
+      "notes": "",
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://atlas/dependencies/redis",
+        "heading": "Where it is used",
+        "slug": "where-it-is-used"
+      }
+    },
+    {
+      "id": "A93",
+      "query": "what does the notification hub consume?",
+      "lang": "en",
+      "category": "nl-task",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "atlas",
+          "id": "services/notification-hub",
+          "grade": 2
+        },
+        {
+          "bundle": "atlas",
+          "id": "contracts/notification-request-v1",
+          "grade": 1
+        },
+        {
+          "bundle": "atlas",
+          "id": "contracts/consent-changed-v1",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "",
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://atlas/services/notification-hub",
+        "heading": "Interfaces",
+        "slug": "interfaces"
+      }
+    },
+    {
+      "id": "A94",
+      "query": "da cosa dipende il backend dei controllori?",
+      "lang": "it",
+      "category": "nl-task",
+      "split": "heldout",
+      "expected": [
+        {
+          "bundle": "atlas",
+          "id": "services/inspector-app-backend",
+          "grade": 2
+        }
+      ],
+      "distractors": [],
+      "notes": "",
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://atlas/services/inspector-app-backend",
+        "heading": "Dipendenze",
+        "slug": "dipendenze"
+      }
     }
   ],
   "split": {
