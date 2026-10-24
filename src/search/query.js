@@ -286,6 +286,7 @@ function rankQuery(index, config, analysis, docsByUri) {
     runQuery(searchIndex, analysis.tokens, {
       combineWith,
       filter: (result) => docsByUri.has(String(result.id)),
+      document: (id) => docsByUri.get(id),
     });
   let hits;
   let mode;
@@ -376,7 +377,7 @@ function searchConcepts(index, options) {
     });
     return ranking
       ? Object.assign(summary, {
-          matchedTerms: entry.matchedTerms,
+          matchedTerms: entry.positions.map((position) => analysis.tokens[position].raw),
           coverage: entry.coverage,
           relevance: entry.relevance,
         })

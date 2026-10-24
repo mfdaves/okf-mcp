@@ -103,6 +103,28 @@ function languageFixture(t) {
   );
   writeConcept(
     root,
+    "runners.md",
+    { type: "Note", title: "Runners" },
+    "# Runners\n\nTrail runners.",
+  );
+  writeConcept(root, "fruit/blue-apple.md", { type: "Fruit", title: "Blue Apple" }, "# Blue Apple");
+  writeConcept(root, "fruit/apple-blue.md", { type: "Fruit", title: "Apple Blue" }, "# Apple Blue");
+  writeConcept(root, "fruit/split.md", { type: "Fruit", title: "Blue" }, "# Blue\n\nAn apple.");
+  writeConcept(
+    root,
+    "fruit/basket.md",
+    { type: "Fruit", title: "Basket" },
+    "# Basket\n\nA blue apple in the basket.",
+  );
+  writeConcept(root, "foo.md", { type: "Note", title: "Foo" }, "# Foo");
+  writeConcept(
+    root,
+    "growth.md",
+    { type: "Note", title: "Growth" },
+    "# Growth\n\nLa città cresce ogni anno.",
+  );
+  writeConcept(
+    root,
     "a-old.md",
     { type: "Policy", title: "Shipping Policy", status: "deprecated" },
     "# Shipping Policy\n\nOld.",
@@ -219,7 +241,7 @@ test("stems match morphological variants while the raw token stays indexed", (t)
 test("diacritics fold on both sides of the match", (t) => {
   const { index } = languageFixture(t);
   const plain = searchConcepts(index, { query: "citta" });
-  assert.deepEqual(paths(plain), ["cities.md"]);
+  assert.deepEqual(paths(plain), ["cities.md", "growth.md"]);
   assert.equal(plain.mode, "all");
   assert.match(plain.results[0].snippet, /Città/);
   const accented = searchConcepts(index, { query: "CITTÀ metropolitana" });
@@ -244,13 +266,18 @@ test("quoted and identifier terms stay literal: the exact SKU wins and stems nev
   });
   // The custom id "runner" lands only in the exact field, which stems never reach.
   assert.deepEqual(paths(searchConcepts(index, { query: '"runner"' })), ["notes/trail.md"]);
-  assert.deepEqual(paths(searchConcepts(index, { query: "runner", mode: "all" })), [
+  // Unquoted, the plain term also reaches "Runners" through its stem in the title.
+  assert.deepEqual(paths(searchConcepts(index, { query: "runner", mode: "all" })).sort(), [
     "notes/trail.md",
+    "runners.md",
   ]);
-  assert.equal(searchConcepts(index, { query: '"runners"', mode: "all" }).total, 0);
-  assert.equal(
-    searchConcepts(index, { query: "runners", mode: "all", languages: ["en"] }).total,
-    0,
+  // The plural reaches the title "Runners" only, quoted or stemmed: never the custom id.
+  assert.deepEqual(paths(searchConcepts(index, { query: '"runners"', mode: "all" })), [
+    "runners.md",
+  ]);
+  assert.deepEqual(
+    paths(searchConcepts(index, { query: "runners", mode: "all", languages: ["en"] })),
+    ["runners.md"],
   );
   // Quoted text keeps stop words and single letters, and a quoted title matches whole.
   const phrase = searchConcepts(index, { query: '"the trk 042 code"', mode: "all" });
@@ -263,6 +290,47 @@ test("quoted and identifier terms stay literal: the exact SKU wins and stems nev
   assert.ok(letter.total >= 1);
   assert.deepEqual(paths(searchConcepts(index, { query: '"Città metropolitana"', mode: "all" })), [
     "cities.md",
+  ]);
+});
+
+test("literal terms match a whole compound or an adjacent raw run, never stems or scattered pieces", (t) => {
+  const { index } = languageFixture(t);
+  // A quoted word is not satisfied by a stem: "runner" leaves the title "Runners" alone.
+  assert.deepEqual(paths(searchConcepts(index, { query: '"runner"', mode: "all" })), [
+    "notes/trail.md",
+  ]);
+  // A quoted compound needs the whole title or the pieces adjacent and in order in one field.
+  const compound = searchConcepts(index, { query: '"blue apple"', mode: "all" });
+  assert.deepEqual(paths(compound).sort(), ["fruit/basket.md", "fruit/blue-apple.md"]);
+  assert.equal(compound.results[0].path, "fruit/blue-apple.md");
+  // Punctuation around a quoted group and a trailing comma do not defeat the quotes.
+  const bracketed = searchConcepts(index, { query: '("blue apple")', mode: "all" });
+  assert.deepEqual(bracketed.queryTerms, ["blue apple"]);
+  assert.deepEqual(paths(bracketed).sort(), ["fruit/basket.md", "fruit/blue-apple.md"]);
+  assert.deepEqual(searchConcepts(index, { query: '"x",' }).queryTerms, ["x"]);
+  // Coverage counts logical terms: a compound whose piece matched is still unmatched.
+  const partial = searchConcepts(index, { query: '"foo bar" foo', mode: "any" });
+  assert.deepEqual([partial.total, partial.allTermsTotal, partial.lowConfidence], [1, 0, false]);
+  assert.equal(partial.results[0].path, "foo.md");
+  assert.equal(partial.results[0].coverage, 0.5);
+  assert.deepEqual(partial.results[0].matchedTerms, ["foo"]);
+  const satisfied = searchConcepts(index, { query: '"blue apple" apple', mode: "any" });
+  assert.equal(satisfied.results[0].path, "fruit/blue-apple.md");
+  assert.equal(satisfied.results[0].coverage, 1);
+  assert.deepEqual(satisfied.results[0].matchedTerms, ["blue apple", "apple"]);
+  assert.equal(
+    satisfied.allTermsTotal,
+    satisfied.results.filter((entry) => entry.coverage === 1).length,
+  );
+  assert.equal(satisfied.allTermsTotal, 2);
+  // Quoted accented words use the text fields' raw normalisation; the exact field keeps accents.
+  assert.deepEqual(paths(searchConcepts(index, { query: '"città"', mode: "all" })).sort(), [
+    "cities.md",
+    "growth.md",
+  ]);
+  assert.deepEqual(paths(searchConcepts(index, { query: '"citta"', mode: "all" })).sort(), [
+    "cities.md",
+    "growth.md",
   ]);
 });
 
@@ -375,6 +443,12 @@ test("detection is per bundle: a small Italian bundle keeps its language beside 
       `# Guide ${position}\n\nThe category pages of the shop are indexed by the crawler.`,
     );
   }
+  writeConcept(
+    english,
+    "homecoming.md",
+    { type: "Guide", title: "Homecoming" },
+    "# Homecoming\n\nCome home before dark, the guide says.",
+  );
   const italian = tempRoot(t, "okf-search-it-");
   writeConcept(
     italian,
@@ -404,6 +478,13 @@ test("detection is per bundle: a small Italian bundle keeps its language beside 
   const categoria = searchConcepts(index, { query: "categoria", mode: "all" });
   assert.deepEqual(paths(categoria), ["categorie.md"]);
   assert.equal(searchConcepts(index, { query: "categories", mode: "all" }).total, 40);
+  // A bundle filter analyses the query with that bundle's languages: "come" is an Italian
+  // stop word in the union but a content word for the English bundle.
+  const filtered = searchConcepts(index, { query: "come home", bundle: "en", mode: "all" });
+  assert.deepEqual([filtered.queryTerms, filtered.droppedTerms], [["come", "home"], []]);
+  assert.deepEqual(paths(filtered), ["homecoming.md"]);
+  const unfiltered = searchConcepts(index, { query: "come home", mode: "all" });
+  assert.deepEqual([unfiltered.queryTerms, unfiltered.droppedTerms], [["home"], ["come"]]);
 });
 
 test("search languages come from the option, the index, the project config, then detection", (t) => {

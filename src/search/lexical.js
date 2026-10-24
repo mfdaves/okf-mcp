@@ -4,13 +4,16 @@
 // instance per OKF index and language setting, built lazily and cached in a
 // WeakMap. Languages are detected per bundle (the union of languages present
 // in at least 5% of that bundle's documents) unless configured; each document
-// is stemmed with its own bundle's set and queries with the union of all sets.
-// Text fields keep the raw token (diacritics folded) plus one stem per
-// language; the `exact` field (path, identifiers, aliases, raw title tokens)
-// is literal: never stemmed, folded or stop-worded. Query time folds, drops
-// stop words and single letters, and stems every plain term; quoted text and
-// identifier-looking tokens stay literal and run an all-term or any-term
-// tree where each query term is an OR of its forms.
+// is stemmed with its own bundle's set and queries with the union of all sets
+// (or the filtered bundle's set). Text fields keep the raw token (diacritics
+// folded) plus one stem per language; the `exact` field (path, identifiers,
+// aliases, raw title tokens) is literal: never stemmed, folded or
+// stop-worded. Query time folds, drops stop words and single letters, and
+// stems every plain term; quoted text and identifier-looking tokens are
+// literal terms that only count when the whole compound is in the exact
+// field or their pieces form an adjacent run in one field's raw tokens,
+// never through a stem. One BM25 tree scores the query; coverage is counted
+// over logical terms after that verification.
 
 const MiniSearch = require("minisearch");
 const {
@@ -48,13 +51,34 @@ const SEARCH_BOOSTS = Object.freeze({
 const DETECTION_SAMPLE_CHARACTERS = 4000;
 // Distinct tokens whose index forms are memoised per language set.
 const TERM_FORMS_CACHE_LIMIT = 50000;
+// Documents whose raw token streams are kept for literal-term verification.
+const STREAM_CACHE_LIMIT = 2000;
 // OKF index -> { detection, variants: Map<language key, variant> }
 const SEARCH_INDEXES = new WeakMap();
-const tokenize = MiniSearch.getDefault("tokenize");
+// MiniSearch instance -> Map<document id, { text, exact }>
+const STREAM_CACHES = new WeakMap();
+// Separates fields in the cached text: a control character is never part of
+// a token and never a separator, so an adjacent run cannot cross it.
+const FIELD_BREAK = "\n\u0001\n";
+const SEPARATOR_CLASS = "[\\n\\r\\p{Z}\\p{P}\\p{S}]";
+// MiniSearch's default tokenizer splits on space and punctuation only; symbols
+// such as Markdown backticks would stay glued to code-formatted terms
+// ("`kill"), so the lexical index splits on symbols as well, everywhere.
+const TOKEN_SEPARATORS = /[\n\r\p{Z}\p{P}\p{S}]+/u;
+const tokenize = (text) => String(text).split(TOKEN_SEPARATORS).filter(Boolean);
 const identity = (value) => value;
 const identityTokenize = (text) => [text];
-// Query pieces in order: "double quoted", “typographic quoted”, or a run of non-spaces.
-const QUERY_PIECES = /"([^"]*)"|“([^”]*)”|(\S+)/gu;
+// Leaves are pre-processed; MiniSearch must neither tokenize nor expand them.
+const LEAF_OPTIONS = Object.freeze({
+  tokenize: identityTokenize,
+  processTerm: identity,
+  prefix: false,
+  fuzzy: false,
+});
+// Query pieces in order: "double quoted", “typographic quoted”, or a run of
+// characters that are neither spaces nor quotes, so punctuation around a
+// quoted group never swallows it.
+const QUERY_PIECES = /"([^"]*)"|“([^”]*)”|([^\s"“”]+)/gu;
 // An unquoted chunk that looks like an identifier: digits or an internal hyphen.
 const IDENTIFIER_CHUNK = /\p{N}|[\p{L}\p{N}]-[\p{L}\p{N}]/u;
 // An indexed chunk kept whole beside its pieces: an internal hyphen, underscore or dot.
@@ -64,6 +88,9 @@ const FILE_EXTENSION = /\.[a-z0-9]+$/;
 
 const canonicalCodes = (codes) => Array.from(new Set(codes)).sort();
 const languageKey = (codes) => canonicalCodes(codes).join(",") || "none";
+// Index normalisation of raw tokens: lower-cased, diacritics folded, no stems.
+const rawTokens = (text) =>
+  tokenize(String(text || "")).map((token) => foldDiacritics(token.toLowerCase()));
 
 // A custom id is a full okf:// URI; only its concept path is an identifier.
 function customIdPath(customId) {
@@ -80,16 +107,29 @@ function exactSegments(doc) {
     .filter(Boolean);
 }
 
+function textFieldValues(doc) {
+  return [
+    String(doc.title || ""),
+    String(doc.type || ""),
+    (doc.tags || []).join(" "),
+    (doc.aliases || []).join(" "),
+    String(doc.description || ""),
+    String(doc.path || ""),
+    String(doc.body || ""),
+  ];
+}
+
 function searchDocument(doc) {
+  const [title, type, tags, aliases, description, path, body] = textFieldValues(doc);
   return {
     id: doc.uri,
-    title: String(doc.title || ""),
-    type: String(doc.type || ""),
-    tags: (doc.tags || []).join(" "),
-    aliases: (doc.aliases || []).join(" "),
-    description: String(doc.description || ""),
-    path: String(doc.path || ""),
-    body: String(doc.body || ""),
+    title,
+    type,
+    tags,
+    aliases,
+    description,
+    path,
+    body,
     exact: exactSegments(doc).join("\n"),
   };
 }
@@ -251,8 +291,15 @@ function languagePlan(index, options) {
   };
 }
 
+// Languages a query is analysed with: the filtered bundle's own set when a
+// `bundle` filter is given and detection ran, otherwise the union.
 function searchLanguages(index, options) {
-  return languagePlan(index, options).languages;
+  const plan = languagePlan(index, options);
+  const bundle = options?.bundle;
+  if (bundle && plan.bundles?.[String(bundle)]) {
+    return canonicalCodes(plan.bundles[String(bundle)].languages);
+  }
+  return plan.languages;
 }
 
 function buildVariant(index, plan) {
@@ -275,6 +322,10 @@ function buildVariant(index, plan) {
       searchIndex.replace(document);
     } else {
       searchIndex.add(document);
+    }
+    const streams = STREAM_CACHES.get(searchIndex);
+    if (streams) {
+      streams.delete(document.id);
     }
   };
   index.concepts.forEach(upsert);
@@ -314,7 +365,7 @@ function plainTerm(raw, languages) {
     raw,
     literal: raw,
     forms,
-    run: [],
+    pieces: [],
     leaves: [raw].concat(forms),
     snippetTerms: [folded],
     stems: forms.slice(1),
@@ -322,18 +373,19 @@ function plainTerm(raw, languages) {
 }
 
 // Quoted text and identifier-looking chunks: the lower-cased literal as a
-// whole plus its pieces, nothing folded, stemmed or dropped.
+// whole (accents kept, for the exact field) plus its pieces folded the way
+// the text fields index raw tokens; nothing stemmed or dropped.
 function literalTerm(kind, text) {
   const literal = text.toLowerCase().replace(/\s+/g, " ").trim();
-  const run = tokenize(literal).filter(Boolean);
+  const pieces = rawTokens(literal);
   return {
     kind,
     raw: literal,
     literal,
     forms: [],
-    run,
-    leaves: [literal].concat(run),
-    snippetTerms: [literal].concat(run),
+    pieces,
+    leaves: [literal].concat(pieces),
+    snippetTerms: [literal].concat(pieces),
     stems: [],
   };
 }
@@ -365,7 +417,7 @@ function analyzeQuery(value, options) {
     const quoted = piece[1] !== undefined ? piece[1] : piece[2];
     if (quoted !== undefined) {
       const term = literalTerm("exact", quoted);
-      if (term.run.length) {
+      if (term.pieces.length) {
         push(term);
       }
       continue;
@@ -408,11 +460,21 @@ function normalizeSearchQuery(value, options) {
 }
 
 // One term of the query tree. Plain terms: the literal against the exact
-// field, the folded token and stems against the text fields. Literal terms:
-// the whole against the exact field, or every piece (an ordered run the
-// tokenizer split) across all fields.
+// field, the folded token and stems against the text fields (one node over
+// every field when the literal needs no folding, so stems alone are kept
+// away from the exact field). Literal terms: the whole compound against the
+// exact field, or every piece somewhere in the document; the run is
+// verified for adjacency afterwards.
 function termNode(term) {
   if (term.kind === "plain") {
+    const [folded, ...stems] = term.forms;
+    if (term.literal === folded) {
+      const queries = [{ combineWith: "OR", fields: SEARCH_FIELDS, queries: [folded] }];
+      if (stems.length) {
+        queries.push({ combineWith: "OR", fields: TEXT_FIELDS, queries: stems });
+      }
+      return queries.length === 1 ? queries[0] : { combineWith: "OR", queries };
+    }
     return {
       combineWith: "OR",
       queries: [
@@ -421,14 +483,14 @@ function termNode(term) {
       ],
     };
   }
-  if (term.run.length === 1 && term.run[0] === term.literal) {
+  if (term.pieces.length === 1 && term.pieces[0] === term.literal) {
     return { combineWith: "OR", fields: SEARCH_FIELDS, queries: [term.literal] };
   }
   return {
     combineWith: "OR",
     queries: [
       { combineWith: "OR", fields: [EXACT_FIELD], queries: [term.literal] },
-      { combineWith: "AND", fields: SEARCH_FIELDS, queries: term.run },
+      { combineWith: "AND", fields: SEARCH_FIELDS, queries: term.pieces },
     ],
   };
 }
@@ -437,44 +499,129 @@ function queryTree(tokens, combineWith) {
   return { combineWith, queries: tokens.map(termNode) };
 }
 
+// A document's text fields and exact segments in index normalisation
+// (lower-cased, diacritics folded, no stems), joined by a control character
+// no run can cross, plus its literal exact tokens; cached per MiniSearch
+// instance for literal-term verification.
+function documentText(searchIndex, id, doc) {
+  let cache = STREAM_CACHES.get(searchIndex);
+  if (!cache) {
+    cache = new Map();
+    STREAM_CACHES.set(searchIndex, cache);
+  }
+  let entry = cache.get(id);
+  if (!entry) {
+    const segments = exactSegments(doc);
+    entry = {
+      text: textFieldValues(doc)
+        .concat(segments)
+        .map((value) => foldDiacritics(value.toLowerCase()))
+        .join(FIELD_BREAK),
+      exact: new Set(exactTokens(segments.join("\n"))),
+    };
+    if (cache.size >= STREAM_CACHE_LIMIT) {
+      cache.delete(cache.keys().next().value);
+    }
+    cache.set(id, entry);
+  }
+  return entry;
+}
+
+const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+// Matches `pieces` as whole tokens, adjacent and in order, within one field.
+function runPattern(pieces) {
+  const run = pieces.map(escapeRegExp).join(`${SEPARATOR_CLASS}+`);
+  return new RegExp(`(?:^|${SEPARATOR_CLASS})${run}(?=${SEPARATOR_CLASS}|$)`, "u");
+}
+
+// A literal term counts for a document only when the whole compound is one
+// of its exact tokens or its pieces form an adjacent run in one of its
+// fields; a stem never satisfies it. Documents the tree matched without the
+// literal evidence are skipped before any normalisation.
+function literalTermMatched(searchIndex, term, result, options) {
+  const matchedLeaves = result.queryTerms;
+  const evidence =
+    matchedLeaves.includes(term.literal) ||
+    term.pieces.every((piece) => matchedLeaves.includes(piece));
+  if (!evidence) {
+    return false;
+  }
+  const doc = options.document ? options.document(String(result.id)) : null;
+  if (!doc) {
+    return evidence;
+  }
+  const entry = documentText(searchIndex, String(result.id), doc);
+  if (entry.exact.has(term.literal)) {
+    return true;
+  }
+  if (!term.pattern) {
+    term.pattern = runPattern(term.pieces);
+  }
+  return term.pattern.test(entry.text);
+}
+
 // One MiniSearch run over analysed terms. `combineWith` AND requires every
-// term (any of its forms), OR accepts any term. Prefix and fuzzy matching
-// stay off (R-12). Each hit reports the raw terms it matched and the share
-// of distinct query terms matched.
+// logical term, OR accepts any. Prefix and fuzzy matching stay off (R-12).
+// Plain terms are attributed through their matched leaves, literal terms
+// through verification; each hit reports the raw terms it matched and the
+// share of distinct logical terms matched. `options.document(id)` supplies
+// documents for the verification.
 function runQuery(searchIndex, tokens, options) {
   const config = options || {};
   const combineWith = config.combineWith === "OR" ? "OR" : "AND";
-  const positions = new Map();
+  // Leaf string -> positions of the plain terms it belongs to.
+  const leafPositions = new Map();
+  const literalPositions = [];
   tokens.forEach((term, position) => {
+    if (term.kind !== "plain") {
+      literalPositions.push(position);
+      return;
+    }
     term.leaves.forEach((leaf) => {
-      if (!positions.has(leaf)) {
-        positions.set(leaf, new Set());
+      if (!leafPositions.has(leaf)) {
+        leafPositions.set(leaf, []);
       }
-      positions.get(leaf).add(position);
+      leafPositions.get(leaf).push(position);
     });
   });
-  const results = searchIndex.search(queryTree(tokens, combineWith), {
-    tokenize: identityTokenize,
-    processTerm: identity,
-    prefix: false,
-    fuzzy: false,
-    filter: config.filter,
-  });
-  return results.map((result) => {
-    const matched = new Set();
+  const results = searchIndex.search(
+    queryTree(tokens, combineWith),
+    Object.assign({ filter: config.filter }, LEAF_OPTIONS),
+  );
+  const hits = [];
+  results.forEach((result) => {
+    const seen = new Array(tokens.length).fill(false);
     result.queryTerms.forEach((leaf) => {
-      (positions.get(leaf) || []).forEach((position) => {
-        matched.add(position);
-      });
+      const owners = leafPositions.get(leaf);
+      if (owners) {
+        owners.forEach((position) => {
+          seen[position] = true;
+        });
+      }
     });
-    const ordered = Array.from(matched).sort((left, right) => left - right);
-    return {
+    literalPositions.forEach((position) => {
+      if (literalTermMatched(searchIndex, tokens[position], result, config)) {
+        seen[position] = true;
+      }
+    });
+    const positions = [];
+    seen.forEach((flag, position) => {
+      if (flag) {
+        positions.push(position);
+      }
+    });
+    if (!positions.length || (combineWith === "AND" && positions.length !== tokens.length)) {
+      return;
+    }
+    hits.push({
       id: String(result.id),
       score: result.score,
-      matchedTerms: ordered.map((position) => tokens[position].raw),
-      coverage: tokens.length ? ordered.length / tokens.length : 0,
-    };
+      positions,
+      coverage: positions.length / tokens.length,
+    });
   });
+  return hits;
 }
 
 // Incremental maintenance for a functional index update (WP2): every cached
@@ -504,6 +651,10 @@ function removeDocuments(index, uris) {
     (uris || []).forEach((uri) => {
       if (variant.searchIndex.has(uri)) {
         variant.searchIndex.discard(uri);
+      }
+      const streams = STREAM_CACHES.get(variant.searchIndex);
+      if (streams) {
+        streams.delete(uri);
       }
     });
   });
