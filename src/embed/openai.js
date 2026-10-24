@@ -116,15 +116,18 @@ function estimateTokens(text) {
 }
 
 // Contiguous batches in input order, closed by the input count or the token
-// budget, whichever comes first. A single input always fits because it was
-// truncated to at most maxInputChars before this point.
+// budget, whichever comes first. An input that alone exceeds the budget gets
+// a batch of its own; the client's configuration rules that case out, other
+// callers of this helper may not.
 function planBatches(inputs, batchSize, maxRequestTokens) {
   const batches = [];
   let current = null;
   inputs.forEach((text, index) => {
     const tokens = estimateTokens(text);
+    const oversized = tokens > maxRequestTokens;
     if (
       !current ||
+      oversized ||
       current.texts.length >= batchSize ||
       current.tokens + tokens > maxRequestTokens
     ) {
@@ -133,6 +136,7 @@ function planBatches(inputs, batchSize, maxRequestTokens) {
     }
     current.texts.push(text);
     current.tokens += tokens;
+    if (oversized) current = null;
   });
   return batches;
 }
@@ -287,6 +291,13 @@ function createOpenAiEmbedder(options) {
     1,
     OPENAI_EMBEDDING_LIMITS.maxRequestTokens,
   );
+  if (Math.ceil(maxInputChars / OPENAI_EMBEDDING_LIMITS.charsPerToken) > maxRequestTokens) {
+    throw new EmbedderError(
+      "Embedder option maxRequestTokens must admit one input of maxInputChars characters.",
+      "invalid_embedder_config",
+      { field: "maxRequestTokens" },
+    );
+  }
   const languages = config.languages === undefined ? [] : config.languages;
   if (!Array.isArray(languages) || languages.some((code) => typeof code !== "string")) {
     throw configError("languages");
@@ -294,8 +305,7 @@ function createOpenAiEmbedder(options) {
   const fetchImpl = config.fetch === undefined ? globalThis.fetch : config.fetch;
   if (typeof fetchImpl !== "function") throw configError("fetch");
   const env = config.env === undefined ? process.env : config.env;
-  const sleep =
-    config.sleep || ((ms) => new Promise((resolve) => setTimeout(resolve, ms).unref?.()));
+  const sleep = typeof config.sleep === "function" ? config.sleep : null;
   const random = config.random || Math.random;
   const now = config.now || Date.now;
 
@@ -458,15 +468,29 @@ function createOpenAiEmbedder(options) {
     }
   }
 
+  // The retry wait keeps the process alive on purpose: a CLI run must not
+  // exit mid-retry. The timer is cleared the moment the run is aborted.
   async function wait(ms, signal) {
     if (signal.aborted) throw abortError(signal.reason);
     await new Promise((resolve, reject) => {
-      const onAbort = () => reject(abortError(signal.reason));
-      signal.addEventListener("abort", onAbort, { once: true });
-      Promise.resolve(sleep(ms)).then(() => {
+      let timer = null;
+      const onAbort = () => {
+        if (timer !== null) clearTimeout(timer);
+        reject(abortError(signal.reason));
+      };
+      const settle = () => {
         signal.removeEventListener("abort", onAbort);
         resolve();
-      }, reject);
+      };
+      signal.addEventListener("abort", onAbort, { once: true });
+      if (sleep) {
+        Promise.resolve(sleep(ms)).then(settle, (error) => {
+          signal.removeEventListener("abort", onAbort);
+          reject(error);
+        });
+      } else {
+        timer = setTimeout(settle, ms);
+      }
     });
   }
 

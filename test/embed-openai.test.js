@@ -1,6 +1,8 @@
 "use strict";
 
 const assert = require("node:assert/strict");
+const { spawn } = require("node:child_process");
+const path = require("node:path");
 const test = require("node:test");
 
 const { EmbedderError, validateEmbedder } = require("../src/embed/interface");
@@ -241,7 +243,6 @@ test("times out with an AbortController and retries within the budget", async (t
   const server = await serverFor(t);
   const { embedder, sleeps } = embedderFor(server, { timeoutMs: 50, maxRetries: 1 });
   server.script({ delayMs: 400 }, { delayMs: 400 });
-  const started = Date.now();
   await assert.rejects(embedder.embed(["slow"]), (error) => {
     assertMasked(error, ["slow"]);
     return (
@@ -250,7 +251,8 @@ test("times out with an AbortController and retries within the budget", async (t
       error.details.attempts === 2
     );
   });
-  assert.ok(Date.now() - started < 2000);
+  assert.equal(embedder.usage().requests, 2);
+  assert.equal(embedder.usage().retries, 1);
   assert.equal(sleeps.length, 1);
   const external = new AbortController();
   external.abort();
@@ -537,4 +539,97 @@ test("keeps server-supplied strings out of error messages and drops tainted fiel
     assert.deepEqual(error.details.server, {});
     return error.status === 502;
   });
+});
+
+test("keeps every input within the request token budget", async (t) => {
+  const server = await serverFor(t);
+  assert.throws(
+    () => embedderFor(server, { maxInputChars: 32000, maxRequestTokens: 1000 }),
+    (error) =>
+      error.code === "invalid_embedder_config" && error.details.field === "maxRequestTokens",
+  );
+  const { embedder } = embedderFor(server, {
+    maxInputChars: 4000,
+    maxRequestTokens: 1000,
+    concurrency: 1,
+  });
+  await embedder.embed(["a".repeat(40000), "b", "c".repeat(40000)]);
+  assert.deepEqual(
+    server.requests.map((request) => request.body.input.length),
+    [1, 1, 1],
+  );
+  assert.deepEqual(
+    server.requests.map((request) => request.body.input[0].length),
+    [4000, 1, 4000],
+  );
+  const oversized = "x".repeat(8000);
+  assert.deepEqual(
+    planBatches(["a", oversized, "b"], 2048, 1000).map((batch) => batch.texts.length),
+    [1, 1, 1],
+  );
+  assert.deepEqual(
+    planBatches([oversized, oversized], 2048, 1000).map((batch) => batch.tokens),
+    [2000, 2000],
+  );
+  assert.deepEqual(
+    planBatches(["a", "b", oversized, "c"], 2048, 1000).map((batch) => batch.offset),
+    [0, 2, 3],
+  );
+});
+
+test("a retry wait keeps a process alive until the retried request completes", async (t) => {
+  const server = await serverFor(t, { apiKey: null, dimension: 4 });
+  server.script({ status: 429, retryAfter: "1" });
+  const clientPath = path.join(__dirname, "..", "src", "embed", "openai.js");
+  const script = [
+    `const { createOpenAiEmbedder } = require(${JSON.stringify(clientPath)});`,
+    "createOpenAiEmbedder({ baseUrl: process.argv[1], model: 'm', dimensions: 4, maxRetries: 2 })",
+    "  .embed(['kept alive'])",
+    "  .then(",
+    "    (vectors) => console.log('vectors', vectors.length),",
+    "    (error) => { console.error(error.code); process.exitCode = 2; },",
+    "  );",
+  ].join("\n");
+  const child = await new Promise((resolve) => {
+    const proc = spawn(process.execPath, ["-e", script, server.baseUrl], {
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let stdout = "";
+    let stderr = "";
+    proc.stdout.on("data", (chunk) => {
+      stdout += chunk;
+    });
+    proc.stderr.on("data", (chunk) => {
+      stderr += chunk;
+    });
+    proc.on("close", (code) => resolve({ code, stdout, stderr }));
+  });
+  assert.equal(child.code, 0, child.stderr);
+  assert.equal(child.stdout.trim(), "vectors 1");
+  assert.equal(server.requests.length, 2, "the child exited only after the retried request");
+});
+
+test("a failed batch cancels its in-flight sibling and schedules nothing further", async (t) => {
+  const server = await serverFor(t);
+  const { embedder } = embedderFor(server, { batchSize: 1, concurrency: 2, maxRetries: 0 });
+  server.script({ status: 500 }, { delayMs: 300 });
+  await assert.rejects(
+    embedder.embed(["unit-a1", "unit-b2", "unit-c3"]),
+    (error) => error.code === "embedder_http_error" && error.status === 500,
+  );
+  assert.ok(server.requests.length <= 2, "the server saw at most the two in-flight requests");
+  assert.equal(embedder.usage().requests, 2, "the third batch was never requested");
+});
+
+test("sends at most 2,048 inputs per request through embed()", async (t) => {
+  const server = await serverFor(t, { dimension: 2 });
+  const { embedder } = embedderFor(server, { batchSize: 2048, dimensions: 2, concurrency: 1 });
+  const texts = Array.from({ length: 2049 }, (_, index) => `t${index}`);
+  const vectors = await embedder.embed(texts);
+  assert.equal(vectors.length, 2049);
+  assertClose(vectors[2048], vectorFor("t2048", 2));
+  assert.deepEqual(
+    server.requests.map((request) => request.body.input.length),
+    [2048, 1],
+  );
 });
