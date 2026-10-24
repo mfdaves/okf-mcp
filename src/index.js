@@ -26,4 +26,5 @@ module.exports = {
   ...require("./embed/prepare"),
   ...require("./cache/store"),
   ...require("./policy/write-policy"),
+  ...require("./context/sections"),
 };
