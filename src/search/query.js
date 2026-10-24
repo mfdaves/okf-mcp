@@ -6,7 +6,7 @@ const { resolveConcept } = require("../indexer");
 const { foldDiacritics } = require("./languages");
 const { analyzeQuery, prepareSearchIndex, runQuery, searchLanguages } = require("./lexical");
 const { denseSearch } = require("./dense");
-const { fuseRankings, fusionAlpha } = require("./fusion");
+const { fuseRankings, fusionAlpha, fusionNormalization } = require("./fusion");
 
 const MAX_COMPACT_TEXT = 500;
 // `auto` runs the all-term query and falls back to any-term when it returns
@@ -345,6 +345,7 @@ function hybridRank(index, config, ranking, filteredDocs, depth) {
     lexical: lexical.map((entry) => ({ id: entry.doc.uri, score: entry.score })),
     dense,
     alpha: config.alpha,
+    normalization: config.fusionNormalization,
   });
   const top = fused.length ? fused[0].fusedScore : 0;
   const results = fused.map((entry) => {
@@ -457,7 +458,11 @@ function searchConcepts(index, options) {
       droppedTerms: analysis.dropped,
     });
     if (hybrid) {
-      Object.assign(response, { hybrid: true, alpha: fusionAlpha(config.alpha) });
+      Object.assign(response, {
+        hybrid: true,
+        alpha: fusionAlpha(config.alpha),
+        normalization: fusionNormalization(config.fusionNormalization),
+      });
     }
   }
   response.results = page;

@@ -16,7 +16,7 @@ const { describeEmbedder, validateEmbedder } = require("../embed/interface");
 const { OPENAI_SERVER_CODES, createOpenAiEmbedder } = require("../embed/openai");
 const { prepareEmbeddings } = require("../embed/prepare");
 const { denseCoverage, resolveUnits, unitMemo } = require("./dense");
-const { fusionAlpha } = require("./fusion");
+const { fusionAlpha, fusionNormalization } = require("./fusion");
 const { searchConcepts } = require("./query");
 
 const QUERY_CACHE_SIZE = 256;
@@ -44,6 +44,25 @@ function failureOf(error, fallback) {
 
 function round(value) {
   return Math.round(value * 1000) / 1000;
+}
+
+// R-9: remote bundles stay lexical-only in 1.0, so their text is never sent
+// to an embedder. One wrapper per runtime keeps the unit memo stable.
+function localUnits(unitsOf) {
+  return (index) => {
+    const units = unitsOf(index);
+    const remote = new Set(
+      (index.bundles || []).filter((bundle) => bundle.remote).map((bundle) => bundle.id),
+    );
+    if (!remote.size) return units;
+    return units.filter((unit) => {
+      const anchor = unit.id.indexOf("#");
+      const doc =
+        index.byUri?.get(unit.id) ||
+        (anchor === -1 ? null : index.byUri?.get(unit.id.slice(0, anchor)));
+      return !doc || !remote.has(doc.bundle);
+    });
+  };
 }
 
 function usageOf(embedder) {
@@ -91,6 +110,7 @@ class EmbeddingRuntime {
     const config = settings || {};
     this.context = context || {};
     this.alpha = fusionAlpha(config.fusion?.alpha);
+    this.normalization = fusionNormalization(config.fusion?.normalization);
     this.embedUnits = typeof config.embedUnits === "string" ? config.embedUnits : "concepts";
     this.units = null;
     this.embedders = null;
@@ -115,7 +135,7 @@ class EmbeddingRuntime {
   async open(settings) {
     const config = settings || {};
     try {
-      this.units = resolveUnits(config.embedUnits);
+      this.units = localUnits(resolveUnits(config.embedUnits));
       this.embedders = embeddersFor(config.embedder, this.context);
       const documents = this.embedders.documents;
       if (!Number.isSafeInteger(documents.dimension)) {
@@ -246,6 +266,7 @@ class EmbeddingRuntime {
             vectorCache: this.cache,
             embedUnits: this.units,
             alpha: config.alpha === undefined ? this.alpha : config.alpha,
+            fusionNormalization: config.fusionNormalization || this.normalization,
           })
         : Object.assign(config, { hybrid: false }),
     );
@@ -369,6 +390,7 @@ class EmbeddingRuntime {
       configured: true,
       available: this.ready && Boolean(this.cache?.size),
       alpha: this.alpha,
+      normalization: this.normalization,
       embedUnits: this.embedUnits,
       embedder: this.describe(failure),
       cache: this.cacheReceipt(),

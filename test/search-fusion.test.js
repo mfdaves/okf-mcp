@@ -39,7 +39,12 @@ test("alpha 0 returns the lexical ranking and alpha 1 the dense ranking exactly"
 });
 
 test("fusion is a convex combination of min-max normalised scores over the union", () => {
-  const fused = fuseRankings({ lexical: LEXICAL, dense: DENSE, alpha: 0.25 });
+  const fused = fuseRankings({
+    lexical: LEXICAL,
+    dense: DENSE,
+    alpha: 0.25,
+    normalization: "minmax",
+  });
   assert.deepEqual(fused.map((entry) => entry.id).sort(), ["a", "b", "c", "d", "e", "f"]);
   const byId = new Map(fused.map((entry) => [entry.id, entry]));
   const close = (actual, expected) => assert.ok(Math.abs(actual - expected) < 1e-12);
@@ -104,4 +109,40 @@ test("fusion validates alpha and its inputs", () => {
   }
   assert.throws(() => fuseRankings({ lexical: [{ id: 1, score: 1 }] }), TypeError);
   assert.deepEqual(fuseRankings({ alpha: 0.5 }), []);
+  assert.throws(() => fuseRankings({ alpha: 0.5, normalization: "zscore" }), TypeError);
+});
+
+test("theoretical-minimum normalization keeps the weakest lexical hit above a miss", () => {
+  const byId = (normalization) =>
+    new Map(
+      fuseRankings({ lexical: LEXICAL, dense: DENSE, alpha: 0.25, normalization }).map((entry) => [
+        entry.id,
+        entry,
+      ]),
+    );
+  const close = (actual, expected) => assert.ok(Math.abs(actual - expected) < 1e-12);
+  // minmax: d (lexical 1, the minimum) normalises to 0 like a miss.
+  close(byId("minmax").get("d").lexicalNorm, 0);
+  // lexical-tmm: lexical lower bound 0, so d keeps 1/9; dense stays min-max.
+  const lexicalTmm = byId("lexical-tmm");
+  close(lexicalTmm.get("d").lexicalNorm, 1 / 9);
+  close(lexicalTmm.get("b").lexicalNorm, 5 / 9);
+  close(lexicalTmm.get("c").denseNorm, 0.75);
+  // tmm: dense lower bound -1 as well.
+  const tmm = byId("tmm");
+  close(tmm.get("e").denseNorm, 1);
+  close(tmm.get("a").denseNorm, 1.4 / 1.8);
+  // The ends still reduce to one side exactly under every normalization.
+  for (const normalization of ["minmax", "tmm", "lexical-tmm"]) {
+    const zero = fuseRankings({ lexical: LEXICAL, dense: DENSE, alpha: 0, normalization });
+    assert.deepEqual(
+      zero.map((entry) => entry.id),
+      LEXICAL.map((entry) => entry.id),
+    );
+    const one = fuseRankings({ lexical: LEXICAL, dense: DENSE, alpha: 1, normalization });
+    assert.deepEqual(
+      one.map((entry) => entry.id),
+      DENSE.map((entry) => entry.id),
+    );
+  }
 });

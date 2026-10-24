@@ -48,7 +48,13 @@ const HYBRID_DESCRIPTION =
   "there); false ranks lexically and makes no embedding request. Ignored without an embedder.";
 
 // Options only the server supplies; never accepted from tool arguments.
-const RUNTIME_OPTIONS = ["queryVector", "vectorCache", "embedUnits", "alpha"];
+const RUNTIME_OPTIONS = [
+  "queryVector",
+  "vectorCache",
+  "embedUnits",
+  "alpha",
+  "fusionNormalization",
+];
 
 async function runSearch(state, args) {
   const options = Object.assign({ detail: "compact" }, args || {});

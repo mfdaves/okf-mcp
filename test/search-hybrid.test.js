@@ -46,7 +46,8 @@ test("hybrid search finds a concept that shares no word with the query", async (
   assert.equal(lexical.total, 0, "no lexical match for the Italian synonym");
   const hybrid = searchConcepts(index, hybridOptions(cache, "spedizione"));
   assert.equal(hybrid.hybrid, true);
-  assert.equal(hybrid.alpha, 0.5);
+  assert.equal(hybrid.alpha, 0.4);
+  assert.equal(hybrid.normalization, "tmm");
   assert.equal(hybrid.results[0].uri, "okf://shop/delivery");
   const top = hybrid.results[0];
   assert.equal(top.lexicalScore, null);
@@ -271,4 +272,19 @@ test("a write batch embeds only its changed units in one request", async (t) => 
   assert.equal(state.calls - before, 2, "only the query was encoded");
   assert.equal(runtime.status().sync.last.pruned, 1);
   assert.equal(runtime.status().cache.rows, 7);
+});
+
+test("remote bundles stay lexical-only: their text is never embedded (R-9)", async (t) => {
+  const { runtime, state, reindex } = await runtimeWorld(t);
+  const index = reindex();
+  index.bundles.forEach((bundle) => {
+    bundle.remote = true;
+  });
+  const receipt = await runtime.sync(index);
+  assert.equal(receipt.units, 0);
+  assert.equal(state.inputs, 0, "no text left for the embedder");
+  const response = await runtime.search(index, { query: "delivery" });
+  assert.equal(response.hybrid, false);
+  assert.equal(response.embedder.code, "cache_empty");
+  assert.ok(response.results.length > 0, "lexical results remain");
 });

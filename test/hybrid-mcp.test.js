@@ -91,6 +91,7 @@ test("project config parses embedder, cacheDir, fusion and embedUnits", (t) => {
       "cacheDir: ../vectors",
       "fusion:",
       "  alpha: 0.3",
+      "  normalization: tmm",
       "embedUnits: concepts",
       "",
     ].join("\n"),
@@ -106,7 +107,7 @@ test("project config parses embedder, cacheDir, fusion and embedUnits", (t) => {
       dimensions: 512,
     },
     cacheDir: "../vectors",
-    fusion: { alpha: 0.3 },
+    fusion: { alpha: 0.3, normalization: "tmm" },
     embedUnits: "concepts",
   });
   // No embedder: off, and the project shape only gains a null field.
@@ -142,7 +143,7 @@ test("--embedder-config files hold a bare embedder block or the project keys", (
   assert.deepEqual(loadEmbeddingConfigFile(bare), {
     embedder: { type: "openai", baseUrl: "http://127.0.0.1:1", model: "m" },
     cacheDir: null,
-    fusion: { alpha: 0.5 },
+    fusion: { alpha: 0.4, normalization: "tmm" },
     embedUnits: "concepts",
   });
   const full = path.join(dir, "full.yaml");

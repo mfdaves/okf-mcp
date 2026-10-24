@@ -13,7 +13,7 @@ const path = require("node:path");
 const { createOpenAiEmbedder } = require("../embed/openai");
 const { parseFrontmatterYaml } = require("../parser");
 const { EMBED_UNITS } = require("./dense");
-const { fusionAlpha } = require("./fusion");
+const { FUSION_NORMALIZATIONS, fusionAlpha, fusionNormalization } = require("./fusion");
 
 const EMBEDDER_TYPES = Object.freeze(["openai"]);
 const EMBEDDER_FIELDS = Object.freeze([
@@ -106,18 +106,20 @@ function normalizeEmbeddingConfig(config, errors) {
     }
   }
   let alpha = fusionAlpha(undefined);
+  let normalization = fusionNormalization(undefined);
   if (source.fusion !== undefined) {
     const unknown = isObject(source.fusion)
-      ? Object.keys(source.fusion).filter((key) => key !== "alpha")
+      ? Object.keys(source.fusion).filter((key) => key !== "alpha" && key !== "normalization")
       : [];
     try {
       if (!isObject(source.fusion) || unknown.length) throw new TypeError("fusion");
       alpha = fusionAlpha(source.fusion.alpha);
+      normalization = fusionNormalization(source.fusion.normalization);
     } catch {
       errors.push({
         code: "invalid_fusion",
         field: "fusion",
-        message: "fusion must be { alpha } with alpha between 0 and 1.",
+        message: `fusion must be { alpha, normalization } with alpha between 0 and 1 and normalization one of ${FUSION_NORMALIZATIONS.join(", ")}.`,
       });
     }
   }
@@ -134,7 +136,7 @@ function normalizeEmbeddingConfig(config, errors) {
     }
   }
   if (!embedder) return null;
-  return { embedder, cacheDir, fusion: { alpha }, embedUnits };
+  return { embedder, cacheDir, fusion: { alpha, normalization }, embedUnits };
 }
 
 // The --embedder-config file (JSON, or YAML for any other extension): either

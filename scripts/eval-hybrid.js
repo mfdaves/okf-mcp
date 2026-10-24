@@ -25,7 +25,7 @@ const { performance } = require("node:perf_hooks");
 
 const { buildProjectIndex } = require("../src/indexer");
 const { loadEmbeddingConfigFile } = require("../src/search/embedding-config");
-const { DEFAULT_FUSION_ALPHA, fusionAlpha } = require("../src/search/fusion");
+const { DEFAULT_FUSION_ALPHA, fusionAlpha, fusionNormalization } = require("../src/search/fusion");
 const { openEmbeddingRuntime } = require("../src/search/hybrid");
 const { unitMemo } = require("../src/search/dense");
 const { searchConcepts } = require("../src/search/query");
@@ -37,6 +37,7 @@ const HYBRID_FLAGS = new Set([
   "--embedder",
   "--alpha",
   "--alpha-sweep",
+  "--normalization",
   "--units",
   "--cache-dir",
   "--max-tokens",
@@ -48,6 +49,7 @@ function usage() {
     "  --embedder <file>         Embedder settings (JSON or YAML); enables the hybrid run.",
     "  --alpha <a>               Fusion weight of the dense side (default: the file's fusion.alpha or 0.5).",
     "  --alpha-sweep <list>      Comma-separated weights scored from the same vectors; dev split only.",
+    "  --normalization <name>    Fusion normalization: minmax, tmm or lexical-tmm (default: the file's or minmax).",
     "  --units concepts|sections Retrieval units to embed (default: the file's embedUnits or concepts).",
     "  --cache-dir <dir>         Vector cache directory to reuse (default: under a temporary XDG_CACHE_HOME).",
     `  --max-tokens <n>          Abort before any request above this estimate (default ${DEFAULT_MAX_TOKENS}).`,
@@ -68,6 +70,7 @@ function parseHybridArgs(argv) {
     index += 1;
     if (argument === "--embedder") hybrid.embedder = value;
     if (argument === "--alpha") hybrid.alpha = fusionAlpha(value);
+    if (argument === "--normalization") hybrid.normalization = fusionNormalization(value);
     if (argument === "--units") hybrid.units = value;
     if (argument === "--cache-dir") hybrid.cacheDir = path.resolve(value);
     if (argument === "--max-tokens") hybrid.maxTokens = Number(value);
@@ -107,7 +110,8 @@ function estimateTokens(texts) {
 function settingsFor(options) {
   const settings = loadEmbeddingConfigFile(options.hybrid.embedder);
   if (options.hybrid.units) settings.embedUnits = options.hybrid.units;
-  if (options.hybrid.alpha !== undefined) settings.fusion = { alpha: options.hybrid.alpha };
+  if (options.hybrid.alpha !== undefined) settings.fusion.alpha = options.hybrid.alpha;
+  if (options.hybrid.normalization) settings.fusion.normalization = options.hybrid.normalization;
   settings.cacheDir = options.hybrid.cacheDir || null;
   return settings;
 }
@@ -172,7 +176,7 @@ async function prepareFixture(fixture, settings, options, env) {
 
 // A search module for evaluateFixture: hybrid searchConcepts with the pre-encoded vector, or
 // lexical when the runtime is degraded or the query could not be encoded.
-function hybridModule(prepared, alpha, label) {
+function hybridModule(prepared, alpha, label, normalization) {
   const responses = new Map();
   const { runtime } = prepared;
   return {
@@ -180,7 +184,7 @@ function hybridModule(prepared, alpha, label) {
     path: path.join(__dirname, "..", "src", "search", "query.js"),
     isDefault: false,
     name: label,
-    options: { hybrid: true, alpha, embedUnits: runtime.embedUnits },
+    options: { hybrid: true, alpha, normalization, embedUnits: runtime.embedUnits },
     prepare: null,
     search(index, query, context) {
       const vector = runtime.ready ? prepared.vectors.get(query) : null;
@@ -193,6 +197,7 @@ function hybridModule(prepared, alpha, label) {
         vectorCache: vector ? runtime.cache : undefined,
         embedUnits: runtime.units,
         alpha,
+        fusionNormalization: normalization,
       });
       responses.set(query, response);
       return response;
@@ -282,8 +287,9 @@ async function runHybridEvaluation(options, context) {
   const env = context?.env || process.env;
   const settings = settingsFor(options);
   const alpha = settings.fusion?.alpha ?? DEFAULT_FUSION_ALPHA;
+  const normalization = settings.fusion?.normalization;
   const lexicalModule = evalSearch.loadSearchModule("", {});
-  const label = options.label || `hybrid alpha ${alpha}`;
+  const label = options.label || `hybrid alpha ${alpha} ${normalization}`;
   const report = {
     label,
     generatedAt: new Date().toISOString(),
@@ -293,18 +299,18 @@ async function runHybridEvaluation(options, context) {
     searchModule: {
       path: "src/search/query.js",
       name: label,
-      options: { hybrid: true, alpha, embedUnits: settings.embedUnits },
+      options: { hybrid: true, alpha, normalization, embedUnits: settings.embedUnits },
     },
     split: options.split,
     limit: options.limit,
     bootstrap: { samples: options.bootstrap, seed: options.seed, confidence: 0.95 },
     fixtures: {},
-    hybrid: { alpha, embedUnits: settings.embedUnits, fixtures: {} },
+    hybrid: { alpha, normalization, embedUnits: settings.embedUnits, fixtures: {} },
   };
   for (const nameOrPath of options.fixtures) {
     const fixture = evalSearch.resolveFixture(nameOrPath);
     const prepared = await prepareFixture(fixture, settings, options, env);
-    const module = hybridModule(prepared, alpha, label);
+    const module = hybridModule(prepared, alpha, label, normalization);
     const result = evalSearch.evaluateFixture(fixture, module, options);
     applyResponseFlags(result, module.responses);
     result.categoryCi = categoryIntervals(result, options);
@@ -346,7 +352,12 @@ async function runHybridEvaluation(options, context) {
     };
     if (options.hybrid.sweep) {
       report.hybrid.fixtures[fixture.name].sweep = options.hybrid.sweep.map((weight) => {
-        const sweepModule = hybridModule(prepared, weight, `${label} sweep ${weight}`);
+        const sweepModule = hybridModule(
+          prepared,
+          weight,
+          `${label} sweep ${weight}`,
+          normalization,
+        );
         const run = evalSearch.evaluateFixture(fixture, sweepModule, options);
         applyResponseFlags(run, sweepModule.responses);
         return {
@@ -375,7 +386,7 @@ const num = (value, digits) =>
 function renderHybrid(report) {
   const lines = ["## Hybrid run", ""];
   lines.push(
-    `Fusion alpha ${report.hybrid.alpha} (dense weight) · units ${report.hybrid.embedUnits} · split ${report.split}`,
+    `Fusion alpha ${report.hybrid.alpha} (dense weight) · normalization ${report.hybrid.normalization} · units ${report.hybrid.embedUnits} · split ${report.split}`,
     "",
   );
   Object.entries(report.hybrid.fixtures).forEach(([name, entry]) => {
