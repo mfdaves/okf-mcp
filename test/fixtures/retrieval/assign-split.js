@@ -53,7 +53,12 @@ function main(argv) {
   const file = path.join(fixtureRoot, "queries.json");
   const sidecar = JSON.parse(fs.readFileSync(file, "utf8"));
   const assignment = assignSplit(sidecar.queries, { seed: options.seed, devRatio: options.ratio });
-  sidecar.split = { seed: options.seed, devRatio: options.ratio, strata: "category x lang" };
+  sidecar.split = {
+    seed: options.seed,
+    devRatio: options.ratio,
+    strata: "category x lang",
+    unit: "paraphrase family (queries sharing `family`) or single query; a family never spans both splits",
+  };
   sidecar.queries = sidecar.queries.map((query) => {
     const next = {};
     // Keep `split` right after `category` so diffs stay readable.

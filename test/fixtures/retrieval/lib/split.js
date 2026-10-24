@@ -2,12 +2,15 @@
 
 // Seeded, stratified development / held-out split for a retrieval query set.
 //
-// Strata are category x language. Inside each stratum the queries are ordered by id, shuffled
-// with a seeded generator derived from the global seed and the stratum key, and the first
-// round(ratio * n) go to "dev" (never fewer than one when the stratum is non-empty). The result
-// depends only on the ids, categories, languages, seed and ratio, so adding a query to one
-// stratum never moves queries in another stratum, and the committed split can be re-derived
-// and asserted by a test (test/retrieval-fixtures.test.js).
+// Strata are category x language with a dev target of round(ratio * n) queries each (never fewer
+// than one). The unit of assignment is a paraphrase family (queries sharing a `family` value:
+// the same primary grade-2 target, see the fixture descriptions) or a single query without one;
+// a family always lands in one split so that tuning on a development query never sees a held-out
+// paraphrase of it. Families are placed first, in a seeded order, each on the side whose summed
+// stratum deficit over its members is larger; single queries then fill the remaining quota of
+// their own stratum in a seeded order. The result depends only on ids, families, categories,
+// languages, seed and ratio, so the committed split can be re-derived and asserted by a test
+// (test/retrieval-fixtures.test.js).
 
 const DEFAULT_SEED = 20261024;
 const DEFAULT_DEV_RATIO = 0.7;
@@ -22,8 +25,8 @@ function mulberry32(seed) {
   };
 }
 
-// FNV-1a over the stratum key, folded with the seed, so each stratum has its own stream.
-function stratumSeed(seed, key) {
+// FNV-1a over a key, folded with the seed, so each stratum (and the family pass) has its own stream.
+function derivedSeed(seed, key) {
   let hash = 0x811C9DC5;
   for (const char of String(key)) {
     hash ^= char.codePointAt(0);
@@ -47,26 +50,76 @@ function stratumKey(query) {
   return `${query.category}/${query.lang}`;
 }
 
+function unitKey(query) {
+  return query.family ? `family:${query.family}` : `query:${query.id}`;
+}
+
 // Returns a Map from query id to "dev" | "heldout".
 function assignSplit(queries, options) {
   const config = options || {};
   const seed = Number.isInteger(config.seed) ? config.seed : DEFAULT_SEED;
   const ratio = typeof config.devRatio === "number" ? config.devRatio : DEFAULT_DEV_RATIO;
-  const strata = new Map();
-  queries.forEach((query) => {
+  const sorted = queries.slice().sort((left, right) => String(left.id).localeCompare(String(right.id)));
+
+  const targets = new Map();
+  sorted.forEach((query) => {
     const key = stratumKey(query);
-    if (!strata.has(key)) {
-      strata.set(key, []);
+    if (!targets.has(key)) {
+      targets.set(key, { total: 0, dev: 0, heldout: 0, assignedDev: 0, assignedHeldout: 0 });
     }
-    strata.get(key).push(query.id);
+    targets.get(key).total += 1;
   });
+  targets.forEach((entry) => {
+    entry.dev = Math.max(1, Math.round(entry.total * ratio));
+    entry.heldout = entry.total - entry.dev;
+  });
+
+  const families = new Map();
+  const singles = new Map();
+  sorted.forEach((query) => {
+    if (query.family) {
+      if (!families.has(query.family)) {
+        families.set(query.family, []);
+      }
+      families.get(query.family).push(query);
+    } else {
+      const key = stratumKey(query);
+      if (!singles.has(key)) {
+        singles.set(key, []);
+      }
+      singles.get(key).push(query);
+    }
+  });
+
   const assignment = new Map();
-  Array.from(strata.keys()).sort().forEach((key) => {
-    const ids = strata.get(key).slice().sort();
-    const shuffled = shuffle(ids, mulberry32(stratumSeed(seed, key)));
-    const devCount = Math.max(1, Math.round(ids.length * ratio));
-    shuffled.forEach((id, position) => {
-      assignment.set(id, position < devCount ? "dev" : "heldout");
+  const place = (query, split) => {
+    assignment.set(query.id, split);
+    const entry = targets.get(stratumKey(query));
+    if (split === "dev") {
+      entry.assignedDev += 1;
+    } else {
+      entry.assignedHeldout += 1;
+    }
+  };
+
+  const familyKeys = Array.from(families.keys()).sort();
+  shuffle(familyKeys, mulberry32(derivedSeed(seed, "families"))).forEach((family) => {
+    const members = families.get(family);
+    let devDeficit = 0;
+    let heldoutDeficit = 0;
+    members.forEach((query) => {
+      const entry = targets.get(stratumKey(query));
+      devDeficit += entry.dev - entry.assignedDev;
+      heldoutDeficit += entry.heldout - entry.assignedHeldout;
+    });
+    const split = devDeficit >= heldoutDeficit ? "dev" : "heldout";
+    members.forEach((query) => place(query, split));
+  });
+
+  Array.from(singles.keys()).sort().forEach((key) => {
+    const entry = targets.get(key);
+    shuffle(singles.get(key), mulberry32(derivedSeed(seed, key))).forEach((query) => {
+      place(query, entry.assignedDev < entry.dev ? "dev" : "heldout");
     });
   });
   return assignment;
@@ -88,4 +141,5 @@ module.exports = {
   assignSplit,
   splitCounts,
   stratumKey,
+  unitKey,
 };

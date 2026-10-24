@@ -172,6 +172,22 @@ FIXTURES.forEach((fixture) => {
     strata.forEach((counts, key) => {
       assert.ok(counts.dev >= 1, `stratum ${key} has no dev query`);
     });
+    // Paraphrase families (same primary grade-2 target) never span both splits.
+    const familySplits = new Map();
+    sidecar.queries.forEach((query) => {
+      if (!query.family) {
+        return;
+      }
+      const primary = (query.expected || []).find((entry) => entry.grade === 2);
+      assert.equal(`${primary.bundle}/${primary.id}`, query.family, `${query.id} family differs from its primary target`);
+      if (!familySplits.has(query.family)) {
+        familySplits.set(query.family, new Set());
+      }
+      familySplits.get(query.family).add(query.split);
+    });
+    familySplits.forEach((splits, family) => {
+      assert.equal(splits.size, 1, `family ${family} spans both splits`);
+    });
     const counts = splitCounts(sidecar.queries);
     const devShare = counts.dev / (counts.dev + counts.heldout);
     assert.ok(

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "description": "Retrieval evaluation queries for an architecture-catalog agent over the Tessera 'atlas' OKF bundle (+ shared engineering standards). Second-domain fixture for agent-agnosticism (WP0). Graded relevance: 2 = must appear, 1 = acceptable. distractors are near-duplicates that should rank BELOW the grade-2 concept. All queries were written from the generated text before any search run (added: wp0). split is the seeded 70/30 dev/heldout assignment stratified by category x lang; the plan gates this fixture on its full set until it reaches 150 queries. sectionAnchor marks queries whose answer lives in one section of one concept (WP3a).",
+  "description": "Retrieval evaluation queries for an architecture-catalog agent over the Tessera 'atlas' OKF bundle (+ shared engineering standards). Second-domain fixture for agent-agnosticism (WP0). Graded relevance: 2 = must appear, 1 = acceptable. distractors are near-duplicates that should rank BELOW the grade-2 concept. All queries were written from the generated text before any search run (added: wp0). split is the seeded 70/30 dev/heldout assignment stratified by category x lang; the plan gates this fixture on its full set until it reaches 150 queries. sectionAnchor marks queries whose answer lives in one section of one concept (WP3a). family groups near-paraphrases: answerable queries outside the exact category that share the same primary grade-2 concept carry its bundle/id as family, and a family never spans both splits (see lib/split.js).",
   "as_of": "2026-10-24",
   "categories": {
     "nl-task": "Natural-language task sentence, as an engineering agent would phrase a question mid-task",
@@ -21,7 +21,7 @@
       "query": "why did validators in Bologna go offline in January?",
       "lang": "en",
       "category": "nl-task",
-      "split": "dev",
+      "split": "heldout",
       "expected": [
         {
           "bundle": "atlas",
@@ -150,6 +150,7 @@
       "lang": "en",
       "category": "nl-task",
       "split": "dev",
+      "family": "atlas/incidents/inc-2026-027-subscription-renewal-duplicate",
       "expected": [
         {
           "bundle": "atlas",
@@ -182,6 +183,7 @@
       "lang": "it",
       "category": "nl-task",
       "split": "dev",
+      "family": "atlas/runbooks/pagopa-reconciliation",
       "expected": [
         {
           "bundle": "atlas",
@@ -322,6 +324,7 @@
       "lang": "en",
       "category": "nl-task",
       "split": "dev",
+      "family": "atlas/runbooks/fare-table-hotfix",
       "expected": [
         {
           "bundle": "atlas",
@@ -370,7 +373,8 @@
       "query": "fencing token",
       "lang": "en",
       "category": "keyword",
-      "split": "heldout",
+      "split": "dev",
+      "family": "atlas/incidents/inc-2026-027-subscription-renewal-duplicate",
       "expected": [
         {
           "bundle": "atlas",
@@ -392,7 +396,7 @@
       "query": "RAPTOR",
       "lang": "en",
       "category": "keyword",
-      "split": "dev",
+      "split": "heldout",
       "expected": [
         {
           "bundle": "atlas",
@@ -420,6 +424,7 @@
       "lang": "it",
       "category": "keyword",
       "split": "dev",
+      "family": "atlas/services/pagopa-adapter",
       "expected": [
         {
           "bundle": "atlas",
@@ -452,6 +457,7 @@
       "lang": "en",
       "category": "keyword",
       "split": "dev",
+      "family": "atlas/decisions/adr-012-outbox-pattern",
       "expected": [
         {
           "bundle": "atlas",
@@ -484,6 +490,7 @@
       "lang": "en",
       "category": "keyword",
       "split": "dev",
+      "family": "atlas/runbooks/feature-flag-kill-switch",
       "expected": [
         {
           "bundle": "atlas",
@@ -526,6 +533,7 @@
       "lang": "it",
       "category": "keyword",
       "split": "heldout",
+      "family": "atlas/incidents/inc-2025-041-legacy-sbe-crash",
       "expected": [
         {
           "bundle": "atlas",
@@ -547,7 +555,8 @@
       "query": "advisory lock",
       "lang": "en",
       "category": "keyword",
-      "split": "heldout",
+      "split": "dev",
+      "family": "atlas/incidents/inc-2026-027-subscription-renewal-duplicate",
       "expected": [
         {
           "bundle": "atlas",
@@ -569,7 +578,7 @@
       "query": "TTL",
       "lang": "en",
       "category": "keyword",
-      "split": "dev",
+      "split": "heldout",
       "expected": [
         {
           "bundle": "atlas",
@@ -944,7 +953,8 @@
       "query": "coda offline validatore",
       "lang": "it",
       "category": "morph",
-      "split": "heldout",
+      "split": "dev",
+      "family": "atlas/runbooks/validator-offline-queue-drain",
       "expected": [
         {
           "bundle": "atlas",
@@ -1020,9 +1030,9 @@
       "notes": "'tables' vs 'table'; 'partitioned' vs 'partitions' / 'partitioning'.",
       "added": "wp0",
       "sectionAnchor": {
-        "uri": "okf://atlas/questions/q-006-postgres-partitioning-validations",
-        "heading": "Options",
-        "slug": "options"
+        "uri": "okf://atlas/services/validation-ledger",
+        "heading": "Operational notes",
+        "slug": "operational-notes"
       }
     },
     {
@@ -1030,7 +1040,7 @@
       "query": "sanzione duplicata",
       "lang": "it",
       "category": "morph",
-      "split": "dev",
+      "split": "heldout",
       "expected": [
         {
           "bundle": "atlas",
@@ -1084,7 +1094,8 @@
       "query": "reperibilita team dati",
       "lang": "it",
       "category": "accent",
-      "split": "heldout",
+      "split": "dev",
+      "family": "atlas/questions/q-007-on-call-compensation",
       "expected": [
         {
           "bundle": "atlas",
@@ -1111,7 +1122,7 @@
       "query": "team mobilita",
       "lang": "it",
       "category": "accent",
-      "split": "dev",
+      "split": "heldout",
       "expected": [
         {
           "bundle": "atlas",
@@ -1156,6 +1167,7 @@
       "lang": "it",
       "category": "accent",
       "split": "dev",
+      "family": "atlas/services/pagopa-adapter",
       "expected": [
         {
           "bundle": "atlas",
@@ -1177,7 +1189,8 @@
       "query": "double billing of season passes",
       "lang": "en",
       "category": "synonym",
-      "split": "heldout",
+      "split": "dev",
+      "family": "atlas/incidents/inc-2026-027-subscription-renewal-duplicate",
       "expected": [
         {
           "bundle": "atlas",
@@ -1205,6 +1218,7 @@
       "lang": "it",
       "category": "synonym",
       "split": "dev",
+      "family": "atlas/runbooks/feature-flag-kill-switch",
       "expected": [
         {
           "bundle": "atlas",
@@ -1231,7 +1245,7 @@
       "query": "vehicle locations stuck",
       "lang": "en",
       "category": "synonym",
-      "split": "dev",
+      "split": "heldout",
       "expected": [
         {
           "bundle": "atlas",
@@ -1264,6 +1278,7 @@
       "lang": "en",
       "category": "synonym",
       "split": "dev",
+      "family": "atlas/questions/q-007-on-call-compensation",
       "expected": [
         {
           "bundle": "atlas",
@@ -1291,8 +1306,8 @@
       "added": "wp0",
       "sectionAnchor": {
         "uri": "okf://atlas/questions/q-007-on-call-compensation",
-        "heading": "Opzioni",
-        "slug": "opzioni"
+        "heading": "Orientamento attuale",
+        "slug": "orientamento-attuale"
       }
     },
     {
@@ -1469,6 +1484,7 @@
       "lang": "it",
       "category": "disambig",
       "split": "heldout",
+      "family": "atlas/incidents/inc-2025-041-legacy-sbe-crash",
       "expected": [
         {
           "bundle": "atlas",
@@ -1865,6 +1881,7 @@
       "lang": "en",
       "category": "nl-task",
       "split": "dev",
+      "family": "atlas/decisions/adr-012-outbox-pattern",
       "expected": [
         {
           "bundle": "atlas",
@@ -1886,7 +1903,7 @@
       "query": "quali sono le conseguenze dell'integrazione diretta con pagoPA?",
       "lang": "it",
       "category": "nl-task",
-      "split": "heldout",
+      "split": "dev",
       "expected": [
         {
           "bundle": "atlas",
@@ -1984,7 +2001,7 @@
       "query": "how do I roll back a schema registry change?",
       "lang": "en",
       "category": "nl-task",
-      "split": "heldout",
+      "split": "dev",
       "expected": [
         {
           "bundle": "atlas",
@@ -2011,7 +2028,8 @@
       "query": "what is the rollback for a fare table hotfix?",
       "lang": "en",
       "category": "nl-task",
-      "split": "heldout",
+      "split": "dev",
+      "family": "atlas/runbooks/fare-table-hotfix",
       "expected": [
         {
           "bundle": "atlas",
@@ -2034,6 +2052,7 @@
       "lang": "en",
       "category": "nl-task",
       "split": "dev",
+      "family": "atlas/runbooks/validator-offline-queue-drain",
       "expected": [
         {
           "bundle": "atlas",
@@ -2056,6 +2075,7 @@
       "lang": "it",
       "category": "nl-task",
       "split": "dev",
+      "family": "atlas/runbooks/pagopa-reconciliation",
       "expected": [
         {
           "bundle": "atlas",
@@ -2077,7 +2097,7 @@
       "query": "when should I use the Kafka replay runbook?",
       "lang": "en",
       "category": "nl-task",
-      "split": "heldout",
+      "split": "dev",
       "expected": [
         {
           "bundle": "atlas",
@@ -2099,7 +2119,7 @@
       "query": "what fields does the FareComputed event carry?",
       "lang": "en",
       "category": "nl-task",
-      "split": "dev",
+      "split": "heldout",
       "expected": [
         {
           "bundle": "atlas",
@@ -2258,7 +2278,7 @@
       "query": "qual è l'orientamento attuale sulla licenza di moneta elettronica?",
       "lang": "it",
       "category": "nl-task",
-      "split": "dev",
+      "split": "heldout",
       "expected": [
         {
           "bundle": "atlas",
@@ -2302,7 +2322,7 @@
       "query": "which services depend on Redis?",
       "lang": "en",
       "category": "nl-task",
-      "split": "dev",
+      "split": "heldout",
       "expected": [
         {
           "bundle": "atlas",
@@ -2356,7 +2376,7 @@
       "query": "da cosa dipende il backend dei controllori?",
       "lang": "it",
       "category": "nl-task",
-      "split": "heldout",
+      "split": "dev",
       "expected": [
         {
           "bundle": "atlas",
@@ -2372,11 +2392,127 @@
         "heading": "Dipendenze",
         "slug": "dipendenze"
       }
+    },
+    {
+      "id": "A95",
+      "query": "who approves a refund batch above 10,000 euro when the queue is unstuck?",
+      "lang": "en",
+      "category": "nl-task",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "atlas",
+          "id": "runbooks/refund-queue-unstick",
+          "grade": 2
+        }
+      ],
+      "distractors": [],
+      "notes": "Escalation section names finance.",
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://atlas/runbooks/refund-queue-unstick",
+        "heading": "Escalation",
+        "slug": "escalation"
+      }
+    },
+    {
+      "id": "A96",
+      "query": "quali sono i prerequisiti per il failover di PostgreSQL?",
+      "lang": "it",
+      "category": "nl-task",
+      "split": "heldout",
+      "expected": [
+        {
+          "bundle": "atlas",
+          "id": "runbooks/postgres-failover",
+          "grade": 2
+        }
+      ],
+      "distractors": [],
+      "notes": "Italian question; English runbook.",
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://atlas/runbooks/postgres-failover",
+        "heading": "Prerequisites",
+        "slug": "prerequisites"
+      }
+    },
+    {
+      "id": "A97",
+      "query": "what must every ClickHouse raw table declare before an upgrade?",
+      "lang": "en",
+      "category": "nl-task",
+      "split": "heldout",
+      "expected": [
+        {
+          "bundle": "atlas",
+          "id": "dependencies/clickhouse",
+          "grade": 2
+        },
+        {
+          "bundle": "atlas",
+          "id": "incidents/inc-2026-018-clickhouse-disk-full",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "",
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://atlas/dependencies/clickhouse",
+        "heading": "Upgrade notes",
+        "slug": "upgrade-notes"
+      }
+    },
+    {
+      "id": "A98",
+      "query": "what pages the fare engine latency SLO?",
+      "lang": "en",
+      "category": "nl-task",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "atlas",
+          "id": "slos/fare-engine-latency-p99",
+          "grade": 2
+        }
+      ],
+      "distractors": [],
+      "notes": "",
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://atlas/slos/fare-engine-latency-p99",
+        "heading": "Alerting",
+        "slug": "alerting"
+      }
+    },
+    {
+      "id": "A99",
+      "query": "until when is Kubernetes 1.31 supported?",
+      "lang": "en",
+      "category": "nl-task",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "atlas",
+          "id": "dependencies/kubernetes-eks",
+          "grade": 2
+        }
+      ],
+      "distractors": [],
+      "notes": "",
+      "added": "wp0",
+      "sectionAnchor": {
+        "uri": "okf://atlas/dependencies/kubernetes-eks",
+        "heading": "Support end",
+        "slug": "support-end"
+      }
     }
   ],
   "split": {
     "seed": 20261024,
     "devRatio": 0.7,
-    "strata": "category x lang"
+    "strata": "category x lang",
+    "unit": "paraphrase family (queries sharing `family`) or single query; a family never spans both splits"
   }
 }
