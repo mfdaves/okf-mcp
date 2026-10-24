@@ -100,8 +100,10 @@ async function startFakeEmbeddingsServer(options) {
     }
     record.body = body;
     if (behaviour.status) {
-      const headers =
-        behaviour.retryAfter === undefined ? {} : { "retry-after": behaviour.retryAfter };
+      const headers = {
+        ...(behaviour.retryAfter === undefined ? {} : { "retry-after": behaviour.retryAfter }),
+        ...(behaviour.headers || {}),
+      };
       send(
         response,
         behaviour.status,

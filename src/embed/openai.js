@@ -5,8 +5,9 @@
 // of Node 22+. Every setting arrives through the options object from trusted
 // project configuration; nothing here reads tool arguments. The API key is read
 // once from the named environment variable and lives only in this closure.
-// Errors carry a code and an HTTP status but never input text, the key, or a
-// server message that could echo input (B-6, S-2).
+// Errors carry a code and an HTTP status; error.message never contains a
+// server-supplied string other than a checked lowercase code, and nothing
+// retained can carry input text or the key (B-6, S-2).
 
 const { EmbedderError } = require("./interface");
 const { version: PACKAGE_VERSION } = require("../../package.json");
@@ -35,8 +36,12 @@ const BACKOFF_CAP_MS = 30000;
 const RETRY_AFTER_CAP_MS = 60000;
 const MAX_RESPONSE_BYTES = 256 * 1024 * 1024;
 const MAX_SERVER_MESSAGE_CHARS = 200;
+const MAX_SERVER_FIELD_CHARS = 64;
 const PROBE_TEXT = "okf-mcp";
-const IDENTIFIER = /^[A-Za-z0-9_.:-]{1,64}$/;
+// The only shape of server-supplied code allowed into error.message.
+const SERVER_CODE = /^[a-z][a-z_]{0,39}$/;
+// Node and undici error codes and names, which are not server-supplied.
+const NODE_ERROR_CODE = /^[A-Za-z_]{1,48}$/;
 const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 function configError(field) {
@@ -140,19 +145,27 @@ function scrubSecret(text, secret) {
     .replace(/\bsk-[A-Za-z0-9_-]{8,}/g, "[redacted]");
 }
 
-// A server may echo the request in its error body. Only a message that shares
-// no input text with the batch is kept, and only under details, never in the
-// error message itself.
-function echoesInput(message, inputs) {
-  return inputs.some((input) => {
-    const probe = input.trim();
-    if (probe.length < 8) return false;
-    return message.includes(probe) || message.includes(probe.slice(0, 32));
-  });
+// Every string in an error body is untrusted: a server may echo the request,
+// the key, or anything else. A string is retained, under details only, when
+// it contains neither the key (in any case), nor a bearer token, nor any
+// non-blank input of the batch at any length; it is then scrubbed and cut.
+function retainServerString(value, maxChars, inputs, secret) {
+  if (typeof value !== "string" || !value.trim()) return null;
+  const lower = value.toLowerCase();
+  if (secret && lower.includes(secret.toLowerCase())) return null;
+  if (/bearer\s+\S+/i.test(value)) return null;
+  if (inputs.some((input) => input.trim().length > 0 && value.includes(input.trim()))) {
+    return null;
+  }
+  return scrubSecret(value, secret).slice(0, maxChars);
 }
 
+// Returns { server, diagnostic }: `server` holds the retained fields for
+// details; `diagnostic` is the server code, only when it is a bare lowercase
+// identifier that passed the same checks, and is the one server-derived
+// token error.message may carry.
 function serverErrorDetails(bodyText, inputs, secret) {
-  const details = {};
+  const server = {};
   let parsed = null;
   try {
     parsed = JSON.parse(bodyText);
@@ -160,21 +173,22 @@ function serverErrorDetails(bodyText, inputs, secret) {
     parsed = null;
   }
   const source = parsed && typeof parsed === "object" ? parsed.error || parsed : null;
-  let message = null;
   if (source && typeof source === "object") {
     for (const field of ["type", "code", "param"]) {
-      const value = source[field];
-      if (typeof value === "string" && IDENTIFIER.test(value)) details[field] = value;
+      const kept = retainServerString(source[field], MAX_SERVER_FIELD_CHARS, inputs, secret);
+      if (kept !== null) server[field] = kept;
     }
-    if (typeof source.message === "string") message = source.message;
-  } else if (parsed === null && typeof bodyText === "string") {
-    message = bodyText;
+    const message = retainServerString(source.message, MAX_SERVER_MESSAGE_CHARS, inputs, secret);
+    if (message !== null) server.message = message;
+  } else if (parsed === null) {
+    const message = retainServerString(bodyText, MAX_SERVER_MESSAGE_CHARS, inputs, secret);
+    if (message !== null) server.message = message;
   }
-  if (message !== null) {
-    const excerpt = scrubSecret(message, secret).slice(0, MAX_SERVER_MESSAGE_CHARS);
-    if (excerpt.trim() && !echoesInput(excerpt, inputs)) details.message = excerpt;
-  }
-  return details;
+  const diagnostic =
+    typeof server.code === "string" && server.code === source.code && SERVER_CODE.test(server.code)
+      ? server.code
+      : null;
+  return { server, diagnostic };
 }
 
 function abortError(reason) {
@@ -377,7 +391,7 @@ function createOpenAiEmbedder(options) {
             ),
           };
         }
-        const cause = error && (error.code || error.name);
+        const cause = error?.cause?.code || error?.code || error?.name;
         return {
           ok: false,
           retryable: true,
@@ -385,14 +399,14 @@ function createOpenAiEmbedder(options) {
           error: new EmbedderError(
             "Embeddings request failed before a response arrived.",
             "embedder_network_error",
-            typeof cause === "string" && IDENTIFIER.test(cause) ? { cause } : undefined,
+            typeof cause === "string" && NODE_ERROR_CODE.test(cause) ? { cause } : undefined,
           ),
         };
       }
       if (!response.ok) {
-        const server = serverErrorDetails(bodyText, batch.texts, apiKey);
+        const { server, diagnostic } = serverErrorDetails(bodyText, batch.texts, apiKey);
         const error = new EmbedderError(
-          `Embeddings request failed with HTTP ${response.status}${server.code ? ` (${server.code})` : ""}.`,
+          `Embeddings request failed with HTTP ${response.status}${diagnostic ? ` (${diagnostic})` : ""}.`,
           "embedder_http_error",
           { status: response.status, server },
         );

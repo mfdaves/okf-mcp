@@ -307,7 +307,7 @@ test("masks input text and the key in every error path", async (t) => {
   });
   await assert.rejects(embedder.embed([secretInput]), (error) => {
     assertMasked(error, [secretInput]);
-    assert.match(error.details.server.message, /\[redacted\]/);
+    assert.equal(error.details.server.message, undefined);
     return true;
   });
   server.script({ status: 500, body: "<html>gateway exploded</html>" });
@@ -439,4 +439,77 @@ test("parses Retry-After in both formats and caps the wait", () => {
   assert.equal(parseRetryAfter("3600", nowMs), 60000);
   assert.equal(parseRetryAfter("soon", nowMs), null);
   assert.equal(parseRetryAfter(null, nowMs), null);
+});
+
+test("keeps server-supplied strings out of error messages and drops tainted fields", async (t) => {
+  const server = await serverFor(t);
+  const { embedder } = embedderFor(server, { maxRetries: 0 });
+  const secretInput = "confidential catalogue text that must never surface";
+  const body = (error) => ({ status: 400, body: JSON.stringify({ error }) });
+
+  // Key as code, bearer token as type, input as param, oversized message.
+  server.script(
+    body({
+      code: KEY,
+      type: `Bearer ${KEY}`,
+      param: `field ${secretInput} end`,
+      message: `${"long ".repeat(300)}tail`,
+    }),
+  );
+  await assert.rejects(embedder.embed([secretInput]), (error) => {
+    assertMasked(error, [secretInput]);
+    assert.equal(error.message, "Embeddings request failed with HTTP 400.");
+    assert.deepEqual(Object.keys(error.details.server), ["message"]);
+    assert.equal(error.details.server.message.length, 200);
+    return true;
+  });
+
+  // A lowercase code reaches the message only when it carries no input text.
+  server.script(body({ code: "invalid_api_key" }));
+  await assert.rejects(
+    embedder.embed([secretInput]),
+    (error) =>
+      error.message === "Embeddings request failed with HTTP 400 (invalid_api_key)." &&
+      error.details.server.code === "invalid_api_key",
+  );
+  server.script(body({ code: "invalid_api_key" }));
+  await assert.rejects(embedder.embed(["key"]), (error) => {
+    assertMasked(error, ["key"]);
+    return (
+      error.message === "Embeddings request failed with HTTP 400." &&
+      error.details.server.code === undefined
+    );
+  });
+
+  // Mixed case, digits or punctuation never enter the message; a short input
+  // of any length taints a field that contains it, and the key is matched in
+  // any case.
+  server.script(body({ code: "Invalid-Key-01", type: "x", param: "y" }));
+  await assert.rejects(embedder.embed(["x"]), (error) => {
+    assert.equal(error.message, "Embeddings request failed with HTTP 400.");
+    assert.deepEqual(error.details.server, { code: "Invalid-Key-01", param: "y" });
+    return true;
+  });
+  const lowerKey = "abcdefghijklmnopqrstuvwxyz";
+  const lowerServer = await serverFor(t, { apiKey: lowerKey });
+  const { embedder: lowerKeyed } = embedderFor(lowerServer, {
+    maxRetries: 0,
+    apiKeyEnv: "OKF_LOWER_KEY",
+    env: { OKF_LOWER_KEY: lowerKey },
+  });
+  lowerServer.script(body({ code: lowerKey, type: lowerKey.toUpperCase(), message: "fine" }));
+  await assert.rejects(lowerKeyed.embed([secretInput]), (error) => {
+    const serialized = JSON.stringify({ message: error.message, details: error.details });
+    assert.equal(serialized.toLowerCase().includes(lowerKey), false);
+    assert.deepEqual(error.details.server, { message: "fine" });
+    return true;
+  });
+
+  // A non-JSON body that echoes the input is dropped entirely.
+  server.script({ status: 502, body: `upstream rejected: ${secretInput}` });
+  await assert.rejects(embedder.embed([secretInput]), (error) => {
+    assertMasked(error, [secretInput]);
+    assert.deepEqual(error.details.server, {});
+    return error.status === 502;
+  });
 });
