@@ -204,12 +204,15 @@ function evaluateQuery(index, module, query, context) {
   const lowConfidence = response.mode === null || !top1 || top1.coverage === null
     ? null
     : response.mode === "any" && top1.coverage < LOW_CONFIDENCE_COVERAGE;
+  // Per-query rows are kept compact (top-10 URIs and grades, rounded numbers) so a committed
+  // report stays small; scores and coverage per result live in the search module's own output.
   const base = {
     id: query.id, query: query.query, lang: query.lang, category: query.category, split: query.split || null,
-    ms, total: response.total, returned: ranked.length, mode: response.mode,
-    top1: top1 ? { uri: top1.uri, score: top1.score, coverage: top1.coverage, grade: top1.grade } : null,
+    ms: round(ms, 2), total: response.total, returned: ranked.length, mode: response.mode,
+    top1: top1 ? { uri: top1.uri, grade: top1.grade, score: round(top1.score, 3), coverage: round(top1.coverage, 3) } : null,
     lowConfidence,
-    ranked: ranked.map((entry) => ({ rank: entry.rank, uri: entry.uri, score: entry.score, coverage: entry.coverage, grade: entry.grade })),
+    top: ranked.map((entry) => entry.uri),
+    grades: ranked.map((entry) => entry.grade),
     missingFromIndex: expected.filter((entry) => !index.byUri.get(entry.uri)).map((entry) => entry.uri),
   };
   if (query.category === "no-answer" || !expected.length) {
@@ -239,16 +242,24 @@ function evaluateQuery(index, module, query, context) {
     mustCount: must.length,
     recallAt5: relevant.length ? inTop(relevant, 5) / relevant.length : 0,
     mustRecallAt5: must.length ? inTop(must, 5) / must.length : 0,
-    ndcgAt10: idealDcg ? dcg(ranked.slice(0, 10).map((hit) => hit.grade)) / idealDcg : 0,
-    mrrAt10: firstRelevant && firstRelevant.rank <= 10 ? 1 / firstRelevant.rank : 0,
+    ndcgAt10: idealDcg ? round(dcg(ranked.slice(0, 10).map((hit) => hit.grade)) / idealDcg, 4) : 0,
+    mrrAt10: firstRelevant && firstRelevant.rank <= 10 ? round(1 / firstRelevant.rank, 4) : 0,
     p1: top1 && top1.grade >= 1 ? 1 : 0,
     hitAt10: firstRelevant && firstRelevant.rank <= 10 ? 1 : 0,
     zeroResultRate: ranked.length === 0 ? 1 : 0,
     firstRelevantRank: firstRelevant ? firstRelevant.rank : null,
-    mustRanks,
+    // Ranks of the grade-2 concepts in queries.json order; null when outside the top results.
+    mustRanks: mustRanks.map((entry) => entry.rank),
     distractorOutranks,
-    sectionAnchor: query.sectionAnchor || null,
   });
+}
+
+function round(value, digits) {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  const factor = 10 ** digits;
+  return Math.round(value * factor) / factor;
 }
 
 function aggregate(list) {
@@ -292,7 +303,9 @@ function bootstrap(list, samples, seed) {
         sums[metric] += entry[metric];
       });
     }
-    CI_METRICS.forEach((metric) => draws[metric].push(sums[metric] / list.length));
+    CI_METRICS.forEach((metric) => {
+      draws[metric].push(sums[metric] / list.length);
+    });
   }
   CI_METRICS.forEach((metric) => {
     const low = percentile(draws[metric], 0.025);
@@ -358,7 +371,9 @@ function evaluateFixture(fixture, module, options) {
   }
   // Warm-up pass: lazy structures are built here, so the measured pass reflects steady state.
   const warmupStarted = performance.now();
-  queries.forEach((query) => module.search(index, query.query, context));
+  queries.forEach((query) => {
+    module.search(index, query.query, context);
+  });
   const warmupMs = performance.now() - warmupStarted;
   const rssAfterBuild = memoryRss();
 
@@ -490,7 +505,7 @@ function renderFixture(result) {
   lines.push(`| RSS before build / after build / end | ${result.build.rssBeforeMb} / ${result.build.rssAfterBuildMb} / ${result.build.rssEndMb} MB |`, "");
   lines.push("### Per query (answerable)", "", "| id | split | cat | lang | query | returned | first relevant | must ranks | top-1 (grade) | distractor first |", "|---|---|---|---|---|---|---|---|---|---|");
   result.perQuery.filter((entry) => entry.answerable).forEach((entry) => {
-    const must = entry.mustRanks.map((rank) => (rank.rank === null ? "miss" : rank.rank)).join(",");
+    const must = entry.mustRanks.map((rank) => (rank === null ? "miss" : rank)).join(",");
     const top = entry.top1 ? `${entry.top1.uri.replace(/^okf:\/\//, "")} (${entry.top1.grade})` : "–";
     lines.push(`| ${entry.id} | ${entry.split || "–"} | ${entry.category} | ${entry.lang} | ${entry.query} | ${entry.returned} | ${entry.firstRelevantRank === null ? "miss" : entry.firstRelevantRank} | ${must} | ${top} | ${entry.distractorOutranks === null ? "–" : entry.distractorOutranks ? "yes" : "no"} |`);
   });
@@ -507,7 +522,9 @@ function renderMarkdown(report) {
     lines.push(`| ${result.fixture} | ${result.queries.total} | ${num(result.overall.recallAt5)}${ci(result.overall.ci.recallAt5)} | ${num(result.overall.ndcgAt10)}${ci(result.overall.ci.ndcgAt10)} | ${num(result.overall.mrrAt10)} | ${num(result.overall.p1)} | ${pct(result.overall.zeroResultRate)} | ${pct(result.noAnswer.returnedAnyRate)} | ${lc.available ? `${pct(lc.precision)} / ${pct(lc.recall)}` : "n/a"} | ${num(result.latency.p95Ms, 2)} | ${result.build.rssEndMb} |`);
   });
   lines.push("");
-  Object.values(report.fixtures).forEach((result) => lines.push(...renderFixture(result)));
+  Object.values(report.fixtures).forEach((result) => {
+    lines.push(...renderFixture(result));
+  });
   return `${lines.join("\n")}\n`;
 }
 
@@ -531,10 +548,45 @@ function summaryOf(report) {
   };
 }
 
+// Pretty JSON for the aggregates, one line per per-query row: readable diffs without the bulk
+// of a fully indented array of objects.
+function stringifyReport(report) {
+  const placeholder = "__eval-search-per-query__";
+  const shell = JSON.parse(JSON.stringify(report));
+  const rows = {};
+  Object.entries(shell.fixtures).forEach(([name, fixture]) => {
+    rows[name] = fixture.perQuery || [];
+    fixture.perQuery = `${placeholder}${name}`;
+  });
+  let text = JSON.stringify(shell, null, 2);
+  Object.entries(rows).forEach(([name, entries]) => {
+    const block = entries.length
+      ? `[\n${entries.map((entry) => `  ${JSON.stringify(compactRow(entry))}`).join(",\n")}\n      ]`
+      : "[]";
+    text = text.replace(JSON.stringify(`${placeholder}${name}`), () => block);
+  });
+  return text;
+}
+
+// The query text is in the fixture's queries.json (joined by id); fields derivable from `top`,
+// `grades` and `firstRelevantRank` and empty diagnostics are dropped.
+const DERIVABLE_ROW_FIELDS = ["query", "relevantCount", "mustCount", "p1", "hitAt10", "zeroResultRate"];
+
+function compactRow(entry) {
+  const row = Object.assign({}, entry);
+  DERIVABLE_ROW_FIELDS.forEach((field) => {
+    delete row[field];
+  });
+  if (Array.isArray(row.missingFromIndex) && !row.missingFromIndex.length) {
+    delete row.missingFromIndex;
+  }
+  return row;
+}
+
 function writeReport(report, outPrefix) {
   const prefix = path.resolve(outPrefix.replace("{date}", new Date().toISOString().slice(0, 10)));
   fs.mkdirSync(path.dirname(prefix), { recursive: true });
-  fs.writeFileSync(`${prefix}.json`, `${JSON.stringify(report, null, 2)}\n`);
+  fs.writeFileSync(`${prefix}.json`, `${stringifyReport(report)}\n`);
   fs.writeFileSync(`${prefix}.md`, renderMarkdown(report));
   return [`${prefix}.json`, `${prefix}.md`];
 }
