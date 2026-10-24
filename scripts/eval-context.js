@@ -5,18 +5,20 @@
 //
 //   node scripts/eval-context.js [--fixture alpinaria --fixture atlas | --fixture <path>]
 //        [--budget 1200] [--as-of YYYY-MM-DD] [--bootstrap 1000] [--seed 20261024]
-//        [--label <name>] [--out <prefix>]
+//        [--preamble-weight <w>] [--sweep 1,0.7,0.5] [--label <name>] [--out <prefix>]
 //
 // For every query with a `sectionAnchor` label (`uri#slug`, written in WP0 before any search
 // code), assembleContext runs with the budget and the fixture's as_of date, and the run reports:
 // anchor hit rate (the labelled anchor is among the packed sections, the WP3a acceptance
-// metric), hit@1 (it is the first section), concept-level Recall@5 of the candidate step
+// metric), hit@1 (it is the first section), anchor MRR (1 / its rank among the packed
+// sections, 0 when absent), the labelled section's rank per query, concept-level Recall@5 of the candidate step
 // (grade >= 1 concepts among the first five candidates), whether the labelled concept was a
 // candidate at all (so a miss can be told apart as a candidate or a section-ranking miss), mean
 // used tokens and sections, budget violations, and p50/p95 latency of assembleContext after a
-// warm-up pass (the first, cold call that builds the per-index section corpus is reported
-// separately). Every rate carries a seeded 1,000-sample percentile bootstrap 95% CI, per
-// fixture and per split (dev, heldout, all).
+// warm-up pass (the concept search index build and the first call on the fresh index are
+// reported separately). Every rate carries a seeded 1,000-sample percentile bootstrap 95% CI,
+// per fixture and per split (dev, heldout, all). The preamble-weight sweep scores every
+// candidate weight on the dev split only (held-out queries are never used to choose it).
 //
 // Every run writes <prefix>.json and <prefix>.md. The default prefix is the git-ignored
 // test/fixtures/retrieval/reports/latest-context; a committed report is produced only with an
@@ -26,8 +28,13 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { performance } = require("node:perf_hooks");
 
-const { assembleContext, DEFAULT_CONTEXT_BUDGET_TOKENS } = require("../src/context/assemble");
+const {
+  assembleContext,
+  DEFAULT_CONTEXT_BUDGET_TOKENS,
+  DEFAULT_PREAMBLE_WEIGHT,
+} = require("../src/context/assemble");
 const { buildProjectIndex } = require("../src/indexer");
+const { prepareSearchIndex } = require("../src/search/lexical");
 const { resolveFixture } = require("./eval-search");
 
 const FIXTURES_ROOT = path.join(__dirname, "..", "test", "fixtures", "retrieval");
@@ -37,7 +44,16 @@ const DEFAULT_BOOTSTRAP = 1000;
 const DEFAULT_SEED = 20261024;
 const RECALL_CUTOFF = 5;
 const SPLITS = ["dev", "heldout", "all"];
-const CI_METRICS = ["anchorHit", "hitAt1", "conceptRecallAt5", "usedTokens", "sections"];
+const CI_METRICS = [
+  "anchorHit",
+  "hitAt1",
+  "anchorRR",
+  "conceptRecallAt5",
+  "usedTokens",
+  "sections",
+];
+// The pre-registered candidates for the preamble weight (WP3a review).
+const DEFAULT_SWEEP = [1, 0.7, 0.5];
 
 function usage() {
   return [
@@ -46,6 +62,8 @@ function usage() {
     "                            okf.project.yaml and queries.json (repeatable; default both).",
     `  --budget <tokens>         Token budget per query (default ${DEFAULT_CONTEXT_BUDGET_TOKENS}).`,
     "  --as-of <date>            Evaluation date (default: the fixture's as_of).",
+    `  --preamble-weight <w>     Preamble score multiplier (default ${DEFAULT_PREAMBLE_WEIGHT}).`,
+    `  --sweep <w,w,...>         Preamble weights scored on dev (default ${DEFAULT_SWEEP.join(",")}).`,
     `  --bootstrap <n>           Bootstrap samples (default ${DEFAULT_BOOTSTRAP}).`,
     `  --seed <n>                Bootstrap seed (default ${DEFAULT_SEED}).`,
     "  --label <name>            Report title.",
@@ -65,6 +83,8 @@ function parseArgs(argv) {
   const options = {
     fixtures: [],
     budgetTokens: DEFAULT_CONTEXT_BUDGET_TOKENS,
+    preambleWeight: DEFAULT_PREAMBLE_WEIGHT,
+    sweep: DEFAULT_SWEEP.slice(),
     asOf: "",
     bootstrap: DEFAULT_BOOTSTRAP,
     seed: DEFAULT_SEED,
@@ -85,6 +105,8 @@ function parseArgs(argv) {
     if (argument === "--fixture") options.fixtures.push(value);
     else if (argument === "--budget") options.budgetTokens = positiveInteger(value, "--budget");
     else if (argument === "--as-of") options.asOf = value;
+    else if (argument === "--preamble-weight") options.preambleWeight = Number(value);
+    else if (argument === "--sweep") options.sweep = value.split(",").map(Number);
     else if (argument === "--bootstrap") {
       options.bootstrap = positiveInteger(value, "--bootstrap", true);
     } else if (argument === "--seed") options.seed = positiveInteger(value, "--seed", true);
@@ -154,6 +176,11 @@ function summarize(rows, options) {
     queries: rows.length,
     anchorHitRate: mean(rows, "anchorHit"),
     hitAt1: mean(rows, "hitAt1"),
+    anchorMrr: mean(rows, "anchorRR"),
+    medianAnchorRank: percentile(
+      rows.filter((row) => row.anchorRank).map((row) => row.anchorRank),
+      0.5,
+    ),
     conceptRecallAt5: mean(rows, "conceptRecallAt5"),
     conceptCandidateRate: mean(rows, "conceptCandidate"),
     meanUsedTokens: mean(rows, "usedTokens"),
@@ -183,6 +210,7 @@ function evaluateQuery(index, query, context) {
     query: query.query,
     budgetTokens: context.budgetTokens,
     asOf: context.asOf,
+    preambleWeight: context.preambleWeight,
   });
   const ms = performance.now() - started;
   const anchor = labelledAnchor(query);
@@ -203,6 +231,7 @@ function evaluateQuery(index, query, context) {
     anchorHit: position >= 0 ? 1 : 0,
     anchorRank: position >= 0 ? position + 1 : null,
     hitAt1: position === 0 ? 1 : 0,
+    anchorRR: position >= 0 ? Math.round((1 / (position + 1)) * 10000) / 10000 : 0,
     conceptCandidate: candidates.includes(query.sectionAnchor.uri) ? 1 : 0,
     conceptRecallAt5: relevant.length
       ? relevant.filter((uri) => top.has(uri)).length / relevant.length
@@ -225,24 +254,43 @@ function evaluateFixture(fixture, options) {
   const labelled = (sidecar.queries || []).filter((query) => query.sectionAnchor);
   const context = {
     budgetTokens: options.budgetTokens,
+    preambleWeight: options.preambleWeight,
     asOf: options.asOf || sidecar.as_of || new Date().toISOString().slice(0, 10),
   };
   const buildStarted = performance.now();
   const index = buildProjectIndex(fixture.project);
   const okfIndexMs = performance.now() - buildStarted;
-  // The first call builds the section corpus of this index; the warm-up pass then fills the
-  // remaining lazy structures so the measured pass reflects steady state.
-  let coldMs = null;
+  // The concept search index is what search_concepts builds on first use; context assembly adds
+  // no index of its own, so the first call after it is timed on its own, then a warm-up pass.
+  const searchStarted = performance.now();
+  prepareSearchIndex(index);
+  const searchIndexMs = performance.now() - searchStarted;
+  let firstCallMs = null;
   labelled.forEach((query, position) => {
     const started = performance.now();
     assembleContext(index, {
       query: query.query,
       budgetTokens: context.budgetTokens,
       asOf: context.asOf,
+      preambleWeight: context.preambleWeight,
     });
-    if (position === 0) coldMs = performance.now() - started;
+    if (position === 0) firstCallMs = performance.now() - started;
   });
   const rows = labelled.map((query) => evaluateQuery(index, query, context));
+  // Dev only: the weight is chosen there and never on held-out queries.
+  const devQueries = labelled.filter((query) => query.split === "dev");
+  const preambleSweep = (options.sweep || []).map((weight) => {
+    const devRows = devQueries.map((query) =>
+      evaluateQuery(index, query, Object.assign({}, context, { preambleWeight: weight })),
+    );
+    return {
+      weight,
+      queries: devRows.length,
+      anchorHitRate: mean(devRows, "anchorHit"),
+      anchorMrr: mean(devRows, "anchorRR"),
+      hitAt1: mean(devRows, "hitAt1"),
+    };
+  });
   const bySplit = {};
   SPLITS.forEach((split) => {
     const subset = split === "all" ? rows : rows.filter((row) => row.split === split);
@@ -253,15 +301,18 @@ function evaluateFixture(fixture, options) {
     project: path.relative(path.join(__dirname, ".."), fixture.project),
     asOf: context.asOf,
     budgetTokens: context.budgetTokens,
+    preambleWeight: context.preambleWeight,
     corpus: { concepts: index.concepts.length, validForProject: index.validForProject },
-    build: { okfIndexMs, firstCallMs: coldMs },
+    build: { okfIndexMs, searchIndexMs, firstCallMs },
     bySplit,
+    preambleSweep,
     misses: rows
       .filter((row) => !row.anchorHit)
       .map((row) => ({
         id: row.id,
         split: row.split,
         anchor: row.anchor,
+        top: row.top[0] || null,
         conceptCandidate: Boolean(row.conceptCandidate),
       })),
     perQuery: rows,
@@ -273,6 +324,8 @@ function runContextEvaluation(options) {
     {
       fixtures: DEFAULT_FIXTURES.slice(),
       budgetTokens: DEFAULT_CONTEXT_BUDGET_TOKENS,
+      preambleWeight: DEFAULT_PREAMBLE_WEIGHT,
+      sweep: DEFAULT_SWEEP.slice(),
       asOf: "",
       bootstrap: DEFAULT_BOOTSTRAP,
       seed: DEFAULT_SEED,
@@ -286,6 +339,7 @@ function runContextEvaluation(options) {
     node: process.version,
     platform: `${process.platform} ${process.arch}`,
     budgetTokens: config.budgetTokens,
+    preambleWeight: config.preambleWeight,
     estimator: "chars/4",
     bootstrap: { samples: config.bootstrap, seed: config.seed, confidence: 0.95 },
     fixtures: {},
@@ -306,25 +360,39 @@ const ci = (interval, digits) =>
     : "–";
 
 function splitRow(name, split, summary) {
-  return `| ${name} | ${split} | ${summary.queries} | ${num(summary.anchorHitRate, 3)} ${ci(summary.ci.anchorHit, 3)} | ${num(summary.hitAt1, 3)} ${ci(summary.ci.hitAt1, 3)} | ${num(summary.conceptRecallAt5, 3)} ${ci(summary.ci.conceptRecallAt5, 3)} | ${num(summary.conceptCandidateRate, 3)} | ${num(summary.meanUsedTokens, 0)} ${ci(summary.ci.usedTokens, 0)} | ${num(summary.meanSections, 1)} | ${summary.maxUsedTokens} | ${summary.budgetExceeded} | ${num(summary.latency.p50Ms, 2)} | ${num(summary.latency.p95Ms, 2)} |`;
+  return `| ${name} | ${split} | ${summary.queries} | ${num(summary.anchorHitRate, 3)} ${ci(summary.ci.anchorHit, 3)} | ${num(summary.hitAt1, 3)} ${ci(summary.ci.hitAt1, 3)} | ${num(summary.anchorMrr, 3)} ${ci(summary.ci.anchorRR, 3)} | ${num(summary.medianAnchorRank, 0)} | ${num(summary.conceptRecallAt5, 3)} ${ci(summary.ci.conceptRecallAt5, 3)} | ${num(summary.conceptCandidateRate, 3)} | ${num(summary.meanUsedTokens, 0)} ${ci(summary.ci.usedTokens, 0)} | ${num(summary.meanSections, 1)} | ${summary.maxUsedTokens} | ${summary.budgetExceeded} | ${num(summary.latency.p50Ms, 2)} | ${num(summary.latency.p95Ms, 2)} |`;
 }
 
 function renderMarkdown(report) {
   const lines = [
     `# Context evaluation — ${report.label}`,
     "",
-    `Generated ${report.generatedAt} · Node ${report.node} (${report.platform}) · budget ${report.budgetTokens} tokens (${report.estimator}) · bootstrap ${report.bootstrap.samples} samples (seed ${report.bootstrap.seed})`,
+    `Generated ${report.generatedAt} · Node ${report.node} (${report.platform}) · budget ${report.budgetTokens} tokens (${report.estimator}) · preamble weight ${report.preambleWeight} · bootstrap ${report.bootstrap.samples} samples (seed ${report.bootstrap.seed})`,
     "",
     "Produced by `scripts/eval-context.js` (`npm run eval:context`) over the queries with a `sectionAnchor` label. Routine runs write to the git-ignored `test/fixtures/retrieval/reports/latest-context.{json,md}`; a committed report needs an explicit `--out`.",
     "",
-    "Anchor hit: the labelled `uri#slug` is among the packed sections (WP3a acceptance: ≥ 0.80 on dev on both fixtures). hit@1: it is the first section. Concept R@5: grade ≥ 1 concepts among the first five candidates of the search step. Candidate: the labelled concept is among the candidates (default 10). Latency is assembleContext after a warm-up pass.",
+    "Anchor hit: the labelled `uri#slug` is among the packed sections (WP3a acceptance: ≥ 0.80 on dev on both fixtures). hit@1: it is the first section. Anchor MRR: mean of 1 / its rank among the packed sections (0 when absent); rank: median rank where it is packed. Concept R@5: grade ≥ 1 concepts among the first five candidates of the search step. Candidate: the labelled concept is among the candidates (default 10). Latency is assembleContext after a warm-up pass; the concept search index (built once by search_concepts too) and the first call are listed per fixture.",
     "",
-    "| fixture | split | labelled | anchor hit (95% CI) | hit@1 (95% CI) | concept R@5 (95% CI) | candidate | mean tokens (95% CI) | mean sections | max tokens | over budget | p50 ms | p95 ms |",
-    "|---|---|---|---|---|---|---|---|---|---|---|---|---|",
+    "| fixture | split | labelled | anchor hit (95% CI) | hit@1 (95% CI) | anchor MRR (95% CI) | rank | concept R@5 (95% CI) | candidate | mean tokens (95% CI) | mean sections | max tokens | over budget | p50 ms | p95 ms |",
+    "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
   ];
   Object.values(report.fixtures).forEach((result) => {
     Object.entries(result.bySplit).forEach(([split, summary]) => {
       lines.push(splitRow(result.fixture, split, summary));
+    });
+  });
+  lines.push(
+    "",
+    "## Preamble weight, dev split only",
+    "",
+    "| fixture | weight | dev queries | anchor hit | anchor MRR | hit@1 |",
+    "|---|---|---|---|---|---|",
+  );
+  Object.values(report.fixtures).forEach((result) => {
+    result.preambleSweep.forEach((row) => {
+      lines.push(
+        `| ${result.fixture} | ${row.weight} | ${row.queries} | ${num(row.anchorHitRate, 3)} | ${num(row.anchorMrr, 3)} | ${num(row.hitAt1, 3)} |`,
+      );
     });
   });
   Object.values(report.fixtures).forEach((result) => {
@@ -332,7 +400,7 @@ function renderMarkdown(report) {
       "",
       `## ${result.fixture}`,
       "",
-      `Project \`${result.project}\` · ${result.corpus.concepts} concepts · as-of ${result.asOf} · index build ${num(result.build.okfIndexMs, 0)} ms · first (cold) call ${num(result.build.firstCallMs, 1)} ms`,
+      `Project \`${result.project}\` · ${result.corpus.concepts} concepts · as-of ${result.asOf} · index build ${num(result.build.okfIndexMs, 0)} ms · concept search index ${num(result.build.searchIndexMs, 0)} ms · first context call ${num(result.build.firstCallMs, 1)} ms`,
       "",
     );
     if (!result.misses.length) {
@@ -364,6 +432,7 @@ function summaryOf(report) {
             anchorHitRate: summary.anchorHitRate,
             anchorHitCi: [summary.ci.anchorHit.low, summary.ci.anchorHit.high],
             hitAt1: summary.hitAt1,
+            anchorMrr: summary.anchorMrr,
             conceptRecallAt5: summary.conceptRecallAt5,
             meanUsedTokens: summary.meanUsedTokens,
             budgetExceeded: summary.budgetExceeded,

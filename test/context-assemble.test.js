@@ -9,11 +9,12 @@ const test = require("node:test");
 const {
   CONTEXT_TOKEN_ESTIMATOR,
   DEFAULT_CONTEXT_BUDGET_TOKENS,
+  DEFAULT_PREAMBLE_WEIGHT,
   assembleContext,
   estimateContextTokens,
 } = require("../src/context/assemble");
 const { conceptSections } = require("../src/context/sections");
-const { buildIndex, buildProjectIndex } = require("../src/indexer");
+const { buildIndex, buildProjectIndex, updateIndex } = require("../src/indexer");
 
 const FIXTURES_ROOT = path.join(__dirname, "fixtures", "retrieval");
 const ALPINARIA = path.join(FIXTURES_ROOT, "alpinaria", "okf.project.yaml");
@@ -337,4 +338,78 @@ test("invalid options are rejected with TypeErrors", () => {
     () => assembleContext(index, { query: "scarponi", minRelevance: 2 }),
     /minRelevance must be a number between 0 and 1/,
   );
+});
+
+test("the preamble weight scales only preamble scores and is validated", (t) => {
+  const index = tempBundle(t, {
+    "a.md": note(
+      "Osprey nesting",
+      "Lead about the osprey.\n\n## Nesting sites\n\nOsprey nesting on poles.\n",
+    ),
+  });
+  const run = (preambleWeight) =>
+    assembleContext(index, { query: "osprey nesting", budgetTokens: 1000, preambleWeight });
+  const byAnchor = (result) => new Map(result.sections.map((section) => [section.anchor, section]));
+  const full = byAnchor(run(1));
+  const half = byAnchor(run(0.5));
+  assert.equal(half.get("okf://demo/a").score, full.get("okf://demo/a").score * 0.5);
+  assert.equal(
+    half.get("okf://demo/a#nesting-sites").score,
+    full.get("okf://demo/a#nesting-sites").score,
+  );
+  assert.equal(DEFAULT_PREAMBLE_WEIGHT, 0.5);
+  assert.deepEqual(
+    byAnchor(assembleContext(index, { query: "osprey nesting", budgetTokens: 1000 })),
+    half,
+  );
+  [0, -1, 1.5, "x"].forEach((preambleWeight) => {
+    assert.throws(() => run(preambleWeight), /preambleWeight must be a number greater than 0/);
+  });
+});
+
+test("sections are computed per document, so an index update re-reads only changed concepts", (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "okf-context-update-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  fs.writeFileSync(path.join(root, "a.md"), note("Plover", "## Range\n\nPlover coastal range.\n"));
+  fs.writeFileSync(
+    path.join(root, "b.md"),
+    note("Plover eggs", "## Clutch\n\nPlover clutch size.\n"),
+  );
+  const index = buildIndex([`demo=${root}`]);
+  const before = assembleContext(index, { query: "plover", budgetTokens: 1000 });
+  assert.ok(before.sections.some((section) => section.anchor === "okf://demo/a#range"));
+  fs.writeFileSync(path.join(root, "a.md"), note("Plover", "## Habitat\n\nPlover dunes.\n"));
+  const next = updateIndex(
+    index,
+    { upserts: [{ bundleId: "demo", relativePath: "a.md" }] },
+    { maxChangeRatio: 1 },
+  );
+  assert.equal(next.byUri.get("okf://demo/b"), index.byUri.get("okf://demo/b"));
+  assert.equal(
+    conceptSections(next.byUri.get("okf://demo/b")),
+    conceptSections(index.byUri.get("okf://demo/b")),
+    "the unchanged concept keeps its memoised sections",
+  );
+  const anchors = assembleContext(next, { query: "plover", budgetTokens: 1000 }).sections.map(
+    (section) => section.anchor,
+  );
+  assert.ok(anchors.includes("okf://demo/a#habitat"));
+  assert.equal(anchors.includes("okf://demo/a#range"), false);
+});
+
+test("a section is found through its concept's type, tags and path", (t) => {
+  const index = tempBundle(t, {
+    "runbooks/rotate-keys.md": note(
+      "Rotate keys",
+      "## Steps\n\nGenerate the new key and deploy it.\n",
+      "tags: [security]\n",
+    ),
+  });
+  const result = assembleContext(index, {
+    query: "rotate keys security steps",
+    budgetTokens: 1000,
+  });
+  const steps = result.sections.find((section) => section.anchor.endsWith("#steps"));
+  assert.ok(steps);
+  assert.deepEqual(steps.matchedTerms.slice().sort(), ["keys", "rotate", "security", "steps"]);
 });
