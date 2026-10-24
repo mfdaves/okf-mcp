@@ -37,8 +37,10 @@ function seedRoot(prefix, count) {
   return root;
 }
 
+// A fresh build with the server's configuration, languages included (the
+// server stamps its --languages on the index after the build).
 function freshStateIndex(state) {
-  return attachProject(
+  const index = attachProject(
     buildIndex(state.localBundleArgs.concat(state.remoteBundles), {
       relationTypes: state.relationTypes,
       strictLinks: state.strictLinks,
@@ -46,7 +48,13 @@ function freshStateIndex(state) {
     }),
     state.project,
   );
+  if (state.languages) {
+    index.languages = state.languages;
+  }
+  return index;
 }
+
+const LANGUAGES = ["it", "en"];
 
 const BATCH = (bundle, suffix) => ({
   changes: [
@@ -71,14 +79,22 @@ test("the MCP server index after okf_apply_changes equals a fresh build", async 
   const root = seedRoot("okf-index-mcp-", 30);
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const bundle = path.basename(root);
-  const state = await createStateAsync([], { rootPath: root, allowWrite: true, actor: "test/wp2" });
+  const state = await createStateAsync([], {
+    rootPath: root,
+    allowWrite: true,
+    actor: "test/wp2",
+    languages: LANGUAGES,
+  });
   assert.equal(state.shareLiveIndex, true);
+  assert.equal(state.index.languages, LANGUAGES);
   const before = state.index;
 
   const first = await callTool(state, "okf_apply_changes", BATCH(bundle, "one"));
   assert.equal(JSON.parse(first.content[0].text).applied, true);
   assert.notEqual(state.index, before);
   assert.equal(indexUpdateStats(state.index).mode, "incremental");
+  // The adopted index keeps the server's languages through the service's updates.
+  assert.equal(state.index.languages, LANGUAGES);
   assert.deepEqual(state.index, freshStateIndex(state));
 
   // A create that sorts before the concept the same batch updates.
@@ -110,12 +126,15 @@ test("a server whose live service builds with other options applies the batch to
     allowWrite: true,
     actor: "test/wp2",
     liveAuthoringService: service,
+    languages: LANGUAGES,
   });
   assert.equal(state.shareLiveIndex, false);
   const result = await callTool(state, "okf_apply_changes", BATCH(bundle, "own"));
   assert.equal(JSON.parse(result.content[0].text).applied, true);
   assert.equal(state.index.strictLinks, false);
   assert.equal(indexUpdateStats(state.index).mode, "incremental");
+  // The refresh-then-replay path keeps the server's languages.
+  assert.equal(state.index.languages, LANGUAGES);
   assert.deepEqual(state.index, freshStateIndex(state));
 });
 

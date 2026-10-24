@@ -44,7 +44,7 @@ const registry = composeRegistry([
 // Whether the server's index was built from exactly what the live authoring
 // service would build its own from (the service's bundles with their include
 // and exclude patterns plus the server's remote snapshots, its relation
-// types and flags, a floating date, the project's languages), so the two can
+// types and flags, a floating date, the server's languages), so the two can
 // share one index object instead of each keeping a copy. The check reads the
 // index's own build record, so an index a host built from other arguments
 // is never shared.
@@ -76,7 +76,8 @@ function liveIndexCompatible(state) {
     allowCustomRelationTypes: Boolean(store.allowCustomRelationTypes),
     strictLinks: Boolean(store.strictLinks),
     asOf: null,
-    languages: store.project?.languages === undefined ? null : store.project.languages,
+    // The server stamps its --languages on the index; the service reads none.
+    languages: state.languages === undefined ? null : state.languages,
   };
   return isDeepStrictEqual(built, expected);
 }
