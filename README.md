@@ -676,6 +676,10 @@ latency, Recall@10, MRR@10, and representative rankings. Search indexes are
 process-local and keyed to the parsed OKF index, so remote loads and accepted
 proposals receive a fresh index automatically.
 
+## Embeddings (0.11, opt-in)
+
+Dense retrieval is off unless configured, and the default install makes no network calls. 0.11 ships the embedder interface, a zero-dependency client for the OpenAI embeddings API and compatible servers (Ollama, vLLM, LM Studio), and a vector cache kept outside the bundle under `$XDG_CACHE_HOME/okf-mcp/<sha256 of the root>/` (`~/.cache/okf-mcp/` or `%LOCALAPPDATA%\okf-mcp\`), so a populated cache never dirties a Git worktree and can be deleted at any time. Project configuration will enable it with `embedder: { type: openai, baseUrl, model, apiKeyEnv, dimensions, batchSize, timeoutMs, maxRetries, concurrency }` plus an optional `cacheDir`; the API key is read only from the environment variable named by `apiKeyEnv`, and receipts report `embedder.remote: true` whenever text leaves the machine. Hybrid search wiring follows in the next release; the library already exposes `createOpenAiEmbedder`, `openVectorCache`, `resolveCacheDir`, and `prepareEmbeddings`.
+
 ## Graph Behavior
 
 As an okf-mcp graph projection, Markdown links become `markdown_link` edges, extension `relations` become typed `relation` edges, and standard v0.2 path-valued fields become `resource`, `source`, `computation`, `executor`, and `attester` edges. Internal concept references resolve to canonical nodes; explicitly referenced non-Markdown files resolve to okf-mcp `okf-asset://` nodes; URLs and scope descriptors remain unfetched external or opaque leaves.
