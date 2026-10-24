@@ -36,7 +36,40 @@ const SEARCH_DESCRIPTION =
   "lowConfidence, true when the any-term fallback produced the page and its best result " +
   "matched fewer than half of the terms: treat such results as weak and rephrase or narrow " +
   "with filters. Each result carries coverage (share of query terms it matched) and relevance " +
-  "(score relative to the top result).";
+  "(score relative to the top result). When the server has an embedder configured, ranking is " +
+  "hybrid by default: lexical and semantic similarity are fused, so concepts that use other " +
+  "words for the same idea are found too; relevance is then fused, mode, coverage and " +
+  "lowConfidence keep their lexical meaning, and each result adds lexicalScore, denseScore and " +
+  "fusedScore. The response then reports hybrid (whether fusion ran) and embedder, whose " +
+  "degraded flag says the semantic side could not run and the results are lexical only.";
+
+const HYBRID_DESCRIPTION =
+  "Fuse lexical and semantic ranking when the server has an embedder configured (the default " +
+  "there); false ranks lexically and makes no embedding request. Ignored without an embedder.";
+
+// Options only the server supplies; never accepted from tool arguments.
+const RUNTIME_OPTIONS = ["queryVector", "vectorCache", "embedUnits", "alpha"];
+
+async function runSearch(state, args) {
+  const options = Object.assign({ detail: "compact" }, args || {});
+  RUNTIME_OPTIONS.forEach((key) => {
+    delete options[key];
+  });
+  if (state.embeddings) {
+    return state.embeddings.search(state.index, options);
+  }
+  const response = searchConcepts(state.index, options);
+  if (options.hybrid !== true) {
+    return response;
+  }
+  const results = response.results;
+  delete response.results;
+  return Object.assign(response, {
+    hybrid: false,
+    embedder: { id: null, remote: null, dimension: null, degraded: true, code: "not_configured" },
+    results,
+  });
+}
 
 const MODE_DESCRIPTION =
   "auto requires every term and falls back to any-term matching when that returns nothing; " +
@@ -108,6 +141,7 @@ const tools = {
       minRelevance: unitIntervalParameter(
         "Drop results whose score relative to the top result is below this; off by default. Can leave total at 0.",
       ),
+      hybrid: optionalBooleanParameter(HYBRID_DESCRIPTION),
       freshnessPrior: booleanParameter(
         "Multiply scores by 0.5 for deprecated, 0.7 for stale, and 0.85 for draft concepts before ranking; off by default.",
       ),
@@ -167,11 +201,20 @@ const tools = {
     }),
     handler: async (state, args) =>
       jsonContent(
-        await expectedToolOperation(
-          () => searchConcepts(state.index, Object.assign({ detail: "compact" }, args)),
-          { translateTypeError: true },
-        ),
+        await expectedToolOperation(() => runSearch(state, args), { translateTypeError: true }),
       ),
+  },
+  embedding_status: {
+    ...defineTool(
+      "Report the hybrid search embedder: its id, whether text leaves the machine (remote), the " +
+        "vector dimension, whether searches are degraded to lexical only and why, the vector " +
+        "cache row count, the startup and last preparation receipts, and token usage. Listed " +
+        "only when an embedder is configured.",
+      READ_ONLY,
+      {},
+    ),
+    enabled: (state) => Boolean(state?.embeddings),
+    handler: async (state) => jsonContent(state.embeddings.status()),
   },
 };
 

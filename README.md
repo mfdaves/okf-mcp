@@ -750,7 +750,25 @@ before it, changes it.
 
 ## Embeddings (0.11, opt-in)
 
-Dense retrieval is off unless configured, and the default install makes no network calls. 0.11 ships the embedder interface, a zero-dependency client for the OpenAI embeddings API and compatible servers (Ollama, vLLM, LM Studio), and a vector cache kept outside the bundle under `$XDG_CACHE_HOME/okf-mcp/<sha256 of the root>/` (`~/.cache/okf-mcp/` or `%LOCALAPPDATA%\okf-mcp\`), so a populated cache never dirties a Git worktree and can be deleted at any time. Project configuration will enable it with `embedder: { type: openai, baseUrl, model, apiKeyEnv, dimensions, batchSize, timeoutMs, maxRetries, concurrency }` plus an optional `cacheDir`; the API key is read only from the environment variable named by `apiKeyEnv`, and receipts report `embedder.remote: true` whenever text leaves the machine. The cache is keyed by the embedder identity `openai:<endpoint>:<model>:<dimension>:<maxInputChars>`, so a change of endpoint, model, dimension or truncation length rebuilds it. Hybrid search wiring follows in the next release; the library already exposes `createOpenAiEmbedder`, `openVectorCache`, `resolveCacheDir`, and `prepareEmbeddings`.
+Dense retrieval is off unless configured, and the default install makes no network calls. 0.11 ships the embedder interface, a zero-dependency client for the OpenAI embeddings API and compatible servers (Ollama, vLLM, LM Studio), a vector cache kept outside the bundle under `$XDG_CACHE_HOME/okf-mcp/<sha256 of the root>/` (`~/.cache/okf-mcp/` or `%LOCALAPPDATA%\okf-mcp\`), so a populated cache never dirties a Git worktree and can be deleted at any time, and hybrid search over it.
+
+Enable it in `okf.project.yaml` (or, for `--root` mode, in a JSON or YAML file passed with `--embedder-config <file>`, which may also be a bare embedder block; `--cache-dir <dir>` overrides the cache location):
+
+```yaml
+embedder:
+  type: openai
+  baseUrl: https://api.openai.com   # or a local OpenAI-compatible server
+  model: text-embedding-3-small
+  apiKeyEnv: OPENAI_API_KEY         # the key is read only from this variable
+  dimensions: 512
+  # optional: batchSize, timeoutMs, maxRetries, concurrency, maxInputChars
+cacheDir: ../okf-vectors            # optional; relative to the project root, never inside it
+fusion:
+  alpha: 0.5                        # weight of the dense side; default chosen on the development queries
+embedUnits: concepts                # concepts (default) or sections
+```
+
+Embedder settings are never accepted as tool arguments. At startup the server validates the embedder, discovers the dimension when it is not configured, opens the cache and embeds the missing units in the background; it never fails to start because of the embedder. `search_concepts` then fuses the lexical ranking with cosine similarity over the cache by convex combination of min-max normalised scores (`hybrid: false` per call keeps it lexical and makes no request). `mode`, `coverage`, `allTermsTotal`, the `minCoverage`/`minRelevance` floors and `lowConfidence` keep their lexical meaning (an explicit `mode: "all"` only re-ranks the all-term matches); `relevance` and `score` become fused and each result adds `lexicalScore`, `denseScore` (cosine) and `fusedScore`. The response adds `hybrid`, `alpha`, `embedder: { id, remote, dimension, degraded, code?, serverCode? }`, `cache: { rows, dir? }` (`dir` only on a `--write` server), `usage: { promptTokens, requests }` for the query encoding, and `timings: { queryEncodingMs, searchMs, totalMs }`. Whenever the embedder is missing, failing or the cache is empty, search runs lexical-only with `embedder.degraded: true`, a fixed `code` and, for HTTP failures, the enumerated `serverCode`; no server-supplied text is ever returned. After a failed query encoding the server stays lexical for 30 seconds before trying again. After each successful `okf_apply_changes` batch only the changed units are embedded (one request when the batch fits) and the receipt carries `embedding: { units, embedded, embedder, cache, usage, durationMs }`. The read-only `embedding_status` tool, listed only when an embedder is configured, reports the embedder, the cache, the startup and last preparation receipts and the token usage. Receipts report `embedder.remote: true` whenever text leaves the machine. The cache is keyed by the embedder identity `openai:<endpoint>:<model>:<dimension>:<maxInputChars>`, so a change of endpoint, model, dimension or truncation length rebuilds it. The library exposes `createOpenAiEmbedder`, `openVectorCache`, `resolveCacheDir`, `prepareEmbeddings`, `openEmbeddingRuntime`, `denseSearch` and `fuseRankings`; `node scripts/eval-search.js --embedder <file>` scores hybrid runs on the retrieval fixtures.
 
 ## Graph Behavior
 

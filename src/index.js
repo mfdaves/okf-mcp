@@ -28,4 +28,11 @@ module.exports = {
   ...require("./policy/write-policy"),
   ...require("./context/sections"),
   ...require("./context/assemble"),
+  // Hybrid retrieval (WP3c): dense scoring, fusion, the embedding runtime.
+  denseSearch: require("./search/dense").denseSearch,
+  DEFAULT_FUSION_ALPHA: require("./search/fusion").DEFAULT_FUSION_ALPHA,
+  fuseRankings: require("./search/fusion").fuseRankings,
+  openEmbeddingRuntime: require("./search/hybrid").openEmbeddingRuntime,
+  loadEmbeddingConfigFile: require("./search/embedding-config").loadEmbeddingConfigFile,
+  normalizeEmbeddingConfig: require("./search/embedding-config").normalizeEmbeddingConfig,
 };

@@ -2,6 +2,7 @@
 
 const { McpServer, ResourceTemplate, fromJsonSchema } = require("@modelcontextprotocol/server");
 const { StdioServerTransport, serveStdio } = require("@modelcontextprotocol/server/stdio");
+const path = require("node:path");
 const { isDeepStrictEqual } = require("node:util");
 const {
   attachProject,
@@ -19,6 +20,8 @@ const { LiveAuthoringService } = require("../live-authoring");
 const { FileConceptStore } = require("../store");
 const { DEFAULT_RELATION_TYPES, loadProjectConfig } = require("../project");
 const { ProducerService } = require("../producers");
+const { loadEmbeddingConfigFile } = require("../search/embedding-config");
+const { openEmbeddingRuntime } = require("../search/hybrid");
 const packageMetadata = require("../../package.json");
 const { ToolExecutionError, composeRegistry, jsonContent, toolEnabled } = require("./registry");
 const { listResources, readResource } = require("./resources");
@@ -215,6 +218,32 @@ function createState(bundleArgs, options) {
   return state;
 }
 
+// Hybrid search settings (WP3c): a library caller's settings object, the
+// --embedder-config file of --root mode, or the project's own; --cache-dir
+// (relative to the working directory) overrides the cache location.
+function embeddingSettings(projectSettings, options) {
+  const given = options?.embedding || {};
+  const base = given.embedder
+    ? given
+    : given.configPath
+      ? loadEmbeddingConfigFile(given.configPath)
+      : projectSettings;
+  if (!base) return null;
+  return given.cacheDir
+    ? Object.assign({}, base, { cacheDir: path.resolve(given.cacheDir) })
+    : base;
+}
+
+// Opens the embedding runtime (never throws: failures leave it degraded) and
+// prepares the missing vectors in the background, so a large first embed
+// never delays the server's start; searches stay lexical until rows exist.
+async function attachEmbeddings(state, settings, context) {
+  if (!settings) return state;
+  state.embeddings = await openEmbeddingRuntime(settings, context);
+  state.embeddings.scheduleSync(state.index);
+  return state;
+}
+
 async function createStateAsync(bundleArgs, options) {
   if (options?.projectPath) {
     const loaded = await loadProjectBundles(options.projectPath);
@@ -246,7 +275,7 @@ async function createStateAsync(bundleArgs, options) {
       }),
       loaded.project,
     );
-    return createState(localBundleArgs, {
+    const projectState = createState(localBundleArgs, {
       initialIndex,
       initialRemoteBundles,
       relationTypes: loaded.project.relationTypes,
@@ -264,6 +293,10 @@ async function createStateAsync(bundleArgs, options) {
       strictLinks: options.strictLinks || loaded.project.strictLinks,
       repositoryMappings: options.repositoryMappings,
       languages: options.languages,
+    });
+    return attachEmbeddings(projectState, embeddingSettings(loaded.project.embedding, options), {
+      root: loaded.project.root,
+      write: Boolean(options.allowWrite),
     });
   }
   if (options?.rootPath) {
@@ -298,7 +331,7 @@ async function createStateAsync(bundleArgs, options) {
       }),
       store.project,
     );
-    return createState(localBundleArgs, {
+    const rootState = createState(localBundleArgs, {
       initialIndex,
       initialRemoteBundles: remoteBundles,
       relationTypes: store.getRelationTypes(),
@@ -314,6 +347,10 @@ async function createStateAsync(bundleArgs, options) {
       allowCustomRelationTypes: true,
       repositoryMappings: options.repositoryMappings,
       languages: options.languages,
+    });
+    return attachEmbeddings(rootState, embeddingSettings(null, options), {
+      root: options.rootPath,
+      write: Boolean(options.allowWrite),
     });
   }
   const remoteBundles = await fetchRemoteBundles(options?.remoteBundles || []);

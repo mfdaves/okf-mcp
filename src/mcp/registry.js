@@ -220,6 +220,8 @@ const TOOL_ORDER = [
   "validate_bundle",
   "validate_project",
   "export_graph",
+  // Gated on a configured embedder (WP3c); appended so existing positions hold.
+  "embedding_status",
 ];
 
 function composeRegistry(modules) {

@@ -5,6 +5,7 @@ const path = require("path");
 const { parseFrontmatterYaml, splitFrontmatter } = require("./parser");
 const { normalizeLanguages } = require("./search/languages");
 const { parseWritePolicy } = require("./policy/write-policy");
+const { normalizeEmbeddingConfig } = require("./search/embedding-config");
 
 const DEFAULT_RELATION_TYPES = [
   "depends_on",
@@ -488,6 +489,8 @@ function loadProjectConfig(configPath) {
   const producers = normalizeProducers(config, localBundleIds, errors);
   const languages = normalizeLanguagesConfig(config, errors);
   const writePolicy = normalizeWritePolicyConfig(config, errors);
+  // Hybrid search (WP3c): embedder, cacheDir, fusion.alpha, embedUnits; null when off.
+  const embedding = normalizeEmbeddingConfig(config, errors);
   return {
     path: resolvedPath,
     root: path.dirname(resolvedPath),
@@ -500,6 +503,7 @@ function loadProjectConfig(configPath) {
     strictLinks: Boolean(config.strictLinks),
     languages,
     writePolicy,
+    embedding,
     errors,
     raw: config,
   };

@@ -298,7 +298,12 @@ const tools = {
         { translateTypeError: true },
       );
       if (result.applied || result.filesChanged) {
+        const previous = state.index;
         state.rebuildIndex();
+        // WP3c: embed only the batch's changed units, after the writer lock.
+        if (result.applied && state.embeddings) {
+          result.embedding = await state.embeddings.embedChanged(previous, state.index);
+        }
       }
       return jsonContent(projectLiveReceipt(result, request.detail), {
         structured: true,

@@ -15,6 +15,7 @@ const { conceptSummary } = require("./indexer");
 const { findOkfRoot, findProjectConfig, loadProjectConfig } = require("./project");
 const { normalizeLanguages } = require("./search/languages");
 const { loadWritePolicyFile } = require("./policy/write-policy");
+const embeddingCli = require("./search/embedding-cli");
 const { createSearchOptions, withSearchLanguages } = require("./search/cli-options");
 const contextCli = require("./context/cli-options");
 const { generateProject } = require("./plugins");
@@ -495,6 +496,7 @@ function usage() {
     "  --allow-computation-authoring Enable coordinated computation proposals (also requires --authoring).",
     "  --strict-links              Treat broken internal Markdown links as project-invalid.",
     "  --languages <codes>         Search stemming languages for --root/--bundle mode: auto (default, detected per bundle), none, or codes such as it,en.",
+    embeddingCli.EMBEDDING_USAGE,
     "  --include-assets            Include referenced asset nodes where supported.",
     "  --include-external          Include external provenance or graph leaves.",
     "  --generated-path <path>     Mark a generated migration target; repeat as needed.",
@@ -600,12 +602,8 @@ function stdioServerOptions(args) {
     allowAuthoring: Boolean(args.authoring),
     allowRuntimeRemoteLoad: Boolean(args.allowRemoteTool),
   };
-  if (repositoryMappings.size) {
-    options.repositoryMappings = repositoryMappings;
-  }
-  if (args.authoring && args.allowComputationAuthoring) {
-    options.allowComputationAuthoring = true;
-  }
+  if (repositoryMappings.size) options.repositoryMappings = repositoryMappings;
+  if (args.authoring && args.allowComputationAuthoring) options.allowComputationAuthoring = true;
   if (args.actor) options.actor = args.actor;
   if (args.write) {
     options.allowWrite = true;
@@ -616,9 +614,8 @@ function stdioServerOptions(args) {
   if (args.strictLinks) options.strictLinks = true;
   if (args.policy) options.writePolicy = writePolicyOption(args);
   if (args.languages) options.languages = args.languages;
-  if (args.proposalRoot) {
-    options.proposalRoot = args.proposalRoot;
-  }
+  Object.assign(options, embeddingCli.embeddingServerOptions(args));
+  if (args.proposalRoot) options.proposalRoot = args.proposalRoot;
   if (args.project) {
     options.projectPath = args.project;
   } else if (args.root) {
@@ -671,7 +668,8 @@ function requireValidConcept(index, locator) {
 }
 
 async function main(argv, runtime) {
-  const args = parseArgs(argv || []);
+  const split = embeddingCli.splitEmbeddingArgs(argv || []);
+  const args = Object.assign(parseArgs(split.argv), { embedding: split.embedding });
   if (args.help) {
     process.stdout.write(usage());
     return;
