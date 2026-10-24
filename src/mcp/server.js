@@ -38,6 +38,9 @@ function rebuildStateIndex(state) {
     allowCustomRelationTypes: state.allowCustomRelationTypes,
   });
   state.index = state.project ? attachProject(index, state.project) : index;
+  if (state.languages) {
+    state.index.languages = state.languages;
+  }
   return state.index;
 }
 
@@ -106,7 +109,13 @@ function createState(bundleArgs, options) {
     strictLinks: Boolean((options && options.strictLinks) || (project && project.strictLinks)),
     allowCustomRelationTypes,
     repositoryMappings: (options && options.repositoryMappings) || new Map(),
+    // Search stemming languages from --languages; the project config's value
+    // travels on index.project (attachProject) and detection covers the rest.
+    languages: (options && options.languages) || undefined,
   };
+  if (state.languages) {
+    state.index.languages = state.languages;
+  }
   // Tool handlers refresh the index through the state so index construction
   // stays in this module; handlers never see bundle arguments or build options.
   state.rebuildIndex = () => rebuildStateIndex(state);
@@ -168,6 +177,7 @@ async function createStateAsync(bundleArgs, options) {
       allowComputationAuthoring: options.allowComputationAuthoring,
       strictLinks: options.strictLinks || loaded.project.strictLinks,
       repositoryMappings: options.repositoryMappings,
+      languages: options.languages,
     });
   }
   if (options && options.rootPath) {
@@ -208,6 +218,7 @@ async function createStateAsync(bundleArgs, options) {
       strictLinks: options.strictLinks,
       allowCustomRelationTypes: true,
       repositoryMappings: options.repositoryMappings,
+      languages: options.languages,
     });
   }
   const remoteBundles = await fetchRemoteBundles((options && options.remoteBundles) || []);
@@ -241,6 +252,7 @@ async function createStateAsync(bundleArgs, options) {
     strictLinks: options && options.strictLinks,
     allowCustomRelationTypes: true,
     repositoryMappings: options && options.repositoryMappings,
+    languages: options && options.languages,
   });
 }
 

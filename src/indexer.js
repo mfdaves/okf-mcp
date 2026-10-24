@@ -569,7 +569,6 @@ function buildIndex(bundleArgs, options) {
   const externalReferences = new Map();
   const seenBundleIds = new Set();
   const bundles = [];
-
   requestedBundles.forEach((bundle) => {
     if (seenBundleIds.has(bundle.id)) {
       errors.push({
@@ -1129,6 +1128,7 @@ function attachProject(index, project) {
     producers: project.producers,
     remoteBundles: project.remoteBundles,
     strictLinks: project.strictLinks,
+    languages: project.languages,
   };
   index.strictLinks = Boolean(index.strictLinks || project.strictLinks);
   return attachValidation(index);
