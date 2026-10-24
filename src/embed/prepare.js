@@ -130,7 +130,7 @@ async function prepareEmbeddings(index, embedder, cache, options) {
             "embedder_bad_output",
           );
         }
-        cache.putMany(
+        await cache.putMany(
           batch.map((unit, position) => ({
             id: unit.id,
             hash: unit.hash,
@@ -148,7 +148,7 @@ async function prepareEmbeddings(index, embedder, cache, options) {
   };
   await Promise.all(Array.from({ length: Math.min(parallel, batches.length) }, worker));
   if (failure !== null) throw failure;
-  const pruned = cache.prune(keep);
+  const pruned = await cache.prune(keep);
   const usage = usageDelta(usageBefore, usageSnapshot(embedder));
 
   return {
