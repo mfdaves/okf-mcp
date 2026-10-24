@@ -16,7 +16,9 @@ const {
   buildIndex,
   bundleAllowsPath,
   conceptMatchSummary,
+  refreshIndex,
   resolveConcept,
+  updateIndex,
   validateIndex,
 } = require("../indexer");
 const {
@@ -60,6 +62,17 @@ const { assertRevisions, rollback, stageCandidates } = require("./staging");
 const MAX_CHANGES = 100;
 const MAX_COMMIT_MESSAGE_BYTES = 1024;
 
+function bundleSignature(additionalBundles) {
+  return (additionalBundles || []).map((bundle) => String(bundle?.id)).join("\u0000");
+}
+
+// The candidate as an index upsert: its rendered Markdown before it is
+// written, or a read-back of the target path once it is.
+function candidateUpsert(candidate, persisted) {
+  const upsert = { bundleId: candidate.bundle, relativePath: candidate.path };
+  return persisted ? upsert : Object.assign(upsert, { text: candidate.markdown });
+}
+
 class LiveAuthoringService {
   constructor(store, options) {
     const config = options || {};
@@ -69,6 +82,44 @@ class LiveAuthoringService {
     this.spawnSync = config.spawnSync || nodeSpawnSync;
     this.now = config.now || (() => new Date());
     this.git = new GitPublisher({ gitCommit: this.gitCommit, spawnSync: this.spawnSync });
+    // The current index is kept between batches and brought up to date from
+    // the bundle roots before each one, so a batch costs one incremental
+    // update instead of full builds (W-6). A host that already holds an index
+    // built with the same parameters hands it over through adoptIndex and
+    // takes the post-publication index back through takePublication.
+    this.indexCache = null;
+    this.publication = null;
+  }
+
+  adoptIndex(index, additionalBundles) {
+    this.indexCache = { signature: bundleSignature(additionalBundles), index, hostOwned: true };
+  }
+
+  takePublication() {
+    const publication = this.publication;
+    this.publication = null;
+    return publication;
+  }
+
+  currentIndex(additionalBundles) {
+    const signature = bundleSignature(additionalBundles);
+    const cache = this.indexCache;
+    if (cache && cache.signature === signature) {
+      const refreshed = refreshIndex(cache.index);
+      if (refreshed !== cache.index) {
+        this.indexCache = Object.assign({}, cache, { index: refreshed });
+      }
+      return refreshed;
+    }
+    const index = this.buildIndex(additionalBundles);
+    this.indexCache = { signature, index, hostOwned: false };
+    return index;
+  }
+
+  // Called when the files on disk are no longer known to match any index the
+  // service holds (an incomplete rollback, a diverged worktree).
+  forgetIndex() {
+    this.indexCache = null;
   }
 
   getBundle(id) {
@@ -173,7 +224,7 @@ class LiveAuthoringService {
   updateCandidate(change, bundle, currentIndex, generated) {
     const uri = nonEmptyString(change.uri, "changes[].uri");
     const existing = resolveConcept(currentIndex, uri);
-    if (!existing || !existing.valid || existing.reserved) {
+    if (!existing?.valid || existing.reserved) {
       const details = staleUpdateDetails(currentIndex, uri, bundle.id, this.store.project);
       throw new AuthoringPolicyError(
         `Unknown valid OKF concept: ${uri}`,
@@ -364,13 +415,13 @@ class LiveAuthoringService {
     try {
       bundle = this.getBundle(input.bundle);
     } catch (error) {
-      if (error && error.code) throw error;
-      throw new AuthoringPolicyError(error && error.message ? error.message : String(error));
+      if (error?.code) throw error;
+      throw new AuthoringPolicyError(error?.message ? error.message : String(error));
     }
     const generated = this.generatedStamp();
     const additionalBundles =
       context && Array.isArray(context.additionalBundles) ? context.additionalBundles : [];
-    const currentIndex = this.buildIndex(additionalBundles);
+    const currentIndex = this.currentIndex(additionalBundles);
     const candidates = input.changes.map((change, index) => {
       if (!isPlainObject(change)) {
         throw new AuthoringPolicyError(`changes[${index}] must be an object.`);
@@ -387,8 +438,8 @@ class LiveAuthoringService {
         if (error instanceof AuthoringPolicyError || error instanceof AuthoringOperationalError) {
           throw error;
         }
-        if (error && error.code) throw error;
-        throw new AuthoringPolicyError(error && error.message ? error.message : String(error));
+        if (error?.code) throw error;
+        throw new AuthoringPolicyError(error?.message ? error.message : String(error));
       }
     });
     const targetPaths = new Set();
@@ -447,14 +498,10 @@ class LiveAuthoringService {
       );
     }
     const message = this.commitMessage(input, candidates);
-    const overrides = new Map(
-      candidates.map((candidate) => [
-        `${candidate.bundle}\u0000${candidate.path}`,
-        candidate.markdown,
-      ]),
-    );
     const validation = this.validationResult(
-      this.buildIndex(additionalBundles, overrides),
+      updateIndex(currentIndex, {
+        upserts: candidates.map((candidate) => candidateUpsert(candidate, false)),
+      }),
       candidates,
     );
     const gitPreflight = this.git.prepareGit(bundle, candidates);
@@ -463,6 +510,7 @@ class LiveAuthoringService {
       bundle,
       generated,
       additionalBundles,
+      currentIndex,
       candidates,
       message,
       validation,
@@ -502,7 +550,7 @@ class LiveAuthoringService {
       durability: durabilityReceipt(null, false),
       changes: [],
       validation,
-      ...(error && error.code ? { code: error.code } : {}),
+      ...(error?.code ? { code: error.code } : {}),
       ...(error && error.details !== undefined ? { details: error.details } : {}),
       git: {
         enabled: this.gitCommit,
@@ -517,6 +565,7 @@ class LiveAuthoringService {
 
   async validateChanges(input, context) {
     return this.store.withWriteLock(() => {
+      this.publication = null;
       try {
         return validationReceipt(this.planChanges(input, context));
       } catch (error) {
@@ -533,6 +582,7 @@ class LiveAuthoringService {
   }
 
   async applyChangesUnlocked(input, context) {
+    this.publication = null;
     const plan = this.planChanges(input, context);
     if (!plan.validation.valid) {
       return {
@@ -587,6 +637,7 @@ class LiveAuthoringService {
     } catch (error) {
       const rollback = this.rollback(applied, staged, transaction.createdDirectories);
       if (!rollback.complete) {
+        this.forgetIndex();
         return {
           applied: false,
           readyToApply: false,
@@ -600,20 +651,24 @@ class LiveAuthoringService {
           changes: plan.changes,
           validation: plan.validation,
           rollback,
-          error: error && error.message ? error.message : String(error),
+          error: error?.message ? error.message : String(error),
         };
       }
       throw error;
     }
     let persistedValidation;
+    let persistedIndex;
     try {
-      persistedValidation = this.validationResult(
-        this.buildIndex(plan.additionalBundles),
-        plan.candidates,
-      );
+      // Validate the bytes that landed on disk, read back from the targets,
+      // applied to the index the batch was planned against.
+      persistedIndex = updateIndex(plan.currentIndex, {
+        upserts: plan.candidates.map((candidate) => candidateUpsert(candidate, true)),
+      });
+      persistedValidation = this.validationResult(persistedIndex, plan.candidates);
     } catch (error) {
       const rollback = this.rollback(applied, staged, transaction.createdDirectories);
       if (!rollback.complete) {
+        this.forgetIndex();
         return {
           applied: false,
           readyToApply: false,
@@ -627,13 +682,16 @@ class LiveAuthoringService {
           changes: plan.changes,
           validation: plan.validation,
           rollback,
-          error: error && error.message ? error.message : String(error),
+          error: error?.message ? error.message : String(error),
         };
       }
       throw error;
     }
     if (!persistedValidation.valid) {
       const rollback = this.rollback(applied, staged, transaction.createdDirectories);
+      if (!rollback.complete) {
+        this.forgetIndex();
+      }
       return {
         applied: false,
         readyToApply: false,
@@ -664,10 +722,14 @@ class LiveAuthoringService {
         committed: null,
         commitState: "unknown",
         persistence: "unknown",
-        error: error && error.message ? error.message : String(error),
+        error: error?.message ? error.message : String(error),
       };
     }
     if (git.targetState === "conflict") {
+      // The worktree diverged from what was validated; nothing the service
+      // holds describes the files now, so re-read everything and let the host
+      // rebuild its own index.
+      this.forgetIndex();
       let currentValidation = persistedValidation;
       try {
         currentValidation = this.validationResult(this.buildIndex(plan.additionalBundles), []);
@@ -693,6 +755,16 @@ class LiveAuthoringService {
         };
       }
       persistedValidation = currentValidation;
+    } else {
+      const shared = this.indexCache?.index === plan.currentIndex;
+      if (shared) {
+        this.indexCache = Object.assign({}, this.indexCache, { index: persistedIndex });
+      }
+      this.publication = {
+        index: persistedIndex,
+        hostOwned: Boolean(shared && this.indexCache.hostOwned),
+        changes: { upserts: plan.candidates.map((candidate) => candidateUpsert(candidate, false)) },
+      };
     }
     const status =
       git.commitState === "unknown"

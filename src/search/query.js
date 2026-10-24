@@ -1,6 +1,6 @@
 "use strict";
 
-const { conceptSummary } = require("../indexer");
+const { conceptSummary, edgesBySource, linkSets } = require("../indexer");
 const { normalizeV02Signals } = require("../v02");
 const { resolveConcept } = require("../indexer");
 const { foldDiacritics } = require("./languages");
@@ -109,24 +109,6 @@ function snippetFor(doc, tokens) {
   return text.slice(start, idx + matchedLength + 80).trim();
 }
 
-function linkedSets(index) {
-  const outbound = new Map();
-  const inbound = new Map();
-  index.edges
-    .filter((edge) => !edge.broken)
-    .forEach((edge) => {
-      if (!outbound.has(edge.source)) {
-        outbound.set(edge.source, new Set());
-      }
-      if (!inbound.has(edge.target)) {
-        inbound.set(edge.target, new Set());
-      }
-      outbound.get(edge.source).add(edge.target);
-      inbound.get(edge.target).add(edge.source);
-    });
-  return { outbound, inbound };
-}
-
 function signalsForDoc(doc, asOf) {
   if (!asOf) {
     return doc.signals || {};
@@ -154,7 +136,7 @@ function applyFilters(index, options) {
   const linkedFromDoc = resolveConcept(index, config.linkedFrom);
   const linkedTo = linkedToDoc ? linkedToDoc.uri : config.linkedTo;
   const linkedFrom = linkedFromDoc ? linkedFromDoc.uri : config.linkedFrom;
-  const { outbound, inbound } = linkedSets(index);
+  const { outbound, inbound } = linkSets(index);
   return index.concepts.filter((doc) => {
     const signals = signalsForDoc(doc, config.asOf);
     if (config.bundle && doc.bundle !== config.bundle) {
@@ -190,10 +172,9 @@ function applyFilters(index, options) {
       return false;
     }
     if (config.relationType) {
-      const hasRelation = index.edges.some(
+      const hasRelation = (edgesBySource(index).get(doc.uri) || []).some(
         (edge) =>
           !edge.broken &&
-          edge.source === doc.uri &&
           edge.kind === "relation" &&
           lower(edge.relationType) === lower(config.relationType),
       );

@@ -2,7 +2,14 @@
 
 const { McpServer, ResourceTemplate, fromJsonSchema } = require("@modelcontextprotocol/server");
 const { StdioServerTransport, serveStdio } = require("@modelcontextprotocol/server/stdio");
-const { attachProject, buildIndex, loadProjectBundles } = require("../indexer");
+const {
+  attachProject,
+  buildIndex,
+  indexUpdateStats,
+  loadProjectBundles,
+  parseBundleArg,
+  updateIndex,
+} = require("../indexer");
 const { fetchRemoteBundles } = require("../remote");
 const { ConceptAuthoringService } = require("../authoring");
 const { LiveAuthoringService } = require("../live-authoring");
@@ -31,7 +38,52 @@ const registry = composeRegistry([
   require("./tools/producers"),
 ]);
 
+// Whether the live authoring service builds indexes from the same bundles and
+// options as the server, so the two can share one index object instead of
+// each keeping a copy.
+function liveIndexCompatible(state) {
+  const service = state.liveAuthoringService;
+  const store = service?.store;
+  if (!store || typeof service.adoptIndex !== "function" || store.project !== state.project) {
+    return false;
+  }
+  const describe = (bundles) =>
+    JSON.stringify(
+      (bundles || []).map(parseBundleArg).map((bundle) => [bundle.id, bundle.root, bundle.remote]),
+    );
+  return (
+    Boolean(store.strictLinks) === state.strictLinks &&
+    Boolean(store.allowCustomRelationTypes) === state.allowCustomRelationTypes &&
+    JSON.stringify((state.relationTypes || []).map(String)) ===
+      JSON.stringify((store.getRelationTypes() || []).map(String)) &&
+    describe(state.localBundleArgs) === describe(store.getBundles())
+  );
+}
+
+function shareIndexWithLiveAuthoring(state) {
+  if (state.shareLiveIndex) {
+    state.liveAuthoringService.adoptIndex(state.index, state.remoteBundles);
+  }
+}
+
+// After a live batch the service hands over what it published: the server
+// adopts the service's index when the two share one, applies the batch to its
+// own index otherwise, and only rebuilds from scratch when there is no batch
+// to apply (producer runs, proposals, remote loads, a stale concept file).
 function rebuildStateIndex(state) {
+  const service = state.liveAuthoringService;
+  const publication =
+    service && typeof service.takePublication === "function" ? service.takePublication() : null;
+  if (publication) {
+    if (publication.hostOwned && publication.index) {
+      state.index = publication.index;
+      return state.index;
+    }
+    if (indexUpdateStats(state.index)) {
+      state.index = updateIndex(state.index, publication.changes);
+      return state.index;
+    }
+  }
   const index = buildIndex(state.localBundleArgs.concat(state.remoteBundles), {
     relationTypes: state.relationTypes,
     strictLinks: state.strictLinks,
@@ -41,6 +93,7 @@ function rebuildStateIndex(state) {
   if (state.languages) {
     state.index.languages = state.languages;
   }
+  shareIndexWithLiveAuthoring(state);
   return state.index;
 }
 
@@ -67,25 +120,23 @@ async function callTool(state, name, args) {
 }
 
 function createState(bundleArgs, options) {
-  const authoringService = options && options.authoringService;
+  const authoringService = options?.authoringService;
   let project = null;
-  if (authoringService && authoringService.store) {
+  if (authoringService?.store) {
     project = authoringService.store.project;
-  } else if (options && options.projectPath) {
+  } else if (options?.projectPath) {
     project = loadProjectConfig(options.projectPath);
   }
   const localBundleArgs = project
     ? project.bundles.filter((bundle) => !bundle.remote)
     : (bundleArgs || []).slice();
-  const relationTypes = (options && options.relationTypes) || (project && project.relationTypes);
-  const allowCustomRelationTypes = Boolean(
-    (options && options.allowCustomRelationTypes) || (project && project.rootMode),
-  );
-  let initialIndex = options && options.initialIndex;
+  const relationTypes = options?.relationTypes || project?.relationTypes;
+  const allowCustomRelationTypes = Boolean(options?.allowCustomRelationTypes || project?.rootMode);
+  let initialIndex = options?.initialIndex;
   if (!initialIndex) {
     initialIndex = buildIndex(localBundleArgs, {
       relationTypes,
-      strictLinks: Boolean((options && options.strictLinks) || (project && project.strictLinks)),
+      strictLinks: Boolean(options?.strictLinks || project?.strictLinks),
       allowCustomRelationTypes,
     });
     if (project) {
@@ -95,23 +146,23 @@ function createState(bundleArgs, options) {
   const state = {
     index: initialIndex,
     localBundleArgs,
-    remoteBundles: (options && options.initialRemoteBundles) || [],
+    remoteBundles: options?.initialRemoteBundles || [],
     relationTypes,
     project,
     authoringService,
-    liveAuthoringService: options && options.liveAuthoringService,
-    producerService: options && options.producerService,
-    allowWrite: Boolean(options && options.allowWrite),
-    actor: options && options.actor,
-    allowAuthoring: Boolean(options && options.allowAuthoring),
-    allowRuntimeRemoteLoad: Boolean(options && options.allowRuntimeRemoteLoad),
-    allowComputationAuthoring: Boolean(options && options.allowComputationAuthoring),
-    strictLinks: Boolean((options && options.strictLinks) || (project && project.strictLinks)),
+    liveAuthoringService: options?.liveAuthoringService,
+    producerService: options?.producerService,
+    allowWrite: Boolean(options?.allowWrite),
+    actor: options?.actor,
+    allowAuthoring: Boolean(options?.allowAuthoring),
+    allowRuntimeRemoteLoad: Boolean(options?.allowRuntimeRemoteLoad),
+    allowComputationAuthoring: Boolean(options?.allowComputationAuthoring),
+    strictLinks: Boolean(options?.strictLinks || project?.strictLinks),
     allowCustomRelationTypes,
-    repositoryMappings: (options && options.repositoryMappings) || new Map(),
+    repositoryMappings: options?.repositoryMappings || new Map(),
     // Search stemming languages from --languages; the project config's value
     // travels on index.project (attachProject) and detection covers the rest.
-    languages: (options && options.languages) || undefined,
+    languages: options?.languages || undefined,
   };
   if (state.languages) {
     state.index.languages = state.languages;
@@ -119,27 +170,28 @@ function createState(bundleArgs, options) {
   // Tool handlers refresh the index through the state so index construction
   // stays in this module; handlers never see bundle arguments or build options.
   state.rebuildIndex = () => rebuildStateIndex(state);
+  state.shareLiveIndex = liveIndexCompatible(state);
+  shareIndexWithLiveAuthoring(state);
   if (
     !state.producerService &&
     project &&
     (project.producers || []).length &&
-    authoringService &&
-    authoringService.store
+    authoringService?.store
   ) {
     state.producerService = new ProducerService({
       project,
       store: authoringService.store,
       bundles: localBundleArgs,
-      loader: options && options.producerLoader,
-      env: options && options.producerEnv,
-      now: options && options.producerNow,
+      loader: options?.producerLoader,
+      env: options?.producerEnv,
+      now: options?.producerNow,
     });
   }
   return state;
 }
 
 async function createStateAsync(bundleArgs, options) {
-  if (options && options.projectPath) {
+  if (options?.projectPath) {
     const loaded = await loadProjectBundles(options.projectPath);
     const extraRemoteBundles = await fetchRemoteBundles(options.remoteBundles || []);
     const initialRemoteBundles = loaded.remoteBundles.concat(extraRemoteBundles);
@@ -180,7 +232,7 @@ async function createStateAsync(bundleArgs, options) {
       languages: options.languages,
     });
   }
-  if (options && options.rootPath) {
+  if (options?.rootPath) {
     const store =
       options.authoringStore ||
       FileConceptStore.fromRoot(options.rootPath, {
@@ -221,38 +273,37 @@ async function createStateAsync(bundleArgs, options) {
       languages: options.languages,
     });
   }
-  const remoteBundles = await fetchRemoteBundles((options && options.remoteBundles) || []);
+  const remoteBundles = await fetchRemoteBundles(options?.remoteBundles || []);
   const localBundleArgs = (bundleArgs || []).slice();
-  const liveAuthoringService =
-    options && options.liveAuthoringService
-      ? options.liveAuthoringService
-      : options && options.allowWrite && options.authoringService && options.authoringService.store
-        ? new LiveAuthoringService(options.authoringService.store, {
-            actor: options.actor,
-            gitCommit: options.gitCommit,
-          })
-        : null;
-  if (options && options.allowWrite && !liveAuthoringService) {
+  const liveAuthoringService = options?.liveAuthoringService
+    ? options.liveAuthoringService
+    : options?.allowWrite && options.authoringService?.store
+      ? new LiveAuthoringService(options.authoringService.store, {
+          actor: options.actor,
+          gitCommit: options.gitCommit,
+        })
+      : null;
+  if (options?.allowWrite && !liveAuthoringService) {
     throw new Error("Live OKF authoring requires --root or --project and a configured actor.");
   }
   return createState(localBundleArgs, {
     initialIndex: buildIndex(localBundleArgs.concat(remoteBundles), {
-      strictLinks: options && options.strictLinks,
+      strictLinks: options?.strictLinks,
       allowCustomRelationTypes: true,
     }),
     initialRemoteBundles: remoteBundles,
-    authoringService: options && options.authoringService,
+    authoringService: options?.authoringService,
     liveAuthoringService,
-    producerService: options && options.producerService,
-    allowWrite: options && options.allowWrite,
-    actor: options && options.actor,
-    allowAuthoring: options && options.allowAuthoring,
-    allowRuntimeRemoteLoad: options && options.allowRuntimeRemoteLoad,
-    allowComputationAuthoring: options && options.allowComputationAuthoring,
-    strictLinks: options && options.strictLinks,
+    producerService: options?.producerService,
+    allowWrite: options?.allowWrite,
+    actor: options?.actor,
+    allowAuthoring: options?.allowAuthoring,
+    allowRuntimeRemoteLoad: options?.allowRuntimeRemoteLoad,
+    allowComputationAuthoring: options?.allowComputationAuthoring,
+    strictLinks: options?.strictLinks,
     allowCustomRelationTypes: true,
-    repositoryMappings: options && options.repositoryMappings,
-    languages: options && options.languages,
+    repositoryMappings: options?.repositoryMappings,
+    languages: options?.languages,
   });
 }
 
@@ -333,4 +384,8 @@ async function runStdioServer(bundleArgs, input, output, options) {
 module.exports = {
   createMcpServer,
   runStdioServer,
+  /** @internal Exposed for tests that need the server state behind a tool call. */
+  callTool,
+  /** @internal */
+  createStateAsync,
 };
