@@ -93,6 +93,17 @@ test("the shipped search meets the pre-registered baseline floors on both fixtur
     assertInterval(result.bySplit.dev.ci.ndcgAt10, `${name} dev nDCG@10 CI`);
     assert.ok(result.noAnswer.queries >= 8);
     assert.ok(typeof result.noAnswer.lowConfidence.available === "boolean");
+    // R-4 (plan revision 5): when the module reports the flag, at most the pre-registered
+    // share of answerable queries with a relevant top-1 may carry it.
+    const flagShareMax = thresholds[name].target.lowConfidenceAnswerableTop1HitShareMax;
+    if (flagShareMax !== undefined && result.noAnswer.lowConfidence.available) {
+      const share =
+        result.noAnswer.lowConfidence.flaggedAnswerableTop1Hits / result.queries.answerable;
+      assert.ok(
+        share <= flagShareMax,
+        `${name} flags ${(share * 100).toFixed(1)}% of answerable queries with a relevant top-1 (max ${flagShareMax * 100}%)`,
+      );
+    }
     assert.ok(
       result.latency.p95Ms >= 0 && result.build.okfIndexMs > 0 && result.build.rssEndMb > 0,
     );
@@ -100,6 +111,8 @@ test("the shipped search meets the pre-registered baseline floors on both fixtur
   // Targets are recorded for later work packages and must stay pre-registered, never tuned here.
   assert.equal(thresholds.alpinaria.target.recallAt5, 0.72);
   assert.equal(thresholds.alpinaria.target.ndcgAt10, 0.78);
+  assert.equal(thresholds.alpinaria.target.lowConfidenceNoAnswerRecall, 0.5);
+  assert.equal(thresholds.alpinaria.target.lowConfidenceAnswerableTop1HitShareMax, 0.03);
   assert.equal(thresholds.atlas.target.recallAt5, 0.7);
 });
 

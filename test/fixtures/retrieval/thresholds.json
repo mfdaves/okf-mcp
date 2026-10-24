@@ -8,7 +8,7 @@
       "ndcgAt10": 0.78,
       "zeroResultRateMax": 0,
       "lowConfidenceNoAnswerRecall": 0.5,
-      "lowConfidenceFlagsOnAnswerableTop1HitsMax": 0,
+      "lowConfidenceAnswerableTop1HitShareMax": 0.03,
       "sectionAnchorHitRate": 0.8,
       "sectionAnchorHitRateSource": "WP3a acceptance on labelled dev queries via get_context"
     },

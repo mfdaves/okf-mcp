@@ -6,12 +6,9 @@ const test = require("node:test");
 const { runEvaluation } = require("../scripts/eval-search");
 const thresholds = require("./fixtures/retrieval/thresholds.json");
 
-// WP1 acceptance (docs/plan-1.0.md WP1, R-4), pre-registered before the search
-// changed: point estimates on both full query sets with the shipped default
-// `languages: auto`. Revision 5 of the plan relaxed the flag criterion from
-// "zero answerable flags" to at most 3% of answerable queries with a relevant
-// top-1 flagged; thresholds.json still carries the earlier zero.
-const FLAGGED_ANSWERABLE_TOP1_MAX_SHARE = 0.03;
+// WP1 acceptance (docs/plan-1.0.md WP1, R-4), pre-registered in
+// test/fixtures/retrieval/thresholds.json before the search changed: point
+// estimates on both full query sets with the shipped default `languages: auto`.
 
 test("the 0.10 lexical search meets the pre-registered WP1 targets on both full sets", () => {
   const report = runEvaluation({ fixtures: ["alpinaria", "atlas"], split: "all", bootstrap: 0 });
@@ -35,10 +32,11 @@ test("the 0.10 lexical search meets the pre-registered WP1 targets on both full 
     flag.recall >= target.lowConfidenceNoAnswerRecall,
     `alpinaria lowConfidence recall ${flag.recall} < ${target.lowConfidenceNoAnswerRecall}`,
   );
+  // Plan revision 5: at most this share of answerable queries with a relevant top-1 is flagged.
   const flaggedShare = flag.flaggedAnswerableTop1Hits / alpinaria.queries.answerable;
   assert.ok(
-    flaggedShare <= FLAGGED_ANSWERABLE_TOP1_MAX_SHARE,
-    `alpinaria flagged ${flag.flaggedAnswerableTop1Hits} answerable queries with a relevant top-1 (${(flaggedShare * 100).toFixed(1)}%)`,
+    flaggedShare <= target.lowConfidenceAnswerableTop1HitShareMax,
+    `alpinaria flagged ${flag.flaggedAnswerableTop1Hits} answerable queries with a relevant top-1 (${(flaggedShare * 100).toFixed(1)}%, max ${target.lowConfidenceAnswerableTop1HitShareMax * 100}%)`,
   );
 
   const atlas = report.fixtures.atlas;
