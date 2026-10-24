@@ -33,7 +33,13 @@ test("heading slugs follow GitHub's rule and agree with the fixture labels", () 
   assert.equal(headingSlug("Città & Natura!"), "città--natura");
   assert.equal(headingSlug("C++ 2.0 (beta)"), "c-20-beta");
   assert.equal(headingSlug("Proprietà e runtime"), "proprietà-e-runtime");
-  assert.equal(headingSlug("snake_case stays-hyphen"), "snakecase-stays-hyphen");
+  // github-slugger keeps underscores and combining marks.
+  assert.equal(headingSlug("snake_case stays-hyphen"), "snake_case-stays-hyphen");
+  assert.equal(headingSlug("Cafe\u0301 my_var"), "cafe\u0301-my_var");
+  assert.equal(headingSlug("Ре́жим работы"), "ре́жим-работы");
+  // Whitespace runs are one space before the rule applies.
+  assert.equal(headingSlug("Target  cluster"), "target-cluster");
+  assert.equal(headingSlug("Target\tcluster\n"), "target-cluster");
   assert.equal(headingSlug("!!!"), "");
   let labels = 0;
   ["alpinaria", "atlas"].forEach((name) => {
@@ -155,9 +161,33 @@ test("anchors and hashes survive whitespace-only edits and edits to other sectio
       assert.equal(edited[position].hash, section.hash, section.anchor);
     }
   });
-  // Heading-internal whitespace is part of the heading text, as on GitHub.
+  // Heading-internal whitespace runs and setext line breaks do not move an anchor.
   const widened = conceptSections(concept(body.replace("## Beta", "## Beta  two")));
-  assert.equal(widened[3].slug, "beta--two");
+  assert.equal(widened[3].slug, "beta-two");
+  assert.equal(widened[3].heading, "Beta two");
+  const setext = conceptSections(concept(body.replace("## Beta", "Beta\ntwo\n---")));
+  assert.equal(setext[3].slug, "beta-two");
+  assert.equal(setext[3].heading, "Beta two");
+  const target = conceptSections(
+    concept("## Target  cluster\n\nx\n\nTarget\ncluster\n------\n\ny\n"),
+  );
+  assert.deepEqual(
+    target.slice(1).map((section) => section.slug),
+    ["target-cluster", "target-cluster-1"],
+  );
+});
+
+test("a table delimiter row is dropped from tables only; fenced code keeps its lines", () => {
+  const yaml = (value) =>
+    conceptSections(concept(`## Snippet\n\n\`\`\`yaml\n---\nkey: ${value}\n---\n\`\`\`\n`))[1];
+  const first = yaml("one");
+  const second = yaml("two");
+  assert.notEqual(first.hash, second.hash);
+  assert.equal(first.text, "Snippet\n---\nkey: one\n---");
+  const rule = conceptSections(concept("## Rule\n\n```\n|---|\n```\n"))[1];
+  assert.equal(rule.text, "Rule\n|---|");
+  const table = conceptSections(concept("## Table\n\n| a | b |\n|---|:-:|\n| 1 | 2 |\n"))[1];
+  assert.equal(table.text, "Table\n| a | b |\n| 1 | 2 |");
 });
 
 test("only document-level headings open sections; quoted and fenced headings are text", () => {

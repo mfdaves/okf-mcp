@@ -726,9 +726,13 @@ and the concept's provenance (`status`, `staleAfter`, `freshness`,
 Section anchors are an okf-mcp extension; OKF v0.2 defines none and nothing
 in a bundle needs them. A concept is cut at its document-level headings: the
 text before the first heading (with the title and description) is addressed
-by the concept URI alone, every other section by `uri#slug`, where the slug
-follows GitHub's heading rule (lower-cased, punctuation removed, spaces
-turned into hyphens, accents kept) and a repeated heading takes `-1`, `-2`,
+by the concept URI alone, every other section by `uri#slug`. The heading
+text is first normalised (the line breaks of a setext or wrapped heading and
+every whitespace run become one space, then trimmed); the slug then follows
+GitHub's rule: lower-cased, every character other than a letter, a combining
+mark, a digit, an underscore, a hyphen or a space removed, and each space
+turned into a hyphen (so `## Consentito / Allowed` gives
+`consentito--allowed`, as on GitHub). A repeated heading takes `-1`, `-2`,
 ... in document order. A reader that drops the fragment still lands on the
 concept. An anchor depends only on the heading texts up to its own: edits to
 any section body, whitespace-only edits and edits to later sections leave it

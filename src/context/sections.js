@@ -9,19 +9,25 @@
 // which matches how the computation extractor reads sections.
 //
 // Anchor scheme, an okf-mcp extension (B-2): the preamble is addressed by the
-// concept URI alone, every other section by `uri#slug`. The slug follows
-// GitHub's heading rule (lower-cased; every character that is not a letter, a
-// number, a space or a hyphen removed; each whitespace character turned into
-// a hyphen, hyphens not collapsed; accents kept) and repeated slugs take `-1`,
-// `-2`, ... in document order. It is the rule the fixture labels were written
-// with (test/fixtures/retrieval/lib/slug.js). OKF v0.2 defines no section
-// anchors: nothing in a bundle needs them, and a reader that drops the
-// fragment still lands on the concept. An anchor depends only on the heading
-// texts up to its own, so edits to any body, whitespace-only edits and edits
-// to later sections leave it unchanged.
+// concept URI alone, every other section by `uri#slug`. The heading's text is
+// first normalised (line breaks of a setext or wrapped heading and any
+// whitespace run become one space, trimmed), so whitespace-only edits never
+// move an anchor; then GitHub's rule as github-slugger implements it applies:
+// lower-cased, every character that is not a letter, a combining mark, a
+// number, an underscore, a hyphen or a space removed, each space turned into
+// a hyphen (hyphens left by removed punctuation are not collapsed, as on
+// GitHub), and repeated slugs take `-1`, `-2`, ... in document order. On the
+// fixture labels it agrees with test/fixtures/retrieval/lib/slug.js. OKF v0.2
+// defines no section anchors: nothing in a bundle needs them, and a reader
+// that drops the fragment still lands on the concept. An anchor depends only
+// on the heading texts up to its own, so edits to any body, whitespace-only
+// edits and edits to later sections leave it unchanged; renaming the heading
+// or adding a same-text heading before it changes it.
 //
 // `text` is the section's plain text: the heading once, then paragraphs, list
-// items, code blocks and tables flattened one block or row per line, links
+// items, code blocks and tables flattened one block or row per line (a
+// table's delimiter row dropped; code is kept verbatim apart from whitespace
+// runs), links
 // and images reduced to their text, inline HTML dropped, whitespace runs
 // collapsed. `hash` is the SHA-256 of that text from `hashUnitText` in
 // src/embed/units.js, so `sectionUnits` can replace the concept units in
@@ -42,12 +48,36 @@ const HTML_TAG = /<[^>]*>/g;
 const TABLE_DELIMITER_ROW = /^\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?$/;
 const TABLE_LINE = /^\s*\|/;
 
+// Whitespace-stable heading text: every whitespace run is one space.
+const collapseWhitespace = (text) =>
+  String(text || "")
+    .replace(/\s+/g, " ")
+    .trim();
+
 function headingSlug(heading) {
-  return String(heading || "")
-    .trim()
+  return collapseWhitespace(heading)
     .toLowerCase()
-    .replace(/[^\p{L}\p{N}\s-]/gu, "")
-    .replace(/\s/g, "-");
+    .replace(/[^\p{L}\p{M}\p{N}_ -]/gu, "")
+    .replace(/ /g, "-");
+}
+
+// A heading's text with soft and hard line breaks read as spaces (the shared
+// markdown helper drops them, which would glue a setext heading's lines).
+function headingNodeText(node) {
+  let out = "";
+  const walker = node.walker();
+  for (let event = walker.next(); event; event = walker.next()) {
+    if (!event.entering) {
+      continue;
+    }
+    const type = event.node.type;
+    if (type === "text" || type === "code") {
+      out += event.node.literal || "";
+    } else if (type === "softbreak" || type === "linebreak") {
+      out += " ";
+    }
+  }
+  return collapseWhitespace(out);
 }
 
 // One line per block, no empty lines, whitespace runs collapsed.
@@ -55,7 +85,7 @@ function normalizeText(text) {
   return String(text || "")
     .split("\n")
     .map((line) => line.replace(/\s+/g, " ").trim())
-    .filter((line) => line && !TABLE_DELIMITER_ROW.test(line))
+    .filter(Boolean)
     .join("\n");
 }
 
@@ -75,10 +105,20 @@ function firstTextLiteral(node) {
 function blockText(block) {
   let out = "";
   let tableRows = false;
+  let paragraphStart = 0;
   const walker = block.walker();
   for (let event = walker.next(); event; event = walker.next()) {
     const node = event.node;
     if (!event.entering) {
+      if (node.type === "paragraph" && tableRows) {
+        // Only a table's own delimiter row is dropped, never a code line.
+        const rows = out
+          .slice(paragraphStart)
+          .split("\n")
+          .filter((row) => !TABLE_DELIMITER_ROW.test(row.trim()));
+        out = out.slice(0, paragraphStart) + rows.join("\n");
+        tableRows = false;
+      }
       if (node.type === "paragraph" || node.type === "heading" || node.type === "item") {
         out += "\n";
       }
@@ -103,6 +143,7 @@ function blockText(block) {
         break;
       case "paragraph":
         tableRows = TABLE_LINE.test(firstTextLiteral(node));
+        paragraphStart = out.length;
         break;
       default:
         break;
@@ -128,7 +169,7 @@ function uniqueSlugs(headings) {
   const used = new Set();
   const counters = new Map();
   return headings.map((heading) => {
-    const base = headingSlug(heading.text) || EMPTY_SLUG;
+    const base = headingSlug(headingNodeText(heading.node)) || EMPTY_SLUG;
     let slug = base;
     let count = counters.get(base) || 0;
     while (used.has(slug)) {
@@ -174,7 +215,7 @@ function conceptSections(doc) {
     ]),
   ];
   headings.forEach((heading, position) => {
-    const headingText = normalizeText(heading.text);
+    const headingText = headingNodeText(heading.node);
     const body = sectionNodes(heading, { stopAtAnyHeading: true }).map(blockText).join("\n");
     sections.push(
       makeSection(
