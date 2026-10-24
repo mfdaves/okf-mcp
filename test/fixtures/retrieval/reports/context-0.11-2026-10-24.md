@@ -1,6 +1,6 @@
 # Context evaluation — src/context/assemble.js (lexical)
 
-Generated 2026-10-24T19:01:01.713Z · Node v24.17.0 (linux x64) · budget 1200 tokens (chars/4) · preamble weight 0.5 · bootstrap 1000 samples (seed 20261024)
+Generated 2026-10-24T19:30:33.187Z · Node v24.17.0 (linux x64) · budget 1200 tokens (chars/4) · preamble weight 0.5 · bootstrap 1000 samples (seed 20261024)
 
 Produced by `scripts/eval-context.js` (`npm run eval:context`) over the queries with a `sectionAnchor` label. Routine runs write to the git-ignored `test/fixtures/retrieval/reports/latest-context.{json,md}`; a committed report needs an explicit `--out`.
 
@@ -8,12 +8,12 @@ Anchor hit: the labelled `uri#slug` is among the packed sections (WP3a acceptanc
 
 | fixture | split | labelled | anchor hit (95% CI) | hit@1 (95% CI) | anchor MRR (95% CI) | rank | concept R@5 (95% CI) | candidate | mean tokens (95% CI) | mean sections | max tokens | over budget | p50 ms | p95 ms |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| alpinaria | dev | 40 | 1.000 [1.000, 1.000] | 0.675 [0.525, 0.825] | 0.807 [0.718, 0.892] | 1 | 0.831 [0.760, 0.896] | 1.000 | 560 [427, 693] | 11.8 | 1197 | 0 | 3.16 | 5.04 |
-| alpinaria | heldout | 12 | 0.750 [0.500, 1.000] | 0.583 [0.250, 0.833] | 0.639 [0.361, 0.889] | 1 | 0.688 [0.465, 0.889] | 0.750 | 736 [485, 973] | 14.1 | 1197 | 0 | 3.51 | 4.16 |
-| alpinaria | all | 52 | 0.942 [0.865, 1.000] | 0.654 [0.519, 0.788] | 0.768 [0.677, 0.859] | 1 | 0.798 [0.721, 0.869] | 0.942 | 600 [481, 727] | 12.3 | 1197 | 0 | 3.31 | 5.04 |
-| atlas | dev | 43 | 0.860 [0.744, 0.953] | 0.488 [0.349, 0.651] | 0.557 [0.426, 0.693] | 1 | 0.738 [0.641, 0.831] | 0.907 | 468 [392, 545] | 11.7 | 1085 | 0 | 3.97 | 5.55 |
-| atlas | heldout | 15 | 0.800 [0.600, 1.000] | 0.467 [0.200, 0.667] | 0.554 [0.318, 0.767] | 1 | 0.801 [0.611, 0.944] | 0.867 | 374 [263, 499] | 10.4 | 789 | 0 | 3.91 | 5.28 |
-| atlas | all | 58 | 0.845 [0.741, 0.931] | 0.483 [0.345, 0.603] | 0.556 [0.434, 0.664] | 1 | 0.755 [0.663, 0.838] | 0.897 | 444 [376, 514] | 11.3 | 1085 | 0 | 3.93 | 5.88 |
+| alpinaria | dev | 40 | 1.000 [1.000, 1.000] | 0.675 [0.525, 0.825] | 0.807 [0.718, 0.892] | 1 | 0.831 [0.760, 0.896] | 1.000 | 560 [427, 693] | 11.8 | 1197 | 0 | 2.50 | 3.81 |
+| alpinaria | heldout | 12 | 0.750 [0.500, 1.000] | 0.583 [0.250, 0.833] | 0.639 [0.361, 0.889] | 1 | 0.688 [0.465, 0.889] | 0.750 | 736 [485, 973] | 14.1 | 1197 | 0 | 2.71 | 3.67 |
+| alpinaria | all | 52 | 0.942 [0.865, 1.000] | 0.654 [0.519, 0.788] | 0.768 [0.677, 0.859] | 1 | 0.798 [0.721, 0.869] | 0.942 | 600 [481, 727] | 12.3 | 1197 | 0 | 2.71 | 3.80 |
+| atlas | dev | 43 | 0.860 [0.744, 0.953] | 0.488 [0.349, 0.651] | 0.557 [0.426, 0.693] | 1 | 0.738 [0.641, 0.831] | 0.907 | 468 [392, 545] | 11.7 | 1085 | 0 | 3.18 | 4.73 |
+| atlas | heldout | 15 | 0.800 [0.600, 1.000] | 0.467 [0.200, 0.667] | 0.554 [0.318, 0.767] | 1 | 0.801 [0.611, 0.944] | 0.867 | 374 [263, 499] | 10.4 | 789 | 0 | 3.00 | 4.46 |
+| atlas | all | 58 | 0.845 [0.741, 0.931] | 0.483 [0.345, 0.603] | 0.556 [0.434, 0.664] | 1 | 0.755 [0.663, 0.838] | 0.897 | 444 [376, 514] | 11.3 | 1085 | 0 | 3.16 | 4.75 |
 
 ## Preamble weight, dev split only
 
@@ -28,7 +28,7 @@ Anchor hit: the labelled `uri#slug` is among the packed sections (WP3a acceptanc
 
 ## alpinaria
 
-Project `test/fixtures/retrieval/alpinaria/okf.project.yaml` · 228 concepts · as-of 2026-10-24 · index build 156 ms · concept search index 122 ms · first context call 17.2 ms
+Project `test/fixtures/retrieval/alpinaria/okf.project.yaml` · 228 concepts · as-of 2026-10-24 · index build 107 ms · concept search index 99 ms · first context call 14.8 ms
 
 | missed query | split | labelled anchor | concept was a candidate |
 |---|---|---|---|
@@ -38,7 +38,7 @@ Project `test/fixtures/retrieval/alpinaria/okf.project.yaml` · 228 concepts · 
 
 ## atlas
 
-Project `test/fixtures/retrieval/atlas/okf.project.yaml` · 167 concepts · as-of 2026-10-24 · index build 63 ms · concept search index 74 ms · first context call 5.8 ms
+Project `test/fixtures/retrieval/atlas/okf.project.yaml` · 167 concepts · as-of 2026-10-24 · index build 48 ms · concept search index 58 ms · first context call 4.5 ms
 
 | missed query | split | labelled anchor | concept was a candidate |
 |---|---|---|---|
