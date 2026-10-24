@@ -3,7 +3,6 @@
 const path = require("path");
 const fs = require("fs");
 const { isDeepStrictEqual } = require("node:util");
-const yaml = require("js-yaml");
 const { parseMarkdownText, normalizeSlashes } = require("./parser");
 const {
   bundleExcludesPath,
@@ -12,6 +11,8 @@ const {
   resolveLinkPath,
   semanticReferences,
 } = require("./indexer");
+const { deriveConceptPathSuggestion, normalizeConceptPath, slug } = require("./authoring/paths");
+const { renderConceptMarkdown, renderFrontmatter } = require("./authoring/render");
 const { isExternalReference, isLocalAssetReference, resolveBundleAssetPath } = require("./assets");
 const { buildV02MigrationPlan, checkV02Migration } = require("./migration");
 const { validateIndex } = require("./validation");
@@ -23,13 +24,6 @@ const COMPUTATION_FIELDS = new Set([
   "executor",
   "attester",
 ]);
-
-function slug(value, fallback) {
-  const text = String(value || fallback || "concept")
-    .trim()
-    .toLowerCase();
-  return text.replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || String(fallback || "concept");
-}
 
 function isConfiguredGeneratorOutput(project, absolutePath) {
   if (!project || !project.root || !absolutePath) return false;
@@ -53,121 +47,6 @@ function isConfiguredGeneratorOutput(project, absolutePath) {
       (!relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative))
     );
   });
-}
-
-function normalizeConceptPath(value) {
-  const raw = normalizeSlashes(String(value || "").trim());
-  if (!raw) {
-    throw new Error("Concept path is required.");
-  }
-  if (raw.startsWith("/") || /^[A-Za-z]:\//.test(raw) || /[\u0000-\u001f\u007f]/.test(raw)) {
-    throw new Error("Concept path must be a safe relative path.");
-  }
-  const rawParts = raw.split("/");
-  if (rawParts.some((part) => !part || part === "." || part === ".." || part.startsWith("."))) {
-    throw new Error(
-      "Concept path must be a safe relative path without empty, hidden, dot, or parent segments.",
-    );
-  }
-  if (rawParts.slice(0, -1).some((part) => part.toLowerCase().endsWith(".md"))) {
-    throw new Error("Concept path cannot place a Markdown file inside another Markdown path.");
-  }
-  const normalized = path.posix.normalize(raw);
-  if (!normalized || normalized === "." || normalized.startsWith("../") || normalized === "..") {
-    throw new Error("Concept path must stay inside the bundle.");
-  }
-  if (normalized.split("/").some((part) => !part || part === "." || part === "..")) {
-    throw new Error("Concept path contains an unsafe segment.");
-  }
-  if (!normalized.toLowerCase().endsWith(".md")) {
-    throw new Error("Concept path must end with .md.");
-  }
-  const base = path.posix.basename(normalized).toLowerCase();
-  if (base === "index.md" || base === "log.md") {
-    throw new Error("Concept path cannot be a reserved index.md or log.md file.");
-  }
-  return normalized;
-}
-
-function deriveConceptPathSuggestion(index, bundle, input) {
-  const rawPrefix = input && input.prefix ? normalizeSlashes(String(input.prefix).trim()) : "";
-  if (rawPrefix.startsWith("/") || /^[A-Za-z]:\//.test(rawPrefix)) {
-    throw new Error("Path prefix must be a safe relative path inside the bundle.");
-  }
-  const prefix = rawPrefix.replace(/\/+$/g, "");
-  if (prefix) {
-    normalizeConceptPath(`${prefix}/placeholder.md`);
-  }
-  const type = String((input && input.type) || "").trim();
-  const typePart = type === "Attested Computation" ? "computations" : slug(type, "concept");
-  const titlePart = slug(input && input.title, typePart);
-  let parent = prefix ? `${prefix}/${typePart}` : typePart;
-  let strategy = prefix ? "explicit_prefix" : "type_slug";
-  let evidence = { matchingConcepts: 0, dominantDirectoryCount: 0, dominantDirectoryRatio: 0 };
-
-  if (type !== "Attested Computation" && index) {
-    const matching = findConceptMatches(index, {
-      bundle: bundle.id,
-      type,
-      pathPrefix: prefix,
-    });
-    const counts = new Map();
-    matching.forEach((document) => {
-      const directory = path.posix.dirname(document.path);
-      const normalizedDirectory = directory === "." ? "" : directory;
-      counts.set(normalizedDirectory, (counts.get(normalizedDirectory) || 0) + 1);
-    });
-    const dominant = Array.from(counts.entries()).sort(
-      (left, right) => right[1] - left[1] || left[0].localeCompare(right[0]),
-    )[0];
-    const dominantCount = dominant ? dominant[1] : 0;
-    const ratio = matching.length ? dominantCount / matching.length : 0;
-    evidence = {
-      matchingConcepts: matching.length,
-      dominantDirectoryCount: dominantCount,
-      dominantDirectoryRatio: Number(ratio.toFixed(3)),
-    };
-    if (dominant && dominantCount >= 2 && ratio >= 0.6) {
-      parent = dominant[0];
-      strategy = "dominant_same_type_directory";
-      evidence.dominantDirectory = dominant[0] || ".";
-    }
-  }
-
-  return {
-    path: normalizeConceptPath([parent, `${titlePart}.md`].filter(Boolean).join("/")),
-    strategy,
-    evidence,
-  };
-}
-
-function renderFrontmatter(frontmatter) {
-  const values = Object.fromEntries(
-    Object.entries(frontmatter || {}).filter((entry) => entry[1] !== undefined),
-  );
-  return yaml
-    .dump(values, {
-      schema: yaml.CORE_SCHEMA,
-      noRefs: true,
-      lineWidth: -1,
-      sortKeys: false,
-    })
-    .trimEnd();
-}
-
-function renderConceptMarkdown(input) {
-  const frontmatter = Object.assign({}, input && input.frontmatter ? input.frontmatter : {});
-  const body = String((input && input.body) || "")
-    .replace(/\r\n/g, "\n")
-    .trim();
-  return [
-    "---",
-    renderFrontmatter(frontmatter),
-    "---",
-    "",
-    body || `# ${frontmatter.title || path.posix.basename(input.path || "concept.md", ".md")}`,
-    "",
-  ].join("\n");
 }
 
 function relationFrom(value, doc) {

@@ -1,6 +1,6 @@
 "use strict";
 
-const { renderConceptMarkdown } = require("../authoring");
+const { renderConceptMarkdown } = require("./render");
 const { evaluateWritePolicy, isWritePolicy, parseWritePolicy } = require("../policy/write-policy");
 const { revisionFor } = require("./shared");
 
