@@ -165,18 +165,31 @@ function classifyServerError(status, bodyText) {
   } catch {
     // A body that is not JSON contributes nothing.
   }
-  // Quota exhaustion arrives as a 429 and is the more useful answer; after
-  // that the status decides (a 5xx is a server failure whatever the body
-  // claims), then the code, then the type.
-  if (code === "insufficient_quota" || type === "insufficient_quota") return "insufficient_quota";
+  // Status first: a 5xx is a server failure whatever the body claims, 401,
+  // 404 and 429 speak for themselves (a 429 or a 402/403 that names quota
+  // exhaustion is that instead). Other 4xx go by code, then by type; code
+  // beats type when both are present.
+  const quota = code === "insufficient_quota" || type === "insufficient_quota";
+  if (status >= 500 && status < 600) return "server_error";
   if (status === 401) return "invalid_api_key";
   if (status === 404) return "model_not_found";
-  if (status === 429) return "rate_limited";
-  if (status >= 500 && status < 600) return "server_error";
-  if (code === "invalid_api_key" || type === "authentication_error") return "invalid_api_key";
-  if (code === "model_not_found" || type === "not_found_error") return "model_not_found";
-  if (code === "rate_limit_exceeded" || type === "rate_limit_error") return "rate_limited";
-  if (status >= 400 && status < 500) return "invalid_request";
+  if (status === 429) return quota ? "insufficient_quota" : "rate_limited";
+  if ((status === 402 || status === 403) && quota) return "insufficient_quota";
+  if (status >= 400 && status < 500) {
+    const byCode = {
+      invalid_api_key: "invalid_api_key",
+      model_not_found: "model_not_found",
+      insufficient_quota: "insufficient_quota",
+    }[code];
+    if (byCode) return byCode;
+    const byType = {
+      authentication_error: "invalid_api_key",
+      not_found_error: "model_not_found",
+      rate_limit_error: "rate_limited",
+      insufficient_quota: "insufficient_quota",
+    }[type];
+    return byType || "invalid_request";
+  }
   return "unknown";
 }
 

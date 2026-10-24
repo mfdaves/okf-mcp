@@ -8,6 +8,7 @@ const test = require("node:test");
 const { EmbedderError, validateEmbedder } = require("../src/embed/interface");
 const {
   OPENAI_EMBEDDING_LIMITS,
+  classifyServerError,
   createOpenAiEmbedder,
   parseRetryAfter,
   planBatches,
@@ -439,23 +440,15 @@ test("returns constant-shaped errors whatever an error body contains", async (t)
   assert.equal(shapes.size, 1, "every adversarial body produced the same error shape");
 
   // The server code is one of our constants, chosen from status and code.
-  // Status first, then code, then type; quota exhaustion wins over its 429.
+  // End to end through the server; the full precedence table has its own test.
   const typed = (type, code) => JSON.stringify({ error: { type, code, message: "m" } });
   const cases = [
     [401, typed("invalid_request_error", null), "invalid_api_key"],
     [404, typed("invalid_request_error", null), "model_not_found"],
-    [429, typed("invalid_request_error", null), "rate_limited"],
     [429, "", "rate_limited"],
-    [400, typed("invalid_request_error", "invalid_api_key"), "invalid_api_key"],
-    [400, typed("invalid_request_error", "model_not_found"), "model_not_found"],
-    [400, typed("invalid_request_error", "rate_limit_exceeded"), "rate_limited"],
-    [400, typed("authentication_error", null), "invalid_api_key"],
-    [400, typed("not_found_error", null), "model_not_found"],
-    [400, typed("rate_limit_error", null), "rate_limited"],
     [429, typed("insufficient_quota", null), "insufficient_quota"],
-    [429, typed("insufficient_quota", "insufficient_quota"), "insufficient_quota"],
+    [400, typed("authentication_error", null), "invalid_api_key"],
     [418, "teapot", "invalid_request"],
-    [422, typed("invalid_request_error", "context_length_exceeded"), "invalid_request"],
     [500, "<html>gateway exploded</html>", "server_error"],
     [503, typed("authentication_error", KEY), "server_error"],
   ];
@@ -468,6 +461,62 @@ test("returns constant-shaped errors whatever an error body contains", async (t)
       return true;
     });
   }
+});
+
+test("classifies server errors by status, then code, then type", () => {
+  const body = (code, type) => JSON.stringify({ error: { code, type, message: "m" } });
+  // [status, code, type, expected]
+  const table = [
+    // Any 5xx is a server failure whatever the body claims.
+    [500, null, null, "server_error"],
+    [502, "invalid_api_key", "authentication_error", "server_error"],
+    [503, "insufficient_quota", "insufficient_quota", "server_error"],
+    // 401, 404 and 429 speak for themselves.
+    [401, null, "invalid_request_error", "invalid_api_key"],
+    [401, "model_not_found", "not_found_error", "invalid_api_key"],
+    [404, null, "invalid_request_error", "model_not_found"],
+    [404, "invalid_api_key", null, "model_not_found"],
+    [429, null, "invalid_request_error", "rate_limited"],
+    [429, "rate_limit_exceeded", "rate_limit_error", "rate_limited"],
+    // ... unless quota exhaustion is named, on 429, 402 or 403.
+    [429, "insufficient_quota", null, "insufficient_quota"],
+    [429, null, "insufficient_quota", "insufficient_quota"],
+    [402, null, "insufficient_quota", "insufficient_quota"],
+    [403, "insufficient_quota", null, "insufficient_quota"],
+    [402, null, "invalid_request_error", "invalid_request"],
+    [403, "permission_denied", null, "invalid_request"],
+    // Other 4xx: code first.
+    [400, "invalid_api_key", null, "invalid_api_key"],
+    [400, "model_not_found", null, "model_not_found"],
+    [400, "insufficient_quota", null, "insufficient_quota"],
+    [400, "context_length_exceeded", null, "invalid_request"],
+    [400, "rate_limit_exceeded", null, "invalid_request"],
+    // Then type.
+    [400, null, "authentication_error", "invalid_api_key"],
+    [400, null, "not_found_error", "model_not_found"],
+    [400, null, "rate_limit_error", "rate_limited"],
+    [400, null, "insufficient_quota", "insufficient_quota"],
+    [400, null, "invalid_request_error", "invalid_request"],
+    // Code beats type when both are present; an unknown code falls to type.
+    [400, "model_not_found", "authentication_error", "model_not_found"],
+    [400, "unknown_code", "rate_limit_error", "rate_limited"],
+    [422, null, null, "invalid_request"],
+    // Outside 4xx/5xx nothing is claimed.
+    [399, "invalid_api_key", "authentication_error", "unknown"],
+  ];
+  for (const [status, code, type, expected] of table) {
+    assert.equal(
+      classifyServerError(status, body(code, type)),
+      expected,
+      `${status} ${code} ${type}`,
+    );
+  }
+  assert.equal(classifyServerError(400, "not json"), "invalid_request");
+  assert.equal(
+    classifyServerError(400, JSON.stringify({ code: "invalid_api_key" })),
+    "invalid_api_key",
+  );
+  assert.equal(classifyServerError(400, JSON.stringify([1, 2])), "invalid_request");
 });
 
 test("derives id, endpoint and remote from the base URL and discovers the dimension", async (t) => {
