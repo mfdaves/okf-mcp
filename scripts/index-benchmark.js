@@ -544,7 +544,8 @@ function runChild(root, options) {
   if (typeof loaded.prepare === "function") {
     loaded.prepare(index, { okf: path.join(__dirname, ".."), options: options.searchOptions });
   } else if (modulePath === DEFAULT_SEARCH_MODULE) {
-    require("../src/search-index").prepareSearchIndex(index);
+    // `--search-options '{"languages":"none"}'` times the unstemmed build (WP1 ratio gate).
+    require("../src/search-index").prepareSearchIndex(index, options.searchOptions);
   } else {
     fn(index, Object.assign({ query: QUERIES[0], limit: 10 }, options.searchOptions));
   }

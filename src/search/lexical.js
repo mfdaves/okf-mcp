@@ -50,6 +50,11 @@ const tokenize = MiniSearch.getDefault("tokenize");
 const identity = (value) => value;
 const identityTokenize = (text) => [text];
 
+// A custom id is a full okf:// URI; only its concept path is an identifier.
+function customIdPath(customId) {
+  return customId ? String(customId).replace(/^okf:\/\/[^/]+\//, "") : "";
+}
+
 function searchDocument(doc) {
   const aliases = doc.aliases || [];
   return {
@@ -61,7 +66,7 @@ function searchDocument(doc) {
     description: String(doc.description || ""),
     path: String(doc.path || ""),
     body: String(doc.body || ""),
-    exact: [doc.conceptId, doc.customId, doc.path, doc.title]
+    exact: [doc.conceptId, customIdPath(doc.customId), doc.path, doc.title]
       .concat(aliases)
       .filter(Boolean)
       .map(String)
