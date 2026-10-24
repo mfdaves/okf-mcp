@@ -16,14 +16,25 @@ const {
   bundleExcludesPath,
   documentAbsolutePath,
   documentOverrideKey,
+  fileStat,
   parseBundleArg,
   sanitizeBundleId,
   uniqueBundleIds,
   walkMarkdown,
 } = require("./paths");
 
+// The UTC day the parser stamps on documents when no asOf is configured
+// (`signals.asOf`, and `freshness` against `stale_after`). An index built
+// without an asOf floats with the calendar: it records the day it used, and
+// updateIndex rebuilds it when asked for a later day.
+function dayKey(value) {
+  const date = value instanceof Date ? value : value === undefined ? new Date() : new Date(value);
+  return date.toISOString().slice(0, 10);
+}
+
 function buildConfig(options) {
   const config = options || {};
+  const floatingDate = config.asOf === undefined || config.asOf === null || config.asOf === "";
   return {
     options: config,
     documentOverrides:
@@ -31,22 +42,14 @@ function buildConfig(options) {
     documentDeletions:
       config.documentDeletions instanceof Set ? config.documentDeletions : new Set(),
     strictLinks: Boolean(config.strictLinks),
-    asOf: config.asOf,
+    floatingDate,
+    asOf: floatingDate ? dayKey() : config.asOf,
     maxAssetBytes: config.maxAssetBytes,
     edgeConfig: {
       allowedRelationTypes: new Set((config.relationTypes || DEFAULT_RELATION_TYPES).map(String)),
       allowCustomRelationTypes: Boolean(config.allowCustomRelationTypes),
     },
   };
-}
-
-function fileStat(absolutePath) {
-  try {
-    const stat = fs.statSync(absolutePath);
-    return { size: stat.size, mtimeMs: stat.mtimeMs };
-  } catch {
-    return null;
-  }
 }
 
 // Parses one document into an index entry. A document given as text is
@@ -277,6 +280,7 @@ module.exports = {
   buildProjectIndexAsync,
   bundleAllowsPath,
   bundleExcludesPath,
+  dayKey,
   loadProjectBundles,
   missingRootError,
   parseBundleArg,

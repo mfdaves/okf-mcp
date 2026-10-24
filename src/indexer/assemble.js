@@ -1,10 +1,10 @@
 "use strict";
 
-const { buildAssetRegistry, collectAssetReferences } = require("../assets");
+const { buildAssetRegistry, collectAssetReferences, resolveBundleAssetPath } = require("../assets");
 const { normalizeSlashes } = require("../parser");
 const { validateIndex } = require("../validation");
 const { assetUri, contractAssetsReady, documentAtPath, documentEdges } = require("./edges");
-const { bundleExcludesPath } = require("./paths");
+const { bundleExcludesPath, fileStat } = require("./paths");
 
 // Build state that is not part of the index object: the inputs the index was
 // built from and, per document entry, the derived state together with the
@@ -216,6 +216,43 @@ function assetMaps(registry, byPathUri, bundles) {
     byAssetKey: new Map(assets.map((asset) => [`${asset.bundle}\u0000${asset.path}`, asset])),
     byAssetUri: new Map(assets.map((asset) => [asset.uri, asset])),
   };
+}
+
+// The asset paths the local documents reference, each with the size and
+// mtime found now (null where no regular file exists), so a refresh can tell
+// whether a referenced asset was modified, removed or added without reading
+// any of them. Documents and policy-excluded paths are left out: the first
+// are tracked as documents, the second carry a fixed diagnostic.
+function watchAssets(record) {
+  const watch = new Map();
+  record.bundles.forEach((bundleRecord) => {
+    const bundle = bundleRecord.bundle;
+    if (bundle.remote) {
+      return;
+    }
+    bundleRecord.entries.forEach((entry) => {
+      if (!entry.doc) {
+        return;
+      }
+      entry.derived.assetReferences.forEach((reference) => {
+        let resolved;
+        try {
+          resolved = resolveBundleAssetPath(bundle.root, reference.fromPath, reference.value);
+        } catch {
+          return;
+        }
+        if (
+          resolved.path.toLowerCase().endsWith(".md") ||
+          bundleExcludesPath(bundle, resolved.path) ||
+          watch.has(resolved.absolutePath)
+        ) {
+          return;
+        }
+        watch.set(resolved.absolutePath, fileStat(resolved.absolutePath));
+      });
+    });
+  });
+  return watch;
 }
 
 function lookupMaps(registration, assetState) {
@@ -475,8 +512,9 @@ function assembleIndex(record, documents, registration, assetState) {
 // selects (all of them for a build), applies computation readiness, and
 // assembles the index object. `operation` carries `owned` (entries whose
 // documents this operation parsed and may mutate), an optional carried
-// `registry`, an optional `selectAffected` narrowing derivation, and
-// `pooledReadiness` when duplicate canonical URIs exist on either side.
+// `assets` state (registry and watch list), an optional `selectAffected`
+// narrowing derivation, and `pooledReadiness` when duplicate canonical URIs
+// exist on either side.
 function completeIndex(record, operation) {
   const bundles = record.bundles.map((bundleRecord) => bundleRecord.bundle);
   const located = [];
@@ -489,7 +527,9 @@ function completeIndex(record, operation) {
   });
   let documents = located.map((item) => item.entry.doc);
   let registration = registerDocuments(documents);
-  const registry = operation.registry || buildLocalAssetRegistry(documents, bundles, record.config);
+  const registry = operation.assets
+    ? operation.assets.registry
+    : buildLocalAssetRegistry(documents, bundles, record.config);
   let assetState = assetMaps(registry, registration.byPathUri, bundles);
   const maps = lookupMaps(registration, assetState);
   const affected = operation.selectAffected
@@ -506,7 +546,10 @@ function completeIndex(record, operation) {
     assetState = assetMaps(registry, registration.byPathUri, bundles);
   }
   record.registration = registration;
-  record.assets = Object.assign({ registry }, assetState);
+  record.assets = Object.assign(
+    { registry, watch: operation.assets ? operation.assets.watch : watchAssets(record) },
+    assetState,
+  );
   record.stats.documents = documents.length;
   record.stats.derived = affected.length;
   return assembleIndex(record, documents, registration, assetState);

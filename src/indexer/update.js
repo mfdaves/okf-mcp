@@ -5,11 +5,13 @@ const { isDeepStrictEqual } = require("node:util");
 const { collectAssetReferences } = require("../assets");
 const { normalizeSlashes, safeRelativePath } = require("../parser");
 const { assetKeys, completeIndex, documentKeys, indexRecord } = require("./assemble");
-const { attachProject, buildIndex, missingRootError, parseEntry } = require("./build");
+const { attachProject, buildIndex, dayKey, missingRootError, parseEntry } = require("./build");
 const {
   bundleAllowsPath,
   documentAbsolutePath,
   documentOverrideKey,
+  fileStat,
+  sameStat,
   walkMarkdown,
 } = require("./paths");
 
@@ -181,9 +183,12 @@ function bundleRecordFor(record, bundleId) {
 // Groups the requested changes per bundle. Deletions apply before upserts, so
 // a path in both is an upsert; paths the bundle policy excludes are dropped,
 // as a build would drop them; deletions of unknown paths count for nothing.
+// `assetsChanged` says the asset files may differ from what the index saw,
+// so the registry is rebuilt and the documents that depend on assets are
+// re-derived.
 function planChanges(index, record, changes) {
   const input = changes || {};
-  const plan = { bundles: new Map(), changed: 0 };
+  const plan = { bundles: new Map(), changed: 0, assetsChanged: Boolean(input.assetsChanged) };
   const touch = (bundleId) => {
     let state = plan.bundles.get(bundleId);
     if (!state) {
@@ -223,16 +228,14 @@ function planChanges(index, record, changes) {
   return plan;
 }
 
-// A full build with the same inputs as the index, the changes folded into the
-// document overrides and deletions so documents not yet on disk still count.
-// A full build with the same inputs as the index. What the index holds apart
-// from the files (documents kept as text, documents removed while their
-// files remain) and the requested changes are folded into the document
-// overrides and deletions of this one build, so the rebuilt index describes
-// the same state; the rebuilt record keeps the original options and carries
-// the overlay state on its entries and in overlayDeletions, never as pins
-// that would outlive the files.
-function rebuildIndex(record, plan, stats) {
+// A full build with the same inputs as the index, for the given day. What the
+// index holds apart from the files (documents kept as text, documents removed
+// while their files remain) and the requested changes are folded into the
+// document overrides and deletions of this one build, so the rebuilt index
+// describes the same state; the rebuilt record keeps the original options and
+// carries the overlay state on its entries and in overlayDeletions, never as
+// pins that would outlive the files.
+function rebuildIndex(record, plan, stats, asOf) {
   const overrides = new Map(record.config.documentOverrides);
   const deletions = new Set(record.config.documentDeletions);
   const overlayDeletions = new Set(record.overlayDeletions);
@@ -275,6 +278,7 @@ function rebuildIndex(record, plan, stats) {
     Object.assign({}, record.options, {
       documentOverrides: overrides,
       documentDeletions: deletions,
+      asOf,
     }),
   );
   if (record.project) {
@@ -282,7 +286,7 @@ function rebuildIndex(record, plan, stats) {
   }
   const next = indexRecord(rebuilt);
   next.options = record.options;
-  next.config = record.config;
+  next.config = Object.assign({}, record.config, { asOf });
   next.overlayDeletions = overlayDeletions;
   next.stats = Object.assign(stats, { mode: "full" });
   return rebuilt;
@@ -429,7 +433,7 @@ function applyIncrementally(record, plan, stats) {
       changedUris.add(entry.doc.uri);
     }
   });
-  const registryChanged = assetReferencesChanged(changes);
+  const registryChanged = plan.assetsChanged || assetReferencesChanged(changes);
   if (registryChanged) {
     assetKeys(record.assets.byAssetKey, record.assets.byAssetUri).forEach((key) => {
       dirty.add(key);
@@ -464,8 +468,18 @@ function applyIncrementally(record, plan, stats) {
     }
     const pooled = previousDuplicates || registration.duplicateErrors.length > 0;
     const affected = [];
+    const chosen = new Set();
+    // The entry object is shared with the input index; re-derive a copy.
+    const rederive = (item) => {
+      const copy = Object.assign({}, item.entry);
+      item.bundleRecord.entries[item.position] = copy;
+      item.entry = copy;
+      chosen.add(item);
+      affected.push(item);
+    };
     located.forEach((item) => {
       if (changedEntries.has(item.entry)) {
+        chosen.add(item);
         affected.push(item);
         return;
       }
@@ -479,15 +493,20 @@ function applyIncrementally(record, plan, stats) {
           }
         }
       }
-      if (!hit) {
-        return;
+      if (hit) {
+        rederive(item);
       }
-      // The entry object is shared with the input index; re-derive a copy.
-      const copy = Object.assign({}, item.entry);
-      item.bundleRecord.entries[item.position] = copy;
-      item.entry = copy;
-      affected.push(item);
     });
+    if (pooled) {
+      // Readiness pools the edges of every document sharing a canonical URI,
+      // so when one owner is re-derived the others are too.
+      const affectedUris = new Set(affected.map((item) => item.entry.doc.uri));
+      located.forEach((item) => {
+        if (!chosen.has(item) && affectedUris.has(item.entry.doc.uri)) {
+          rederive(item);
+        }
+      });
+    }
     stats.dependents = affected.length - changes.added.filter(({ entry }) => entry.doc).length;
     return affected;
   };
@@ -495,7 +514,7 @@ function applyIncrementally(record, plan, stats) {
   stats.registry = registryChanged ? "rebuilt" : "carried";
   return completeIndex(next, {
     owned: changes.owned,
-    registry: registryChanged ? null : record.assets.registry,
+    assets: registryChanged ? null : record.assets,
     selectAffected,
     pooledReadiness: previousDuplicates,
   });
@@ -516,9 +535,12 @@ function carryIndexSettings(from, to) {
 // lists are shared with it. Only the changed documents and the documents
 // whose edges resolved through a key the change dirtied are re-derived;
 // lookup maps are re-registered in index order (a linear pass); the asset
-// registry is carried unless a changed document's asset references changed;
-// validation is recomputed in full. Above `maxChangeRatio` (changed documents
-// over documents in the index, default 0.2) the index is rebuilt instead.
+// registry is carried unless a changed document's asset references changed
+// or `changes.assetsChanged` says the asset files did; validation is
+// recomputed in full. Above `maxChangeRatio` (changed documents over
+// documents in the index, default 0.2) the index is rebuilt instead, and so
+// is an index built without an asOf when `options.asOf` (default: now) falls
+// on another UTC day than the one its documents were stamped with.
 function updateIndex(index, changes, options) {
   const record = indexRecord(index);
   if (!record) {
@@ -531,35 +553,42 @@ function updateIndex(index, changes, options) {
     throw new TypeError("maxChangeRatio must be a non-negative number.");
   }
   const plan = planChanges(index, record, changes);
-  if (plan.changed === 0) {
+  const asOf = record.config.floatingDate ? dayKey(config.asOf) : record.config.asOf;
+  const dateChanged = asOf !== record.config.asOf;
+  if (plan.changed === 0 && !plan.assetsChanged && !dateChanged) {
     return index;
   }
   const total = index.documents.length;
   const ratio = plan.changed / Math.max(1, total);
-  const stats = { mode: null, changed: plan.changed, total, ratio, maxChangeRatio };
-  if (ratio > maxChangeRatio) {
-    return carryIndexSettings(index, rebuildIndex(record, plan, stats));
+  const stats = {
+    mode: null,
+    changed: plan.changed,
+    total,
+    ratio,
+    maxChangeRatio,
+    asOf,
+    assets: plan.assetsChanged ? "changed" : "unchanged",
+  };
+  if (dateChanged || ratio > maxChangeRatio) {
+    stats.reason = dateChanged ? "date" : "ratio";
+    return carryIndexSettings(index, rebuildIndex(record, plan, stats, asOf));
   }
   return carryIndexSettings(index, applyIncrementally(record, plan, stats));
 }
 
 // Whether the file on disk is what the entry already describes. A disk-backed
-// entry is compared by size and mtime. An entry held as text is compared by
-// content; when the file carries the same text the entry becomes disk-backed
-// in place (a cache fill that changes nothing the entry describes), so later
-// refreshes need only a stat. A file that vanished mid-walk counts as changed
-// and the update records whatever it finds.
+// entry is compared by size and mtime (nanoseconds). An entry held as text is
+// compared by content; when the file carries the same text the entry becomes
+// disk-backed in place (a cache fill that changes nothing the entry
+// describes), so later refreshes need only a stat. A file that vanished
+// mid-walk counts as changed and the update records whatever it finds.
 function fileMatchesEntry(entry, filePath) {
-  let stat;
-  try {
-    stat = fs.statSync(filePath);
-  } catch {
+  const stat = fileStat(filePath);
+  if (!stat) {
     return false;
   }
   if (entry.source === "disk") {
-    return Boolean(
-      entry.stat && entry.stat.size === stat.size && entry.stat.mtimeMs === stat.mtimeMs,
-    );
+    return sameStat(entry.stat, stat);
   }
   if (entry.source !== "text") {
     return false;
@@ -573,16 +602,28 @@ function fileMatchesEntry(entry, filePath) {
   if (text !== entry.text) {
     return false;
   }
-  entry.stat = { size: stat.size, mtimeMs: stat.mtimeMs };
+  entry.stat = stat;
   entry.source = "disk";
   return true;
 }
 
+// Whether any asset the documents reference was modified, removed or added
+// since the index recorded it, judged by size and mtime of the watched paths.
+function assetsChangedOnDisk(record) {
+  for (const [absolutePath, recorded] of record.assets.watch) {
+    if (!sameStat(recorded, fileStat(absolutePath))) {
+      return true;
+    }
+  }
+  return false;
+}
+
 // Brings an index up to date with its local bundle roots by comparing each
-// Markdown file's size and mtime with what the index recorded, then applying
-// the differences through updateIndex. Returns the same index object when
-// nothing changed. Paths pinned by document overrides or deletions at build
-// time are left as built.
+// Markdown file's and each referenced asset's size and mtime with what the
+// index recorded, then applying the differences through updateIndex (which
+// also notices a changed day; `options` are its options). Returns the same
+// index object when nothing changed. Paths pinned by document overrides or
+// deletions at build time are left as built.
 function refreshIndex(index, options) {
   const record = indexRecord(index);
   if (!record) {
@@ -625,10 +666,11 @@ function refreshIndex(index, options) {
       }
     });
   });
-  if (!upserts.length && !deletions.length) {
-    return index;
-  }
-  return updateIndex(index, { upserts, deletions }, options);
+  return updateIndex(
+    index,
+    { upserts, deletions, assetsChanged: assetsChangedOnDisk(record) },
+    options,
+  );
 }
 
 module.exports = {

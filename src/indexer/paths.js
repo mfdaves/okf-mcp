@@ -145,11 +145,32 @@ function documentAbsolutePath(bundle, relativePath) {
   return path.join(bundle.root, ...normalizeSlashes(relativePath).split("/"));
 }
 
+// Size and mtime of a regular file at nanosecond precision, or null when
+// there is no such file. A refresh compares these to tell a changed file
+// from an unchanged one without reading it.
+function fileStat(absolutePath) {
+  try {
+    const stat = fs.statSync(absolutePath, { bigint: true });
+    return stat.isFile() ? { size: Number(stat.size), mtimeNs: stat.mtimeNs } : null;
+  } catch {
+    return null;
+  }
+}
+
+function sameStat(left, right) {
+  if (!left || !right) {
+    return left === right;
+  }
+  return left.size === right.size && left.mtimeNs === right.mtimeNs;
+}
+
 module.exports = {
   bundleAllowsPath,
   bundleExcludesPath,
   documentAbsolutePath,
   documentOverrideKey,
+  fileStat,
+  sameStat,
   parseBundleArg,
   sanitizeBundleId,
   uniqueBundleIds,

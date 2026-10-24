@@ -2,7 +2,6 @@
 
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
-const os = require("node:os");
 const path = require("node:path");
 const test = require("node:test");
 
@@ -14,26 +13,8 @@ const {
   updateIndex,
 } = require("../src/indexer");
 const { parseMarkdownText } = require("../src/parser");
-const { LiveAuthoringService } = require("../src/live-authoring");
-const { callTool, createStateAsync } = require("../src/mcp/server");
-const { FileConceptStore } = require("../src/store");
 
-// mulberry32: a small deterministic generator so a failing sequence can be
-// replayed from its seed.
-function prng(seed) {
-  let state = seed >>> 0;
-  return () => {
-    state = (state + 0x6d2b79f5) >>> 0;
-    let t = state;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-const TYPES = ["Concept", "Guide", "Reference"];
-const WORDS = ["alpha", "beta", "gamma", "delta", "note", "topic"];
-const DIRS = ["", "guides/", "topics/deep/", "drafts/"];
+const { REMOTE, World, makeRoot, prng } = require("./helpers/index-world");
 
 // Sweep controls for one-off runs; the defaults are the committed cases.
 // OKF_INDEX_UPDATE_STEPS sets the sequence length and OKF_INDEX_UPDATE_SEEDS
@@ -62,315 +43,6 @@ function sweepSeeds(spec) {
     });
   return seeds;
 }
-
-// Asset files every bundle carries from the start, so documents can reference
-// text and binary assets that exist, a file that is missing, and, in beta, a
-// file the bundle policy excludes. Refreshes track Markdown only, so the
-// asset files themselves never change during a sequence.
-const ASSET_FILES = {
-  "tools/run.py": "print('run')\n",
-  "tools/check.py": "print('check')\n",
-  "data/revenue.sql": "SELECT SUM(amount) FROM revenue;\n",
-  "data/chart.png": Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 1]),
-  "drafts/hidden.py": "print('hidden')\n",
-};
-
-function makeRoot(prefix) {
-  return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
-}
-
-// A random two-bundle catalog mirrored on disk. Every operation keeps
-// `files` equal to what is on disk so a fresh build is always available as
-// the reference.
-class World {
-  constructor(root, rand) {
-    this.rand = rand;
-    this.bundles = [
-      { id: "alpha", root: path.join(root, "alpha") },
-      { id: "beta", root: path.join(root, "beta"), exclude: ["drafts/**"] },
-    ];
-    this.bundles.forEach((bundle) => {
-      Object.entries(ASSET_FILES).forEach(([relativePath, content]) => {
-        const file = path.join(bundle.root, ...relativePath.split("/"));
-        fs.mkdirSync(path.dirname(file), { recursive: true });
-        fs.writeFileSync(file, content);
-      });
-    });
-    this.files = new Map();
-    this.counter = 0;
-    this.wanted = [];
-  }
-
-  pick(list) {
-    return list[Math.floor(this.rand() * list.length)];
-  }
-
-  chance(probability) {
-    return this.rand() < probability;
-  }
-
-  bundle(id) {
-    return id ? this.bundles.find((bundle) => bundle.id === id) : this.pick(this.bundles);
-  }
-
-  entries() {
-    return Array.from(this.files.keys()).map((key) => {
-      const [bundleId, ...rest] = key.split("/");
-      return { bundleId, relativePath: rest.join("/") };
-    });
-  }
-
-  concepts() {
-    return this.entries().filter((entry) => !/(^|\/)(index|log)\.md$/.test(entry.relativePath));
-  }
-
-  newPath() {
-    this.counter += 1;
-    return `${this.pick(DIRS)}${this.pick(WORDS)}-${this.counter}.md`;
-  }
-
-  // A link or relation target: an existing concept (by several locator
-  // forms), a target that is wanted but missing yet, a fresh missing path,
-  // a cross-bundle URI, the remote bundle, or an external URL.
-  target(bundleId, kind) {
-    const roll = this.rand();
-    const concepts = this.concepts();
-    if (roll < 0.45 && concepts.length) {
-      const entry = this.pick(concepts);
-      const conceptId = entry.relativePath.replace(/\.md$/i, "");
-      if (entry.bundleId !== bundleId || this.chance(0.4)) {
-        return `okf://${entry.bundleId}/${conceptId}`;
-      }
-      return kind === "link"
-        ? `/${entry.relativePath}`
-        : this.chance(0.5)
-          ? conceptId
-          : entry.relativePath;
-    }
-    if (roll < 0.6) {
-      const missing = { bundleId, relativePath: this.newPath() };
-      this.wanted.push(missing);
-      return `/${missing.relativePath}`;
-    }
-    if (roll < 0.7 && this.wanted.length) {
-      const wanted = this.pick(this.wanted);
-      return wanted.bundleId === bundleId
-        ? `/${wanted.relativePath}`
-        : `okf://${wanted.bundleId}/${wanted.relativePath.replace(/\.md$/i, "")}`;
-    }
-    if (roll < 0.8) return "okf://remote/notes";
-    if (roll < 0.9) return "https://example.com/reference";
-    return kind === "link" ? "../outside.md" : "okf://alpha/does/not/exist";
-  }
-
-  // An asset reference: a file that exists (bundle-rooted, or relative to the
-  // document so it misses from a subdirectory), a missing file, a concept or
-  // other link target, a path outside the root, or a URL.
-  assetTarget(bundleId) {
-    const roll = this.rand();
-    const files = Object.keys(ASSET_FILES);
-    if (roll < 0.4) return `/${this.pick(files)}`;
-    if (roll < 0.6) return this.pick(files);
-    if (roll < 0.7) return "/data/missing.bin";
-    if (roll < 0.8) return this.target(bundleId, "link");
-    if (roll < 0.9) return "../escape.py";
-    return "https://example.com/tool.py";
-  }
-
-  // An Attested Computation contract whose readiness depends on what its
-  // executor, attester and computation references resolve to: text assets,
-  // concepts, missing files or URLs; the computation is a file or an inline
-  // block, now and then left unclosed so the contract is structurally unready.
-  contract(bundleId) {
-    const resource = () =>
-      this.chance(0.55)
-        ? `/${this.pick(["tools/run.py", "tools/check.py"])}`
-        : this.assetTarget(bundleId);
-    const lines = [
-      `runtime: ${this.pick(["bigquery", "postgres"])}`,
-      "executor:",
-      `  resource: ${resource()}`,
-      "  receipt: [job_id, result]",
-    ];
-    if (this.chance(0.9)) lines.push("attester:", `  resource: ${resource()}`);
-    if (this.chance(0.5)) {
-      lines.push(
-        `computation: ${this.chance(0.7) ? "/data/revenue.sql" : this.assetTarget(bundleId)}`,
-      );
-      return { lines, body: [] };
-    }
-    const body = ["# Computation", "```sql\nSELECT 1\n```"];
-    if (this.chance(0.1)) body[1] = "```sql\nSELECT 1\n";
-    return { lines, body };
-  }
-
-  // Rendered Markdown with random validity: sometimes no type, sometimes a
-  // compatibility id that collides with another document, sometimes a
-  // relation of an unsupported type, sometimes an asset reference or a
-  // computation contract, sometimes unparsable frontmatter.
-  render(bundleId, relativePath) {
-    if (this.chance(0.04)) {
-      return "---\ntype: [unclosed\n---\n\n# Broken\n";
-    }
-    const lines = [];
-    const contract = this.chance(0.12) ? this.contract(bundleId) : null;
-    if (contract) lines.push("type: Attested Computation");
-    else if (this.chance(0.9)) lines.push(`type: ${this.pick(TYPES)}`);
-    lines.push(`title: Title ${this.counter}-${Math.floor(this.rand() * 1000)}`);
-    if (this.chance(0.3)) lines.push(`tags: [${this.pick(WORDS)}, ${this.pick(WORDS)}]`);
-    if (this.chance(0.25)) {
-      const concepts = this.concepts();
-      const alias =
-        concepts.length && this.chance(0.5)
-          ? `okf://${bundleId}/${this.pick(concepts).relativePath.replace(/\.md$/i, "")}`
-          : `okf://${bundleId}/alias-${Math.floor(this.rand() * 6)}`;
-      lines.push(`id: ${alias}`);
-    }
-    if (contract) lines.push(...contract.lines);
-    else if (this.chance(0.15)) lines.push(`resource: ${this.assetTarget(bundleId)}`);
-    if (this.chance(0.1)) {
-      const source = this.chance(0.6) ? this.assetTarget(bundleId) : "all rows in the warehouse";
-      lines.push("sources:", `  - resource: ${source}`);
-    }
-    const relationCount = Math.floor(this.rand() * 3);
-    if (relationCount) {
-      lines.push("relations:");
-      for (let index = 0; index < relationCount; index += 1) {
-        const type = this.chance(0.85)
-          ? "related_to"
-          : this.chance(0.5)
-            ? "custom_kind"
-            : "bad type";
-        lines.push(`  - type: ${type}`, `    target: ${this.target(bundleId, "relation")}`);
-      }
-    }
-    const body = [`# ${relativePath}`];
-    const linkCount = Math.floor(this.rand() * 3);
-    for (let index = 0; index < linkCount; index += 1) {
-      body.push(`See [target ${index}](${this.target(bundleId, "link")}).`);
-    }
-    if (contract) body.push(...contract.body);
-    return `---\n${lines.join("\n")}\n---\n\n${body.join("\n\n")}\n`;
-  }
-
-  write(bundleId, relativePath, text) {
-    const bundle = this.bundle(bundleId);
-    const file = path.join(bundle.root, ...relativePath.split("/"));
-    fs.mkdirSync(path.dirname(file), { recursive: true });
-    fs.writeFileSync(file, text);
-    this.files.set(`${bundleId}/${relativePath}`, text);
-    this.wanted = this.wanted.filter(
-      (entry) => !(entry.bundleId === bundleId && entry.relativePath === relativePath),
-    );
-    return { bundleId, relativePath, text };
-  }
-
-  remove(bundleId, relativePath) {
-    fs.unlinkSync(path.join(this.bundle(bundleId).root, ...relativePath.split("/")));
-    this.files.delete(`${bundleId}/${relativePath}`);
-    return { bundleId, relativePath };
-  }
-
-  // One random operation applied to disk, returned as index changes.
-  operate() {
-    const roll = this.rand();
-    const existing = this.entries();
-    if (roll < 0.3 || existing.length < 4) {
-      const bundleId = this.bundle().id;
-      const wanted = this.wanted.filter((entry) => entry.bundleId === bundleId);
-      const relativePath =
-        wanted.length && this.chance(0.6) ? this.pick(wanted).relativePath : this.newPath();
-      return { upserts: [this.write(bundleId, relativePath, this.render(bundleId, relativePath))] };
-    }
-    if (roll < 0.5) {
-      const entry = this.pick(existing);
-      return {
-        upserts: [
-          this.write(
-            entry.bundleId,
-            entry.relativePath,
-            this.render(entry.bundleId, entry.relativePath),
-          ),
-        ],
-      };
-    }
-    if (roll < 0.65) {
-      const entry = this.pick(existing);
-      return { deletions: [this.remove(entry.bundleId, entry.relativePath)] };
-    }
-    if (roll < 0.75) {
-      const entry = this.pick(existing);
-      const text = this.files.get(`${entry.bundleId}/${entry.relativePath}`);
-      const renamed = this.newPath();
-      return {
-        deletions: [this.remove(entry.bundleId, entry.relativePath)],
-        upserts: [this.write(entry.bundleId, renamed, text)],
-      };
-    }
-    if (roll < 0.85) {
-      // A batch like an agent's: new documents, replacements and now and then
-      // a deletion together, so insertions and replacements interleave.
-      const upserts = [];
-      const deletions = [];
-      const touched = new Set();
-      const count = 2 + Math.floor(this.rand() * 3);
-      for (let index = 0; index < count; index += 1) {
-        if (this.chance(0.5)) {
-          const bundleId = this.bundle().id;
-          const relativePath = this.newPath();
-          upserts.push(this.write(bundleId, relativePath, this.render(bundleId, relativePath)));
-          continue;
-        }
-        const entry = this.pick(existing);
-        const key = `${entry.bundleId}/${entry.relativePath}`;
-        if (touched.has(key)) continue;
-        touched.add(key);
-        if (this.chance(0.25)) {
-          deletions.push(this.remove(entry.bundleId, entry.relativePath));
-        } else {
-          upserts.push(
-            this.write(
-              entry.bundleId,
-              entry.relativePath,
-              this.render(entry.bundleId, entry.relativePath),
-            ),
-          );
-        }
-      }
-      return { upserts, deletions };
-    }
-    const bundleId = this.bundle().id;
-    const reservedRoll = this.rand();
-    if (reservedRoll < 0.45) {
-      const version = this.pick(['"0.2"', '"0.1"', '"9"', null]);
-      const text =
-        version === null ? "# Index\n" : `---\nokf_version: ${version}\n---\n\n# Index\n`;
-      return { upserts: [this.write(bundleId, "index.md", text)] };
-    }
-    if (reservedRoll < 0.75) {
-      return { upserts: [this.write(bundleId, "log.md", `# Log\n\n- ${this.counter}\n`)] };
-    }
-    // A document whose path normalises to a reserved document's concept id
-    // (`log.md.md` and `log.md` are both `okf://<bundle>/log.md`): the one way
-    // two files share a canonical URI, which is what pools computation
-    // readiness.
-    const dir = this.pick(DIRS);
-    const upserts = [];
-    if (!this.files.has(`${bundleId}/${dir}log.md`)) {
-      upserts.push(this.write(bundleId, `${dir}log.md`, "# Log\n"));
-    }
-    upserts.push(this.write(bundleId, `${dir}log.md.md`, this.render(bundleId, `${dir}log.md.md`)));
-    return { upserts };
-  }
-}
-
-const REMOTE = {
-  id: "remote",
-  remote: true,
-  documents: [
-    { path: "notes.md", text: "---\ntype: Concept\ntitle: Remote notes\n---\n\n# Notes\n" },
-  ],
-};
 
 // The upsert and deletion forms updateIndex accepts, chosen at random so the
 // sequence exercises all of them.
@@ -402,7 +74,7 @@ function asChanges(world, index, operation) {
     if (doc && roll < 0.65) return doc;
     return { bundleId: entry.bundleId, relativePath: entry.relativePath };
   });
-  return { upserts, deletions };
+  return { upserts, deletions, assetsChanged: Boolean(operation.assetsChanged) };
 }
 
 function runSequence(t, seed, steps, options, project) {
@@ -429,6 +101,7 @@ function runSequence(t, seed, steps, options, project) {
     unreadyContract: false,
     duplicates: false,
     registryRebuilt: false,
+    assetsMutated: false,
   };
   const observe = (index) => {
     if (index.assets.length) seen.assets = true;
@@ -437,14 +110,17 @@ function runSequence(t, seed, steps, options, project) {
       if (contract) seen[contract.attestationReady ? "readyContract" : "unreadyContract"] = true;
     });
     if (index.errors.some((error) => error.code === "duplicate_concept_id")) seen.duplicates = true;
-    if (indexUpdateStats(index).registry === "rebuilt") seen.registryRebuilt = true;
+    const stats = indexUpdateStats(index);
+    if (stats.registry === "rebuilt") seen.registryRebuilt = true;
+    if (stats.assets === "changed") seen.assetsMutated = true;
   };
   for (let step = 1; step <= steps; step += 1) {
     const operation = world.operate();
     const label = `seed ${seed} step ${step}`;
-    if (step % 10 === 0) {
+    if (step % 10 === 0 || (operation.assetsChanged && world.chance(0.5))) {
       // Every tenth step the change is external: nothing tells the index,
-      // the refresh has to find it from the files.
+      // the refresh has to find it from the files; so is half of the asset
+      // changes, the other half is announced to updateIndex.
       const refreshed = refreshIndex(current);
       assert.deepEqual(refreshed, fresh(), `${label} (refresh)`);
       assert.equal(refreshed.languages, languages, `${label} (refresh): languages`);
@@ -509,7 +185,7 @@ test("incremental updates equal a fresh build with strict links and custom relat
 });
 
 test("the fixed sequences reach the asset, readiness and duplicate paths", () => {
-  assert.equal(Object.keys(REACHED).length, 5);
+  assert.equal(Object.keys(REACHED).length, 6);
   const missed = Object.keys(REACHED).filter((key) => !REACHED[key]);
   assert.deepEqual(missed, [], `paths neither sequence reached: ${missed.join(", ")}`);
 });
@@ -636,141 +312,116 @@ test("updateIndex falls back to a full build above the change ratio and rejects 
   assert.throws(() => updateIndex(index, {}, { maxChangeRatio: -1 }), /non-negative/);
 });
 
-function writeConcept(root, relativePath, title, extra) {
-  const file = path.join(root, ...relativePath.split("/"));
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(
-    file,
-    `---\ntype: Reference\ntitle: ${title}\n${extra || ""}---\n\n# ${title}\n`,
+// Regression: a refresh compared Markdown files only, so an asset that was
+// modified or removed under the documents kept its bytes, diagnostics and
+// readiness in the index until a document referencing it changed.
+test("a refresh sees referenced assets that were modified, removed or added", (t) => {
+  const root = makeRoot("okf-index-assets-");
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const world = new World(root, prng(9));
+  world.write(
+    "alpha",
+    "report.md",
+    "---\ntype: Reference\ntitle: Report\nresource: /data/revenue.sql\n---\n\n# Report\n",
   );
-}
-
-function seedRoot(prefix, count) {
-  const root = makeRoot(prefix);
-  for (let index = 0; index < count; index += 1) {
-    writeConcept(root, `reference/seed-${index}.md`, `Seed ${index}`);
-  }
-  return root;
-}
-
-function freshStateIndex(state) {
-  return attachProject(
-    buildIndex(state.localBundleArgs.concat(state.remoteBundles), {
-      relationTypes: state.relationTypes,
-      strictLinks: state.strictLinks,
-      allowCustomRelationTypes: state.allowCustomRelationTypes,
-    }),
-    state.project,
+  world.write(
+    "alpha",
+    "job.md",
+    "---\ntype: Attested Computation\ntitle: Job\nruntime: postgres\ncomputation: /data/revenue.sql\nexecutor:\n  resource: /tools/run.py\n  receipt: [job_id]\nattester:\n  resource: /tools/check.py\n---\n\n# Job\n",
   );
-}
+  world.write("alpha", "note.md", "---\ntype: Reference\ntitle: Note\n---\n\n# Note\n");
+  const args = world.bundles.concat([REMOTE]);
+  const index = buildIndex(args);
+  const sql = path.join(world.bundle("alpha").root, "data", "revenue.sql");
+  const digest = (result) => result.byAssetUri.get("okf-asset://alpha/data/revenue.sql")?.sha256;
+  const missing = (result) => result.warnings.some((entry) => entry.code === "asset_missing");
+  assert.equal(index.assets.length, 3);
+  assert.equal(missing(index), false);
 
-const BATCH = (bundle, suffix) => ({
-  changes: [
-    {
-      op: "create",
-      path: `reference/linked-${suffix}.md`,
-      type: "Reference",
-      title: `Linked ${suffix}`,
-      relations: [{ type: "related_to", target: `okf://${bundle}/reference/seed-1` }],
-      body: `# Linked ${suffix}\n\nSee [seed](seed-2.md) and [later](later-${suffix}.md).`,
-    },
-    {
-      op: "create",
-      path: `reference/later-${suffix}.md`,
-      type: "Reference",
-      title: `Later ${suffix}`,
-    },
-  ],
+  fs.writeFileSync(sql, "SELECT 1;\n");
+  const modified = refreshIndex(index);
+  assert.notEqual(modified, index);
+  assert.equal(indexUpdateStats(modified).assets, "changed");
+  assert.deepEqual(modified, buildIndex(args));
+  assert.notEqual(digest(modified), digest(index));
+
+  fs.unlinkSync(sql);
+  const removed = refreshIndex(modified);
+  assert.deepEqual(removed, buildIndex(args));
+  assert.equal(removed.assets.length, 2);
+  assert.equal(missing(removed), true);
+  assert.equal(removed.byUri.get("okf://alpha/job").signals.computation.attestationReady, false);
+
+  // An unrelated write on the refreshed index carries the registry as is.
+  world.write("alpha", "note.md", "---\ntype: Reference\ntitle: Note two\n---\n\n# Note\n");
+  const unrelated = updateIndex(
+    removed,
+    { upserts: [{ bundleId: "alpha", relativePath: "note.md" }] },
+    { maxChangeRatio: 1 },
+  );
+  assert.equal(indexUpdateStats(unrelated).registry, "carried");
+  assert.deepEqual(unrelated, buildIndex(args));
+
+  fs.writeFileSync(sql, "SELECT 2;\n");
+  const restored = refreshIndex(unrelated);
+  assert.deepEqual(restored, buildIndex(args));
+  assert.equal(restored.assets.length, 3);
+  assert.equal(missing(restored), false);
+  assert.equal(refreshIndex(restored), restored);
+
+  // A host that knows it changed an asset can say so without a refresh.
+  fs.writeFileSync(sql, "SELECT 3;\n");
+  const announced = updateIndex(restored, { assetsChanged: true }, { maxChangeRatio: 1 });
+  assert.equal(indexUpdateStats(announced).mode, "incremental");
+  assert.deepEqual(announced, buildIndex(args));
 });
 
-test("the MCP server index after okf_apply_changes equals a fresh build", async (t) => {
-  const root = seedRoot("okf-index-mcp-", 30);
+// Regression: `signals.asOf` and `freshness` are stamped with the day of the
+// parse, so an index kept across midnight disagreed with a fresh build on
+// every document until each was rewritten.
+test("an index built without an asOf follows the calendar", (t) => {
+  const root = makeRoot("okf-index-date-");
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-  const bundle = path.basename(root);
-  const state = await createStateAsync([], { rootPath: root, allowWrite: true, actor: "test/wp2" });
-  assert.equal(state.shareLiveIndex, true);
-  const before = state.index;
-
-  const first = await callTool(state, "okf_apply_changes", BATCH(bundle, "one"));
-  assert.equal(JSON.parse(first.content[0].text).applied, true);
-  assert.notEqual(state.index, before);
-  assert.equal(indexUpdateStats(state.index).mode, "incremental");
-  assert.deepEqual(state.index, freshStateIndex(state));
-
-  // A create that sorts before the concept the same batch updates.
-  const update = await callTool(state, "okf_apply_changes", {
-    changes: [
-      { op: "create", path: "reference/aaa-first.md", type: "Reference", title: "First" },
-      { op: "update", uri: `okf://${bundle}/reference/seed-2`, title: "Seed two, renamed" },
-    ],
-  });
-  assert.equal(JSON.parse(update.content[0].text).applied, true);
-  assert.equal(indexUpdateStats(state.index).mode, "incremental");
-  assert.deepEqual(state.index, freshStateIndex(state));
-
-  // A validation-only call leaves the server index alone.
-  const validated = await callTool(state, "okf_validate_changes", BATCH(bundle, "two"));
-  assert.equal(JSON.parse(validated.content[0].text).valid, true);
-  assert.deepEqual(state.index, freshStateIndex(state));
-});
-
-test("a server whose live service builds with other options applies the batch to its own index", async (t) => {
-  const root = seedRoot("okf-index-mcp-own-", 30);
-  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-  const bundle = path.basename(root);
-  const service = new LiveAuthoringService(FileConceptStore.fromRoot(root, { strictLinks: true }), {
-    actor: "test/wp2",
-  });
-  const state = await createStateAsync([], {
-    rootPath: root,
-    allowWrite: true,
-    actor: "test/wp2",
-    liveAuthoringService: service,
-  });
-  assert.equal(state.shareLiveIndex, false);
-  const result = await callTool(state, "okf_apply_changes", BATCH(bundle, "own"));
-  assert.equal(JSON.parse(result.content[0].text).applied, true);
-  assert.equal(state.index.strictLinks, false);
-  assert.equal(indexUpdateStats(state.index).mode, "incremental");
-  assert.deepEqual(state.index, freshStateIndex(state));
-});
-
-test("the live service sees files changed outside it between batches", async (t) => {
-  const root = seedRoot("okf-index-external-", 12);
-  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-  const bundle = path.basename(root);
-  const service = new LiveAuthoringService(FileConceptStore.fromRoot(root), { actor: "test/wp2" });
-  const first = await service.applyChanges({
-    changes: [{ op: "create", path: "reference/first.md", type: "Reference", title: "First" }],
-  });
-  assert.equal(first.applied, true);
-
-  writeConcept(root, "reference/external.md", "External");
-  fs.unlinkSync(path.join(root, "reference/seed-3.md"));
-  const second = await service.applyChanges({
-    changes: [
-      {
-        op: "create",
-        path: "reference/second.md",
-        type: "Reference",
-        title: "Second",
-        relations: [{ type: "related_to", target: `okf://${bundle}/reference/external` }],
-      },
-    ],
-  });
-  assert.equal(second.applied, true, JSON.stringify(second.validation.diagnostics));
-  assert.ok(!second.validation.diagnostics.some((entry) => entry.code === "broken_relation"));
-  // The externally deleted concept is gone from the refreshed index too, so
-  // the update is refused as unknown instead of failing on the missing file.
-  await assert.rejects(
-    service.applyChanges({
-      changes: [{ op: "update", uri: `okf://${bundle}/reference/seed-3`, title: "Gone" }],
-    }),
-    (error) => error.code === "concept_not_found",
+  const world = new World(root, prng(13));
+  world.write(
+    "alpha",
+    "stale.md",
+    "---\ntype: Reference\ntitle: Stale\nstale_after: 2098-06-01\n---\n\n# Stale\n",
   );
-  const validated = await service.validateChanges({
-    changes: [{ op: "update", uri: `okf://${bundle}/reference/seed-3`, title: "Gone" }],
-  });
-  assert.equal(validated.valid, false);
-  assert.equal(validated.code, "concept_not_found");
+  world.write("alpha", "ever.md", "---\ntype: Reference\ntitle: Ever\n---\n\n# Ever\n");
+  const args = world.bundles.concat([REMOTE]);
+  const index = buildIndex(args);
+  assert.equal(index.byUri.get("okf://alpha/stale").signals.freshness, "fresh");
+  // The same day costs nothing.
+  assert.equal(updateIndex(index, {}), index);
+  assert.equal(refreshIndex(index), index);
+
+  const later = refreshIndex(index, { asOf: "2099-01-01" });
+  assert.equal(indexUpdateStats(later).mode, "full");
+  assert.equal(indexUpdateStats(later).reason, "date");
+  assert.deepEqual(later, buildIndex(args, { asOf: "2099-01-01" }));
+  assert.equal(later.byUri.get("okf://alpha/stale").signals.freshness, "stale");
+  assert.equal(later.byUri.get("okf://alpha/ever").signals.asOf, "2099-01-01");
+  // The rebuilt index still floats: same day, same object; next day, rebuilt.
+  assert.equal(updateIndex(later, {}, { asOf: new Date("2099-01-01T23:00:00Z") }), later);
+  world.write("alpha", "ever.md", "---\ntype: Reference\ntitle: Ever two\n---\n\n# Ever\n");
+  const next = updateIndex(
+    later,
+    { upserts: [{ bundleId: "alpha", relativePath: "ever.md" }] },
+    { asOf: "2099-01-02" },
+  );
+  assert.equal(indexUpdateStats(next).reason, "date");
+  assert.deepEqual(next, buildIndex(args, { asOf: "2099-01-02" }));
+
+  // A configured asOf is a fixed point of view and never moves.
+  const fixed = buildIndex(args, { asOf: "2026-01-01" });
+  assert.equal(updateIndex(fixed, {}, { asOf: "2099-01-01" }), fixed);
+  world.write("alpha", "ever.md", "---\ntype: Reference\ntitle: Ever three\n---\n\n# Ever\n");
+  const edited = updateIndex(
+    fixed,
+    { upserts: [{ bundleId: "alpha", relativePath: "ever.md" }] },
+    { asOf: "2099-01-01", maxChangeRatio: 1 },
+  );
+  assert.equal(indexUpdateStats(edited).mode, "incremental");
+  assert.deepEqual(edited, buildIndex(args, { asOf: "2026-01-01" }));
 });
