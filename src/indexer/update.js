@@ -301,7 +301,9 @@ function insertSorted(entries, entry) {
 
 // Applies one bundle's deletions and upserts to a copy of its entries. A
 // replaced document keeps its position; a new one is inserted where a walk
-// would have listed it. Returns the documents that left and entered.
+// would have listed it, after every replacement, because an insertion shifts
+// the positions of the entries behind it. Returns the documents that left
+// and entered.
 function applyBundleChanges(bundleRecord, state, config, changes) {
   const bundle = bundleRecord.bundle;
   if (!fs.existsSync(bundle.root)) {
@@ -334,6 +336,7 @@ function applyBundleChanges(bundleRecord, state, config, changes) {
       changes.restored.add(key);
     }
   });
+  const inserted = [];
   state.upserts.forEach((upsert, relativePath) => {
     const absolutePath = documentAbsolutePath(bundle, relativePath);
     let entry;
@@ -360,10 +363,13 @@ function applyBundleChanges(bundleRecord, state, config, changes) {
       }
       entries[position] = entry;
     } else {
-      insertSorted(entries, entry);
+      inserted.push(entry);
     }
     changes.added.push({ relativePath, entry });
     changes.restored.add(documentOverrideKey(bundle.id, relativePath));
+  });
+  inserted.forEach((entry) => {
+    insertSorted(entries, entry);
   });
   bundleRecord.entries = entries.filter(Boolean);
 }
