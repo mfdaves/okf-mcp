@@ -52,3 +52,18 @@ jobs:
       - run: npm test
       - run: npm run self:validate
       - run: npm run package:smoke
+
+  test-windows:
+    runs-on: windows-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+
+      - run: npm ci
+      - run: npm test
