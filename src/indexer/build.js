@@ -1,23 +1,18 @@
 "use strict";
 
-const fs = require("fs");
-const path = require("path");
+const fs = require("node:fs");
+const path = require("node:path");
 const {
   normalizeSlashes,
   parseMarkdownFile,
   parseMarkdownText,
   safeRelativePath,
 } = require("../parser");
-const {
-  buildAssetRegistry,
-  collectAssetReferences,
-  isExternalReference,
-  isLocalAssetReference,
-  mimeIsText,
-} = require("../assets");
+const { buildAssetRegistry } = require("../assets");
 const { DEFAULT_RELATION_TYPES, loadProjectConfig } = require("../project");
 const { fetchRemoteBundles } = require("../remote");
 const { validateIndex } = require("../validation");
+const { assetUri, contractAssetsReady, documentAtPath, documentEdges } = require("./edges");
 
 function sanitizeBundleId(value, fallback) {
   const raw = String(value || fallback || "bundle").trim();
@@ -131,7 +126,7 @@ function bundleAllowsPath(bundle, relativePath) {
 }
 
 function bundleExcludesPath(bundle, relativePath) {
-  const exclude = Array.isArray(bundle && bundle.exclude) ? bundle.exclude : [];
+  const exclude = Array.isArray(bundle?.exclude) ? bundle.exclude : [];
   return exclude.some((pattern) => matchesPattern(relativePath, pattern));
 }
 
@@ -154,14 +149,6 @@ function walkMarkdown(root) {
   return out.sort();
 }
 
-function documentAtPath(documentsByPath, pathUri) {
-  if (!documentsByPath || typeof documentsByPath.get !== "function") {
-    return null;
-  }
-  const document = documentsByPath.get(pathUri);
-  return document && document.pathUri === pathUri ? document : null;
-}
-
 function registerPortableConceptId(map, ambiguous, key, document) {
   const normalized = normalizeSlashes(String(key || ""))
     .replace(/^\/+/, "")
@@ -176,377 +163,6 @@ function registerPortableConceptId(map, ambiguous, key, document) {
     return;
   }
   map.set(normalized, document);
-}
-
-function portableConceptKeys(value) {
-  const normalized = normalizeSlashes(String(value || ""))
-    .replace(/^\/+/, "")
-    .split("#")[0];
-  if (!normalized) return [];
-  return normalized.toLowerCase().endsWith(".md")
-    ? [normalized, normalized.slice(0, -3)]
-    : [normalized, `${normalized}.md`];
-}
-
-function portableConceptMatches(index, value) {
-  for (const key of portableConceptKeys(value)) {
-    const matches = (index.documents || []).filter(
-      (doc) => doc.conceptId === key || doc.path === key,
-    );
-    if (matches.length) {
-      return matches.sort((left, right) => left.uri.localeCompare(right.uri));
-    }
-  }
-  return [];
-}
-
-function resolveConcept(index, locator) {
-  const raw = String(locator || "").trim();
-  if (!raw || !index) {
-    return null;
-  }
-  const fragmentless = normalizeSlashes(raw).split("#")[0];
-  const byUri = index.byUri && (index.byUri.get(raw) || index.byUri.get(fragmentless));
-  if (byUri) {
-    return byUri;
-  }
-  if (
-    (index.ambiguousAliases || new Set()).has(raw) ||
-    (index.ambiguousAliases || new Set()).has(fragmentless)
-  ) {
-    return null;
-  }
-  const uriMatch = fragmentless.match(/^okf:\/\/([^/]+)\/(.+)$/);
-  if (fragmentless.startsWith("okf://")) {
-    if (!uriMatch || (index.bundles || []).some((bundle) => bundle.id === uriMatch[1])) {
-      return null;
-    }
-  }
-  for (const key of portableConceptKeys(
-    uriMatch ? `${uriMatch[1]}/${uriMatch[2]}` : fragmentless,
-  )) {
-    if ((index.ambiguousConceptIds || new Set()).has(key)) return null;
-    const owner = index.byConceptId && index.byConceptId.get(key);
-    if (owner) return owner;
-  }
-  return null;
-}
-
-function normalizeConceptTitle(value) {
-  return String(value || "")
-    .normalize("NFKC")
-    .trim()
-    .replace(/\s+/gu, " ")
-    .toLowerCase();
-}
-
-function conceptTitleSlug(value) {
-  return normalizeConceptTitle(value)
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-}
-
-function conceptIsGeneratedFile(doc) {
-  const frontmatter = (doc && doc.frontmatter) || {};
-  return Boolean(
-    (doc && (doc.generatedFile === true || doc.isGenerated === true)) ||
-      frontmatter.generated_file === true ||
-      frontmatter.generatedFile === true,
-  );
-}
-
-function conceptMatchSummary(doc, matchReasons) {
-  const generated = doc && doc.signals && doc.signals.generated;
-  return {
-    uri: doc.uri,
-    bundle: doc.bundle,
-    path: doc.path,
-    conceptId: doc.conceptId || doc.path.replace(/\.md$/i, ""),
-    type: doc.type || (doc.frontmatter && doc.frontmatter.type),
-    title: doc.title,
-    generatedBy: (generated && generated.by) || null,
-    ...(conceptIsGeneratedFile(doc) ? { generatedFile: true } : {}),
-    ...(matchReasons && matchReasons.length ? { matchReasons } : {}),
-  };
-}
-
-function findConceptMatches(index, options) {
-  const config = options || {};
-  const title = config.title === undefined ? null : normalizeConceptTitle(config.title);
-  const prefix = normalizeSlashes(String(config.pathPrefix || "")).replace(/^\/+|\/+$/g, "");
-  const documents =
-    index && Array.isArray(index.concepts)
-      ? index.concepts
-      : index && Array.isArray(index.documents)
-        ? index.documents
-        : [];
-  return documents
-    .filter(
-      (doc) =>
-        doc &&
-        doc.valid !== false &&
-        !doc.reserved &&
-        typeof doc.path === "string" &&
-        (!config.bundle || doc.bundle === config.bundle) &&
-        (!config.type || doc.type === config.type) &&
-        (title === null || normalizeConceptTitle(doc.title) === title) &&
-        (!prefix || doc.path === prefix || doc.path.startsWith(`${prefix}/`)),
-    )
-    .sort(
-      (left, right) => left.path.localeCompare(right.path) || left.uri.localeCompare(right.uri),
-    );
-}
-
-function recoveryReceipt(locator, entries, limit, allowRetry, forcedAmbiguity) {
-  const maximum = Math.max(1, Math.min(Number(limit || 5), 20));
-  const candidates = entries
-    .slice(0, maximum)
-    .map((entry) => conceptMatchSummary(entry.doc, entry.reasons));
-  const actionable = entries.length === 1 && entries[0].doc.valid && !entries[0].doc.reserved;
-  return {
-    status:
-      forcedAmbiguity || entries.length > 1
-        ? "ambiguous"
-        : actionable
-          ? "replacement_found"
-          : "not_found",
-    requestedLocator: locator,
-    candidates,
-    omitted: Math.max(0, entries.length - candidates.length),
-    ...(allowRetry && !forcedAmbiguity && actionable
-      ? { retryWith: { uri: entries[0].doc.uri } }
-      : {}),
-  };
-}
-
-function recoverConceptLocator(index, locator, options) {
-  const config = options || {};
-  const raw = normalizeSlashes(String(locator || "").trim()).split("#")[0];
-  const uriMatch = raw.match(/^okf:\/\/([^/]+)\/(.+)$/);
-  if (/^[A-Za-z][A-Za-z0-9+.-]*:\/\//.test(raw) && !uriMatch) {
-    return { status: "not_found", requestedLocator: raw, candidates: [], omitted: 0 };
-  }
-  const knownBundle = uriMatch && (index.bundles || []).some((entry) => entry.id === uriMatch[1]);
-  const bundle = knownBundle ? uriMatch[1] : config.bundle || "";
-  const portablePath = (
-    uriMatch && knownBundle ? uriMatch[2] : raw.replace(/^okf:\/\//, "")
-  ).replace(/^\/+/, "");
-  const aliasOwners = (index.documents || [])
-    .filter(
-      (doc) =>
-        (index.ambiguousAliases || new Set()).has(raw) && (doc.uriAliases || []).includes(raw),
-    )
-    .sort((left, right) => left.uri.localeCompare(right.uri));
-  const exact = aliasOwners.length
-    ? aliasOwners
-    : knownBundle
-      ? []
-      : portableConceptMatches(index, portablePath);
-  if (exact.length) {
-    const portableAmbiguous = portableConceptKeys(portablePath).some((key) =>
-      (index.ambiguousConceptIds || new Set()).has(key),
-    );
-    return recoveryReceipt(
-      raw,
-      exact.map((doc) => ({
-        doc,
-        reasons: [aliasOwners.length ? "uri_alias" : "portable_id"],
-      })),
-      config.limit,
-      !aliasOwners.length && !portableAmbiguous,
-      aliasOwners.length > 0 || portableAmbiguous,
-    );
-  }
-  const requestedPath = portablePath.replace(/\.md$/i, "");
-  const requestedBase = path.posix.basename(requestedPath).toLowerCase();
-  const requestedSlug = conceptTitleSlug(requestedBase);
-  const ranked = [];
-  if (!requestedSlug) return recoveryReceipt(raw, [], config.limit, false);
-  findConceptMatches(index, { bundle }).forEach((doc) => {
-    const base = path.posix.basename(doc.conceptId || doc.path.replace(/\.md$/i, "")).toLowerCase();
-    const reasons = [];
-    if (base === requestedBase) reasons.push("path_basename");
-    if (conceptTitleSlug(doc.title) === requestedSlug) reasons.push("title_slug");
-    if ((doc.aliases || []).some((alias) => conceptTitleSlug(alias) === requestedSlug))
-      reasons.push("alias");
-    if (!reasons.length) return;
-    ranked.push({
-      doc,
-      reasons,
-      score:
-        (reasons.includes("path_basename") ? 4 : 0) +
-        (reasons.includes("title_slug") ? 2 : 0) +
-        (reasons.includes("alias") ? 1 : 0),
-    });
-  });
-  ranked.sort(
-    (left, right) =>
-      right.score - left.score ||
-      left.doc.path.localeCompare(right.doc.path) ||
-      left.doc.uri.localeCompare(right.doc.uri),
-  );
-  return recoveryReceipt(raw, ranked, config.limit, true);
-}
-
-function resolveIndexedLink(bundleId, resolved, href, documentsByPath) {
-  if (!documentsByPath || typeof documentsByPath.get !== "function") {
-    return resolved;
-  }
-  const directTarget = documentAtPath(documentsByPath, resolved.uri);
-  if (directTarget) {
-    return Object.assign({}, resolved, { uri: directTarget.uri });
-  }
-  const clean = String(href || "").split("#")[0];
-  if (!clean.endsWith("/") && path.posix.extname(resolved.path)) {
-    return resolved;
-  }
-  const indexPath = normalizeSlashes(path.posix.join(resolved.path, "index.md"));
-  const indexTarget = documentAtPath(documentsByPath, `okf://${bundleId}/${indexPath}`);
-  if (!indexTarget) {
-    return resolved;
-  }
-  return Object.assign({}, resolved, {
-    path: indexPath,
-    uri: indexTarget.uri,
-  });
-}
-
-function resolveLinkPath(bundle, fromPath, href, documentsByPath) {
-  const clean = String(href || "").split("#")[0];
-  if (
-    !clean ||
-    clean.startsWith("http://") ||
-    clean.startsWith("https://") ||
-    clean.startsWith("mailto:")
-  ) {
-    return null;
-  }
-  if (bundle.remote) {
-    const normalizedPath = clean.startsWith("/")
-      ? path.posix.normalize(clean.slice(1))
-      : path.posix.normalize(path.posix.join(path.posix.dirname(fromPath), clean));
-    const resolvedPath = normalizedPath === "." ? "" : normalizedPath.replace(/\/+$/g, "");
-    if (resolvedPath.startsWith("../") || resolvedPath === "..") {
-      return {
-        outsideRoot: true,
-        path: normalizeSlashes(clean),
-        uri: null,
-      };
-    }
-    return resolveIndexedLink(
-      bundle.id,
-      {
-        outsideRoot: false,
-        path: resolvedPath,
-        uri: `okf://${bundle.id}/${resolvedPath}`,
-      },
-      clean,
-      documentsByPath,
-    );
-  }
-  const base = clean.startsWith("/")
-    ? path.join(bundle.root, clean.slice(1))
-    : path.resolve(path.dirname(path.join(bundle.root, fromPath)), clean);
-  const relativePath = safeRelativePath(bundle.root, base);
-  if (relativePath === null) {
-    return {
-      outsideRoot: true,
-      path: normalizeSlashes(clean),
-      uri: null,
-    };
-  }
-  return resolveIndexedLink(
-    bundle.id,
-    {
-      outsideRoot: false,
-      path: relativePath,
-      uri: `okf://${bundle.id}/${relativePath}`,
-    },
-    clean,
-    documentsByPath,
-  );
-}
-
-function relationFrom(value, doc) {
-  if (typeof value === "string") {
-    const parts = value.trim().split(/\s+/);
-    if (parts.length === 1) {
-      return { type: "related_to", target: parts[0], source: doc.uri };
-    }
-    return { type: parts[0], target: parts.slice(1).join(" "), source: doc.uri };
-  }
-  if (value && typeof value === "object") {
-    return {
-      type: value.type || value.kind || "related_to",
-      target: value.target || value.to || "",
-      source: doc.uri,
-      label: value.label || value.text || "",
-      description: value.description || "",
-    };
-  }
-  return { type: "related_to", target: "", source: doc.uri };
-}
-
-function assetUri(bundle, relativePath) {
-  return `okf-asset://${bundle}/${normalizeSlashes(relativePath).split("/").map(encodeURIComponent).join("/")}`;
-}
-
-function relativeReferencePath(fromPath, reference) {
-  const raw = normalizeSlashes(String(reference || "").trim()).split("#")[0];
-  if (!raw || isExternalReference(raw)) {
-    return null;
-  }
-  const relative = raw.startsWith("/")
-    ? path.posix.normalize(raw.slice(1))
-    : path.posix.normalize(path.posix.join(path.posix.dirname(fromPath), raw));
-  if (
-    !relative ||
-    relative === "." ||
-    relative === ".." ||
-    relative.startsWith("../") ||
-    path.posix.isAbsolute(relative)
-  ) {
-    return null;
-  }
-  return normalizeSlashes(relative);
-}
-
-function semanticReferences(doc) {
-  const frontmatter = doc.frontmatter || {};
-  const references = [];
-  function add(kind, field, value, metadata) {
-    if (typeof value === "string" && value.trim()) {
-      references.push({ kind, field, value: value.trim(), metadata: metadata || null });
-    }
-  }
-  add("resource", "resource", frontmatter.resource);
-  const sources =
-    doc.signals && Array.isArray(doc.signals.sources)
-      ? doc.signals.sources
-      : Array.isArray(frontmatter.sources)
-        ? frontmatter.sources
-        : [];
-  sources.forEach((source, index) => {
-    if (source && typeof source === "object" && !Array.isArray(source)) {
-      add("source", `sources[${index}].resource`, source.resource, source);
-    }
-  });
-  add("computation", "computation", frontmatter.computation);
-  if (
-    frontmatter.executor &&
-    typeof frontmatter.executor === "object" &&
-    !Array.isArray(frontmatter.executor)
-  ) {
-    add("executor", "executor.resource", frontmatter.executor.resource);
-  }
-  if (
-    frontmatter.attester &&
-    typeof frontmatter.attester === "object" &&
-    !Array.isArray(frontmatter.attester)
-  ) {
-    add("attester", "attester.resource", frontmatter.attester.resource);
-  }
-  return references;
 }
 
 function buildIndex(bundleArgs, options) {
@@ -730,7 +346,7 @@ function buildIndex(bundleArgs, options) {
   bundles
     .filter((bundle) => bundle.remote)
     .forEach((bundle) => {
-      const unresolved = (bundle.remoteSource && bundle.remoteSource.unresolvedReferences) || [];
+      const unresolved = bundle.remoteSource?.unresolvedReferences || [];
       warnings.push.apply(
         warnings,
         unresolved.map((entry) =>
@@ -797,211 +413,26 @@ function buildIndex(bundleArgs, options) {
   });
 
   const edges = [];
+  const lookups = { byPathUri, byUri, byConceptId, byAssetKey, byAssetUri };
   documents.forEach((doc) => {
     const bundle = bundles.find((entry) => entry.id === doc.bundle);
-    doc.links.forEach((link) => {
-      const resolved = resolveLinkPath(bundle, doc.path, link.href, byPathUri);
-      if (!resolved) {
-        return;
-      }
-      if (resolved.outsideRoot) {
-        warnings.push({
-          code: "link_outside_root",
-          bundle: doc.bundle,
-          path: doc.path,
-          href: link.href,
-          message: "Markdown link resolves outside bundle root.",
-        });
-        return;
-      }
-      const target = documentAtPath(byPathUri, `okf://${doc.bundle}/${resolved.path}`);
-      const edge = {
-        source: doc.uri,
-        target: target ? target.uri : resolved.uri,
-        kind: "markdown_link",
-        text: link.text || "",
-        href: link.href,
-        broken: !target,
-      };
-      edges.push(edge);
-      if (!target) {
-        warnings.push({
-          code: "broken_link",
-          bundle: doc.bundle,
-          path: doc.path,
-          href: link.href,
-          target: resolved.path,
-          message: "Markdown link target does not exist in bundle.",
-        });
-      }
+    const derived = documentEdges(doc, bundle, lookups, {
+      allowedRelationTypes,
+      allowCustomRelationTypes,
     });
-    doc.relations
-      .map((relation) => relationFrom(relation, doc))
-      .forEach((relation) => {
-        const type = String(relation.type || "related_to");
-        const targetUri = String(relation.target || "").trim();
-        if (!targetUri) {
-          errors.push({
-            code: "missing_relation_target",
-            bundle: doc.bundle,
-            path: doc.path,
-            relationType: type,
-            message: "Relation has no target.",
-          });
-          return;
-        }
-        const safeCustomType = /^[A-Za-z0-9_.-]+$/.test(type);
-        if (!allowedRelationTypes.has(type) && !(allowCustomRelationTypes && safeCustomType)) {
-          errors.push({
-            code: "invalid_relation_type",
-            bundle: doc.bundle,
-            path: doc.path,
-            relationType: type,
-            message: `Unsupported relation type: ${type}`,
-          });
-        } else if (allowCustomRelationTypes && safeCustomType) {
-          allowedRelationTypes.add(type);
-        }
-        let targetDocument = byUri.get(targetUri) || null;
-        let internalTarget = targetUri.startsWith("okf://");
-        if (!targetDocument && !/^[A-Za-z][A-Za-z0-9+.-]*:/u.test(targetUri)) {
-          internalTarget = true;
-          const resolved = resolveLinkPath(bundle, doc.path, targetUri, byPathUri);
-          if (resolved && !resolved.outsideRoot) {
-            targetDocument = documentAtPath(byPathUri, `okf://${doc.bundle}/${resolved.path}`);
-            if (!targetDocument && !path.posix.extname(resolved.path)) {
-              targetDocument = documentAtPath(byPathUri, `okf://${doc.bundle}/${resolved.path}.md`);
-            }
-          }
-          if (!targetDocument) {
-            const normalizedTarget = normalizeSlashes(targetUri)
-              .replace(/^\/+/, "")
-              .replace(/\.md$/i, "");
-            const portableTarget = byConceptId.get(normalizedTarget);
-            if (portableTarget && portableTarget.bundle === doc.bundle) {
-              targetDocument = portableTarget;
-            }
-          }
-        }
-        const target =
-          targetDocument && !targetDocument.reserved && targetDocument.valid
-            ? targetDocument
-            : null;
-        const isExternal = !internalTarget;
-        if (isExternal) {
-          externalReferences.set(targetUri, { uri: targetUri, kind: "external" });
-        }
-        if (internalTarget && !target) {
-          errors.push({
-            code: "broken_relation",
-            bundle: doc.bundle,
-            path: doc.path,
-            target: targetUri,
-            relationType: type,
-            message: "Relation target does not resolve to a valid concept.",
-          });
-        }
-        edges.push({
-          source: doc.uri,
-          target: target ? target.uri : targetUri,
-          kind: "relation",
-          relationType: type,
-          text: relation.label || type,
-          description: relation.description || "",
-          broken: internalTarget && !target,
-          external: isExternal,
-        });
-      });
-    semanticReferences(doc).forEach((reference) => {
-      const rawTarget = reference.value;
-      let target = null;
-      let external = false;
-      let broken = false;
-      let resolvedAs = "opaque";
-      if (rawTarget.startsWith("okf://")) {
-        const targetDoc = byUri.get(rawTarget);
-        target = targetDoc ? targetDoc.uri : rawTarget;
-        const validTarget = Boolean(targetDoc && !targetDoc.reserved && targetDoc.valid);
-        broken = !validTarget;
-        resolvedAs = validTarget ? "concept" : targetDoc ? "invalid_concept" : "unresolved";
-        if (!validTarget) {
-          warnings.push({
-            code: "broken_semantic_reference",
-            severity: "warning",
-            layer: "project",
-            bundle: doc.bundle,
-            path: doc.path,
-            field: reference.field,
-            target: rawTarget,
-            edgeKind: reference.kind,
-            message: targetDoc
-              ? "Standard OKF semantic reference targets an invalid or reserved document."
-              : "Standard OKF semantic reference targets an unknown internal concept.",
-          });
-        }
-      } else if (isExternalReference(rawTarget)) {
-        target = rawTarget;
-        external = true;
-        resolvedAs = "external";
-      } else {
-        const targetPath = relativeReferencePath(doc.path, rawTarget);
-        const targetDoc = targetPath
-          ? documentAtPath(byPathUri, `okf://${doc.bundle}/${targetPath}`) ||
-            byUri.get(`okf://${doc.bundle}/${targetPath.replace(/\.md$/i, "")}`)
-          : null;
-        const targetAsset = targetPath ? byAssetKey.get(`${doc.bundle}\u0000${targetPath}`) : null;
-        if (targetDoc && !targetDoc.reserved && targetDoc.valid) {
-          target = targetDoc.uri;
-          resolvedAs = "concept";
-        } else if (targetDoc) {
-          target = targetDoc.uri;
-          broken = true;
-          resolvedAs = "invalid_concept";
-        } else if (targetAsset) {
-          target = targetAsset.uri;
-          resolvedAs = "asset";
-        } else {
-          target = rawTarget;
-          const opaqueSource =
-            reference.kind === "source" && !isLocalAssetReference(rawTarget, { allowBare: false });
-          external = opaqueSource;
-          broken = !opaqueSource;
-          resolvedAs = opaqueSource ? "opaque" : "unresolved";
-        }
-      }
-      if (broken && !rawTarget.startsWith("okf://")) {
-        warnings.push({
-          code: "broken_semantic_reference",
-          severity: "warning",
-          layer: "project",
-          bundle: doc.bundle,
-          path: doc.path,
-          field: reference.field,
-          target: rawTarget,
-          edgeKind: reference.kind,
-          message:
-            "Standard OKF semantic reference does not resolve to a valid local concept or indexed asset.",
-        });
-      }
-      if (external) {
-        externalReferences.set(target, { uri: target, kind: "external" });
-      }
-      edges.push({
-        source: doc.uri,
-        target,
-        kind: reference.kind,
-        field: reference.field,
-        reference: rawTarget,
-        sourceEntry: reference.kind === "source" ? reference.metadata : undefined,
-        resolvedAs,
-        broken,
-        external,
-      });
+    edges.push.apply(edges, derived.edges);
+    warnings.push.apply(warnings, derived.warnings);
+    errors.push.apply(errors, derived.errors);
+    derived.externalReferences.forEach((uri) => {
+      externalReferences.set(uri, { uri, kind: "external" });
+    });
+    derived.customRelationTypes.forEach((type) => {
+      allowedRelationTypes.add(type);
     });
   });
 
   concepts.forEach((doc) => {
-    const contract = doc.signals && doc.signals.computation;
+    const contract = doc.signals?.computation;
     if (!contract) {
       return;
     }
@@ -1009,31 +440,7 @@ function buildIndex(bundleArgs, options) {
       (edge) =>
         edge.source === doc.uri && ["computation", "executor", "attester"].includes(edge.kind),
     );
-    const requiredKinds =
-      contract.computation && contract.computation.mode === "file"
-        ? ["computation", "executor", "attester"]
-        : ["executor", "attester"];
-    const assetsReady = requiredKinds.every((kind) => {
-      const edge = contractEdges.find((entry) => entry.kind === kind);
-      if (!edge || edge.broken) {
-        return false;
-      }
-      if (kind === "computation") {
-        if (edge.resolvedAs !== "asset") {
-          return false;
-        }
-        const asset = byAssetUri.get(edge.target);
-        return Boolean(asset && (!mimeIsText(asset.mimeType) || asset.kind === "text"));
-      }
-      if (edge.resolvedAs === "concept") {
-        return true;
-      }
-      if (edge.resolvedAs !== "asset") {
-        return false;
-      }
-      const asset = byAssetUri.get(edge.target);
-      return Boolean(asset && (!mimeIsText(asset.mimeType) || asset.kind === "text"));
-    });
+    const assetsReady = contractAssetsReady(contract, contractEdges, byAssetUri);
     contract.structuralReady = Boolean(contract.ready);
     contract.assetsReady = assetsReady;
     contract.ready = Boolean(contract.structuralReady && assetsReady);
@@ -1064,9 +471,7 @@ function buildIndex(bundleArgs, options) {
   bundles.forEach((bundle) => {
     const rootIndex = documents.find((doc) => doc.bundle === bundle.id && doc.path === "index.md");
     const okfVersion =
-      rootIndex &&
-      rootIndex.frontmatter &&
-      Object.prototype.hasOwnProperty.call(rootIndex.frontmatter, "okf_version")
+      rootIndex?.frontmatter && Object.hasOwn(rootIndex.frontmatter, "okf_version")
         ? rootIndex.frontmatter.okf_version
         : null;
     bundle.okfVersion = okfVersion === null ? null : String(okfVersion);
@@ -1143,79 +548,20 @@ function attachValidation(index) {
   return index;
 }
 
-function conceptSignals(doc, detailed) {
-  const signals = doc.signals || {};
-  const computation = signals.computation;
-  const output = {
-    status: signals.status,
-    staleAfter: signals.staleAfter,
-    freshness: signals.freshness,
-    asOf: signals.asOf,
-    trustTier: signals.trustTier,
-    sourceCount: Array.isArray(signals.sources) ? signals.sources.length : 0,
-    hasSources: Array.isArray(signals.sources) && signals.sources.length > 0,
-    sourcesOrigin: signals.sourcesOrigin,
-    generated: signals.generated,
-    generatedOrigin: signals.generatedOrigin,
-    computation: computation
-      ? {
-          runtime: computation.runtime,
-          mode: computation.computation && computation.computation.mode,
-          attestationReady: Boolean(computation.attestationReady),
-          structuralReady: Boolean(computation.structuralReady),
-          assetsReady: Boolean(computation.assetsReady),
-        }
-      : null,
-  };
-  if (detailed) {
-    output.resource = signals.resource;
-    output.sources = signals.sources || [];
-    output.usageWindow = signals.usageWindow;
-    output.verifiedEvents = signals.verifiedEvents || [];
-    output.diagnostics = signals.diagnostics || [];
-    if (computation) {
-      output.computation = Object.assign({}, computation);
-    }
-  }
-  return output;
-}
-
-function conceptSummary(doc) {
-  return {
-    uri: doc.uri,
-    bundle: doc.bundle,
-    path: doc.path,
-    pathUri: doc.pathUri,
-    conceptId: doc.conceptId,
-    uriAliases: doc.uriAliases || [],
-    type: doc.type,
-    title: doc.title,
-    description: doc.description,
-    tags: doc.tags,
-    aliases: doc.aliases,
-    signals: conceptSignals(doc, false),
-  };
-}
-
 module.exports = {
+  attachProject,
+  attachValidation,
   buildIndex,
   buildProjectIndex,
   buildProjectIndexAsync,
-  attachProject,
-  conceptSummary,
-  conceptSignals,
-  conceptIsGeneratedFile,
-  conceptMatchSummary,
   bundleAllowsPath,
   bundleExcludesPath,
-  findConceptMatches,
+  documentOverrideKey,
   loadProjectBundles,
-  normalizeConceptTitle,
   parseBundleArg,
-  recoverConceptLocator,
-  resolveLinkPath,
-  resolveConcept,
-  semanticReferences,
+  registerPortableConceptId,
   sanitizeBundleId,
+  uniqueBundleIds,
   validateIndex,
+  walkMarkdown,
 };
