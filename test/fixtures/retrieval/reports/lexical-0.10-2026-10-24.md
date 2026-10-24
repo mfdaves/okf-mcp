@@ -1,6 +1,6 @@
 # Retrieval evaluation — src/search.js
 
-Generated 2026-10-24T17:04:54.460Z · Node v24.17.0 (linux x64, gc exposed: false) · search module `src/search.js` · limit 10 · split all · bootstrap 1000 samples (seed 20261024)
+Generated 2026-10-24T17:25:49.712Z · Node v24.17.0 (linux x64, gc exposed: false) · search module `src/search.js` · limit 10 · split all · bootstrap 1000 samples (seed 20261024)
 
 Produced by `scripts/eval-search.js`. Routine runs write to the git-ignored `test/fixtures/retrieval/reports/latest.{json,md}`; a committed baseline is produced only with an explicit `--out test/fixtures/retrieval/reports/baseline-{date}`.
 
@@ -8,8 +8,8 @@ Produced by `scripts/eval-search.js`. Routine runs write to the git-ignored `tes
 
 | fixture | queries | Recall@5 (95% CI) | nDCG@10 (95% CI) | MRR@10 | P@1 | zero-result | no-answer returned any | lowConfidence P / R | p95 ms | RSS MB |
 |---|---|---|---|---|---|---|---|---|---|---|
-| alpinaria | 203 | 0.748 [0.703, 0.790] | 0.815 [0.779, 0.846] | 0.935 | 0.906 | 0.0% | 95.5% | 61.1% / 50.0% | 1.93 | 113 |
-| atlas | 99 | 0.760 [0.693, 0.823] | 0.790 [0.727, 0.846] | 0.867 | 0.820 | 0.0% | 100.0% | 63.6% / 70.0% | 3.45 | 152.3 |
+| alpinaria | 203 | 0.748 [0.703, 0.788] | 0.817 [0.782, 0.848] | 0.940 | 0.917 | 0.0% | 95.5% | 64.7% / 50.0% | 3.93 | 159.8 |
+| atlas | 99 | 0.760 [0.693, 0.823] | 0.789 [0.727, 0.846] | 0.871 | 0.831 | 0.0% | 100.0% | 63.6% / 70.0% | 4.30 | 170 |
 
 ## Fixture alpinaria
 
@@ -20,11 +20,11 @@ Queries: 203 (181 answerable, 22 no-answer, 52 with sectionAnchor)
 
 | metric | value | 95% CI |
 |---|---|---|
-| Recall@5 | 0.748 | [0.703, 0.790] |
+| Recall@5 | 0.748 | [0.703, 0.788] |
 | MustRecall@5 | 0.882 | [0.837, 0.923] |
-| nDCG@10 | 0.815 | [0.779, 0.846] |
-| MRR@10 | 0.935 | [0.901, 0.965] |
-| P@1 | 0.906 | [0.862, 0.950] |
+| nDCG@10 | 0.817 | [0.782, 0.848] |
+| MRR@10 | 0.940 | [0.907, 0.968] |
+| P@1 | 0.917 | [0.873, 0.956] |
 | hit@10 | 0.972 | – |
 | zero-result rate | 0.000 | [0.000, 0.000] |
 | distractor outranks | 11/34 | – |
@@ -33,14 +33,14 @@ Queries: 203 (181 answerable, 22 no-answer, 52 with sectionAnchor)
 
 | group | n | Recall@5 | MustRecall@5 | nDCG@10 | MRR@10 | P@1 | hit@10 | zero-result | distractor outranks |
 |---|---|---|---|---|---|---|---|---|---|
-| accent | 11 | 87.9% | 100.0% | 0.903 | 0.932 | 90.9% | 100.0% | 0.0% | – |
+| accent | 11 | 87.9% | 100.0% | 0.891 | 0.932 | 90.9% | 100.0% | 0.0% | – |
 | disambig | 12 | 65.3% | 83.3% | 0.767 | 1.000 | 100.0% | 100.0% | 0.0% | 2/12 |
-| exact | 18 | 88.5% | 88.9% | 0.878 | 0.907 | 83.3% | 100.0% | 0.0% | 0/1 |
+| exact | 18 | 88.5% | 88.9% | 0.913 | 0.963 | 94.4% | 100.0% | 0.0% | 0/1 |
 | freshness | 11 | 78.8% | 90.9% | 0.786 | 1.000 | 100.0% | 100.0% | 0.0% | 7/11 |
 | keyword | 22 | 86.0% | 90.9% | 0.893 | 1.000 | 100.0% | 100.0% | 0.0% | 0/2 |
-| mixed-lang | 14 | 73.8% | 96.4% | 0.836 | 1.000 | 100.0% | 100.0% | 0.0% | 1/2 |
+| mixed-lang | 14 | 73.8% | 96.4% | 0.835 | 1.000 | 100.0% | 100.0% | 0.0% | 1/2 |
 | morph | 16 | 69.3% | 88.5% | 0.803 | 0.906 | 87.5% | 93.8% | 0.0% | 0/1 |
-| nl-task | 52 | 74.4% | 89.4% | 0.825 | 0.942 | 92.3% | 96.2% | 0.0% | 1/5 |
+| nl-task | 52 | 74.4% | 89.4% | 0.826 | 0.942 | 92.3% | 96.2% | 0.0% | 1/5 |
 | playbook | 9 | 60.2% | 88.9% | 0.724 | 0.847 | 77.8% | 100.0% | 0.0% | – |
 | synonym | 16 | 55.7% | 65.6% | 0.638 | 0.781 | 68.8% | 87.5% | 0.0% | – |
 
@@ -48,21 +48,21 @@ Queries: 203 (181 answerable, 22 no-answer, 52 with sectionAnchor)
 
 | group | n | Recall@5 | MustRecall@5 | nDCG@10 | MRR@10 | P@1 | hit@10 | zero-result | distractor outranks |
 |---|---|---|---|---|---|---|---|---|---|
-| en | 85 | 72.6% | 87.1% | 0.790 | 0.905 | 85.9% | 96.5% | 0.0% | 7/20 |
-| it | 80 | 78.1% | 87.7% | 0.842 | 0.959 | 95.0% | 97.5% | 0.0% | 3/12 |
-| mixed | 16 | 70.8% | 96.9% | 0.809 | 0.969 | 93.8% | 100.0% | 0.0% | 1/2 |
+| en | 85 | 73.0% | 87.1% | 0.797 | 0.917 | 88.2% | 96.5% | 0.0% | 7/20 |
+| it | 80 | 77.6% | 87.7% | 0.840 | 0.959 | 95.0% | 97.5% | 0.0% | 3/12 |
+| mixed | 16 | 70.8% | 96.9% | 0.808 | 0.969 | 93.8% | 100.0% | 0.0% | 1/2 |
 
 ### By split
 
 | group | n | Recall@5 | MustRecall@5 | nDCG@10 | MRR@10 | P@1 | hit@10 | zero-result | distractor outranks |
 |---|---|---|---|---|---|---|---|---|---|
-| dev | 129 | 74.8% | 88.4% | 0.819 | 0.953 | 93.8% | 97.7% | 0.0% | 9/26 |
-| heldout | 52 | 74.9% | 87.8% | 0.804 | 0.891 | 82.7% | 96.2% | 0.0% | 2/8 |
+| dev | 129 | 74.8% | 88.4% | 0.816 | 0.949 | 93.0% | 97.7% | 0.0% | 9/26 |
+| heldout | 52 | 74.9% | 87.8% | 0.820 | 0.920 | 88.5% | 96.2% | 0.0% | 2/8 |
 
 ### No-answer queries
 
 Returned at least one result: 21/22 (95.5%); zero results: 4.5%.  
-lowConfidence (mode === "any" && top1.coverage < 0.5): flagged 11/22 no-answer (recall 50.0%), 7 answerable (4 with a relevant top-1); precision 61.1%.
+lowConfidence (mode === "any" && top1.coverage < 0.5): flagged 11/22 no-answer (recall 50.0%), 6 answerable (4 with a relevant top-1); precision 64.7%.
 
 | id | split | query | returned | mode | top-1 coverage | flagged |
 |---|---|---|---|---|---|---|
@@ -93,13 +93,13 @@ lowConfidence (mode === "any" && top1.coverage < 0.5): flagged 11/22 no-answer (
 
 | metric | value |
 |---|---|
-| query latency p50 | 1.31 ms |
-| query latency p95 | 1.93 ms |
-| query latency mean / max | 1.38 / 2.35 ms |
-| OKF index build | 86.1 ms |
-| search index prepare | 73.4 ms |
-| warm-up pass | 415.1 ms |
-| RSS before build / after build / end | 60 / 112.1 / 113 MB |
+| query latency p50 | 2.22 ms |
+| query latency p95 | 3.93 ms |
+| query latency mean / max | 2.45 / 7.46 ms |
+| OKF index build | 86.3 ms |
+| search index prepare | 79.2 ms |
+| warm-up pass | 626.7 ms |
+| RSS before build / after build / end | 59.5 / 122.2 / 159.8 MB |
 
 ### Per query (answerable)
 
@@ -128,16 +128,16 @@ lowConfidence (mode === "any" && top1.coverage < 0.5): flagged 11/22 no-answer (
 | Q21 | dev | mixed-lang | mixed | finding pile traffico | 2 | 1 | 1 | alpinaria/seo-findings/calo-traffico-pile-autunno-2026 (2) | – |
 | Q22 | dev | mixed-lang | mixed | policy claim riciclato | 4 | 1 | 1 | alpinaria/policies/green-claims (2) | – |
 | Q23 | heldout | mixed-lang | mixed | brief guida scarponi invernali women | 10 | 1 | 1 | alpinaria/content-briefs/guida-scarponi-invernali-donna (2) | – |
-| Q24 | heldout | exact | en | TRK-W-042 | 4 | 2 | 2 | alpinaria/products/trk-m-042-dolomiti-aquastop-m (0) | – |
-| Q25 | dev | exact | en | /en/womens-winter-hiking-boots/ | 10 | 1 | 1 | alpinaria/landing-pages/en-womens-winter-hiking-boots (2) | no |
+| Q24 | heldout | exact | en | TRK-W-042 | 3 | 1 | 1 | alpinaria/products/trk-w-042-dolomiti-aquastop-w (2) | – |
+| Q25 | dev | exact | en | /en/womens-winter-hiking-boots/ | 6 | 1 | 1 | alpinaria/landing-pages/en-womens-winter-hiking-boots (2) | no |
 | Q26 | heldout | exact | en | AquaStop | 10 | 3 | miss | alpinaria/products/trk-m-042-dolomiti-aquastop-m (0) | – |
 | Q27 | dev | exact | it | Montevia | 5 | 1 | 1 | alpinaria/competitors/montevia (2) | – |
 | Q28 | dev | exact | it | /scarponi-da-trekking/donna/ | 10 | 1 | 1 | alpinaria/landing-pages/it-scarponi-da-trekking-donna (2) | – |
 | Q29 | dev | exact | en | JKT-U-310 | 2 | 1 | 1 | alpinaria/products/jkt-u-310-vetta-guscio-u (2) | – |
-| Q30 | dev | exact | en | x-default | 4 | 1 | 2,1 | alpinaria/experiments/hreflang-x-default-en (2) | – |
+| Q30 | dev | exact | en | x-default | 3 | 1 | 2,1 | alpinaria/experiments/hreflang-x-default-en (2) | – |
 | Q31 | dev | morph | it | scarpone trekking donna | 10 | 1 | 3,1 | alpinaria/landing-pages/it-scarponi-da-trekking-donna (2) | – |
-| Q32 | dev | morph | en | canonicalize filtered category pages | 10 | miss | miss,miss | alpinaria/technical-issues/inp-filtri-plp (0) | – |
-| Q33 | dev | morph | it | impermeabilizzazione scarponi | 5 | 1 | 2,1 | alpinaria/content-briefs/guida-impermeabilizzare-scarponi (2) | – |
+| Q32 | dev | morph | en | canonicalize filtered category pages | 10 | miss | miss,miss | playbook/guidelines/pagination (0) | – |
+| Q33 | dev | morph | it | impermeabilizzazione scarponi | 5 | 1 | 1,2 | alpinaria/seo-findings/featured-snippet-impermeabilizzare (2) | – |
 | Q34 | heldout | morph | en | redirects outlet | 3 | 1 | 1,2 | alpinaria/technical-issues/redirect-chains-outlet (2) | – |
 | Q35 | dev | morph | it | pagina categoria duplicata | 2 | 1 | 1,2 | alpinaria/decisions/canonical-pagine-categoria-duplicate (2) | – |
 | Q36 | heldout | morph | en | missing alt texts images | 2 | 2 | miss,2 | playbook/guidelines/image-alt-text (0) | – |
@@ -197,9 +197,9 @@ lowConfidence (mode === "any" && top1.coverage < 0.5): flagged 11/22 no-answer (
 | Q98 | dev | mixed-lang | mixed | competitor scarpe da avvicinamento | 1 | 1 | 1 | alpinaria/competitors/rocciaviva (2) | – |
 | Q99 | heldout | mixed-lang | mixed | experiment title prezzo da 149 | 1 | 1 | 1 | alpinaria/experiments/title-tag-prezzo-scarponi-donna (2) | – |
 | Q100 | heldout | mixed-lang | mixed | brief merino socks vesciche | 10 | 1 | 1 | alpinaria/content-briefs/en-merino-socks-benefits (2) | – |
-| Q101 | dev | mixed-lang | mixed | finding crawl depth pagine inglesi | 10 | 1 | 1,4 | alpinaria/seo-findings/mobile-menu-crawl-depth (2) | – |
+| Q101 | dev | mixed-lang | mixed | finding crawl depth pagine inglesi | 10 | 1 | 1,5 | alpinaria/seo-findings/mobile-menu-crawl-depth (2) | – |
 | Q102 | dev | mixed-lang | mixed | policy claim medici | 4 | 1 | 1 | alpinaria/policies/medical-health-claims (2) | – |
-| Q103 | heldout | exact | en | WIN-W-309 | 7 | 2 | 2 | alpinaria/products/win-m-309-nevaio-polar-m (0) | – |
+| Q103 | heldout | exact | en | WIN-W-309 | 6 | 1 | 1 | alpinaria/products/win-w-309-nevaio-polar-w (2) | – |
 | Q104 | dev | exact | it | SCK-U-705 | 4 | 1 | 1 | alpinaria/products/sck-u-705-rifugio-calze-merino-heavy-u (2) | – |
 | Q105 | dev | exact | en | /en/approach-shoes/ | 10 | 1 | 1 | alpinaria/landing-pages/en-approach-shoes (2) | – |
 | Q106 | dev | exact | it | /abbigliamento/pile/ | 2 | 1 | 1 | alpinaria/landing-pages/it-pile (2) | – |
@@ -207,7 +207,7 @@ lowConfidence (mode === "any" && top1.coverage < 0.5): flagged 11/22 no-answer (
 | Q108 | heldout | exact | it | Dolomyths | 1 | 1 | 1 | alpinaria/audiences/trail-runner (2) | – |
 | Q109 | dev | exact | en | fetchpriority | 1 | 1 | miss | alpinaria/technical-issues/lcp-immagini-prodotto-mobile (1) | – |
 | Q110 | heldout | exact | it | art. 17-bis | 1 | 1 | 1 | alpinaria/policies/price-promo-claims (2) | – |
-| Q111 | dev | exact | en | TRL-M-404 | 4 | 1 | 1 | alpinaria/products/trl-m-404-torrente-rapido-pro-m (2) | – |
+| Q111 | dev | exact | en | TRL-M-404 | 3 | 1 | 1 | alpinaria/products/trl-m-404-torrente-rapido-pro-m (2) | – |
 | Q112 | dev | exact | en | Elisa Dalla Costa | 1 | 1 | 1 | alpinaria/content-briefs/en-what-to-pack-dolomites (2) | – |
 | Q113 | heldout | exact | en | /outlet/ | 10 | 1 | 1 | alpinaria/landing-pages/it-outlet (2) | – |
 | Q114 | heldout | morph | it | pantaloni zip-off | 2 | 1 | miss,1,2 | alpinaria/products/pnt-m-810-passo-zip-off-m (2) | – |
@@ -221,7 +221,7 @@ lowConfidence (mode === "any" && top1.coverage < 0.5): flagged 11/22 no-answer (
 | Q122 | heldout | morph | it | cannibalizzazioni tra pagine | 3 | 1 | 1 | alpinaria/seo-findings/cannibalizzazione-scarponi-donna (2) | – |
 | Q123 | dev | morph | en | hydrating the filter widget | 3 | 1 | 1 | alpinaria/technical-issues/inp-filtri-plp (2) | no |
 | Q124 | heldout | accent | it | priorita editoriale 2027 | 3 | 1 | 1 | alpinaria/decisions/trail-running-line-priority-2027 (2) | – |
-| Q125 | dev | accent | it | sneaker Baita Citta | 3 | 1 | 1,2 | alpinaria/products/lfs-w-901-baita-citt-w (2) | – |
+| Q125 | dev | accent | it | sneaker Baita Citta | 3 | 1 | 2,3 | alpinaria/product-lines/baita (1) | – |
 | Q126 | dev | accent | it | stagionalita cluster scarponi donna | 1 | 1 | 1 | alpinaria/keyword-clusters/scarponi-trekking-donna-transazionale (2) | – |
 | Q127 | dev | accent | it | profondita di catalogo Montevia | 1 | 1 | 1 | alpinaria/seo-findings/competitor-montevia-serp-share (2) | – |
 | Q128 | dev | accent | it | disponibilità immediata famiglie | 1 | 1 | 1 | alpinaria/audiences/famiglie-in-montagna (2) | – |
@@ -229,9 +229,9 @@ lowConfidence (mode === "any" && top1.coverage < 0.5): flagged 11/22 no-answer (
 | Q130 | dev | accent | it | gravita alta problemi tecnici | 10 | 4 | 4 | alpinaria/audiences/alpinisti-esperti (0) | – |
 | Q131 | dev | synonym | en | insulated boots for snowshoeing | 1 | 1 | miss,miss | alpinaria/content-briefs/en-how-to-choose-winter-hiking-boots (1) | – |
 | Q132 | dev | synonym | it | scarpe basse per camminare | 2 | 1 | 1,2 | alpinaria/keyword-clusters/scarpe-trekking-leggere (2) | – |
-| Q133 | heldout | synonym | en | star ratings in search results | 10 | 2 | 2 | playbook/guidelines/search-intent-taxonomy (0) | – |
+| Q133 | heldout | synonym | en | star ratings in search results | 10 | 1 | 1 | alpinaria/experiments/product-schema-aggregate-rating (2) | – |
 | Q134 | dev | synonym | it | marketplace che rivende i nostri prodotti a prezzo più basso | 10 | 1 | 1 | alpinaria/competitors/quota3000 (2) | – |
-| Q135 | dev | synonym | en | slow filters on category pages | 10 | 1 | 1 | alpinaria/technical-issues/inp-filtri-plp (2) | – |
+| Q135 | dev | synonym | en | slow filters on category pages | 10 | 2 | 2 | playbook/guidelines/pagination (0) | – |
 | Q136 | heldout | synonym | it | pulizia delle scarpe in pelle | 10 | 1 | 1,miss | alpinaria/landing-pages/it-guida-cura-scarponi (2) | – |
 | Q137 | heldout | synonym | en | German shoppers | 4 | 2 | 2 | alpinaria/competitors/nordpasso (0) | – |
 | Q138 | dev | synonym | it | testi troppo corti nelle schede Torrente | 10 | 1 | 9,1 | alpinaria/content-briefs/torrente-product-copy-refresh (2) | – |
@@ -298,9 +298,9 @@ Queries: 99 (89 answerable, 10 no-answer, 58 with sectionAnchor)
 |---|---|---|
 | Recall@5 | 0.760 | [0.693, 0.823] |
 | MustRecall@5 | 0.893 | [0.820, 0.955] |
-| nDCG@10 | 0.790 | [0.727, 0.846] |
-| MRR@10 | 0.867 | [0.805, 0.929] |
-| P@1 | 0.820 | [0.742, 0.899] |
+| nDCG@10 | 0.789 | [0.727, 0.846] |
+| MRR@10 | 0.871 | [0.810, 0.931] |
+| P@1 | 0.831 | [0.753, 0.899] |
 | hit@10 | 0.944 | – |
 | zero-result rate | 0.000 | [0.000, 0.000] |
 | distractor outranks | 1/9 | – |
@@ -310,35 +310,35 @@ Queries: 99 (89 answerable, 10 no-answer, 58 with sectionAnchor)
 | group | n | Recall@5 | MustRecall@5 | nDCG@10 | MRR@10 | P@1 | hit@10 | zero-result | distractor outranks |
 |---|---|---|---|---|---|---|---|---|---|
 | accent | 4 | 83.3% | 100.0% | 0.910 | 1.000 | 100.0% | 100.0% | 0.0% | – |
-| disambig | 6 | 94.4% | 100.0% | 0.950 | 1.000 | 100.0% | 100.0% | 0.0% | 0/6 |
+| disambig | 6 | 94.4% | 100.0% | 0.935 | 1.000 | 100.0% | 100.0% | 0.0% | 0/6 |
 | exact | 8 | 100.0% | 100.0% | 0.992 | 1.000 | 100.0% | 100.0% | 0.0% | – |
 | freshness | 3 | 63.9% | 66.7% | 0.614 | 0.833 | 66.7% | 100.0% | 0.0% | 1/3 |
 | keyword | 9 | 95.6% | 100.0% | 0.972 | 1.000 | 100.0% | 100.0% | 0.0% | – |
-| mixed-lang | 4 | 79.2% | 75.0% | 0.680 | 0.833 | 75.0% | 100.0% | 0.0% | – |
-| morph | 6 | 61.1% | 91.7% | 0.787 | 1.000 | 100.0% | 100.0% | 0.0% | – |
-| nl-task | 39 | 75.0% | 89.7% | 0.780 | 0.861 | 82.1% | 92.3% | 0.0% | – |
-| standards | 4 | 37.5% | 75.0% | 0.506 | 0.358 | 0.0% | 100.0% | 0.0% | – |
+| mixed-lang | 4 | 79.2% | 75.0% | 0.652 | 0.800 | 75.0% | 100.0% | 0.0% | – |
+| morph | 6 | 61.1% | 91.7% | 0.769 | 1.000 | 100.0% | 100.0% | 0.0% | – |
+| nl-task | 39 | 75.0% | 89.7% | 0.779 | 0.861 | 82.1% | 92.3% | 0.0% | – |
+| standards | 4 | 37.5% | 75.0% | 0.567 | 0.486 | 25.0% | 100.0% | 0.0% | – |
 | synonym | 6 | 41.7% | 66.7% | 0.426 | 0.556 | 50.0% | 66.7% | 0.0% | – |
 
 ### By language
 
 | group | n | Recall@5 | MustRecall@5 | nDCG@10 | MRR@10 | P@1 | hit@10 | zero-result | distractor outranks |
 |---|---|---|---|---|---|---|---|---|---|
-| en | 58 | 73.2% | 88.8% | 0.782 | 0.872 | 82.8% | 94.8% | 0.0% | 1/7 |
-| it | 27 | 81.5% | 92.6% | 0.823 | 0.861 | 81.5% | 92.6% | 0.0% | 0/2 |
-| mixed | 4 | 79.2% | 75.0% | 0.680 | 0.833 | 75.0% | 100.0% | 0.0% | – |
+| en | 58 | 73.2% | 88.8% | 0.780 | 0.873 | 82.8% | 94.8% | 0.0% | 1/7 |
+| it | 27 | 81.5% | 92.6% | 0.829 | 0.880 | 85.2% | 92.6% | 0.0% | 0/2 |
+| mixed | 4 | 79.2% | 75.0% | 0.652 | 0.800 | 75.0% | 100.0% | 0.0% | – |
 
 ### By split
 
 | group | n | Recall@5 | MustRecall@5 | nDCG@10 | MRR@10 | P@1 | hit@10 | zero-result | distractor outranks |
 |---|---|---|---|---|---|---|---|---|---|
-| dev | 62 | 74.9% | 91.1% | 0.784 | 0.860 | 80.6% | 95.2% | 0.0% | 1/6 |
-| heldout | 27 | 78.5% | 85.2% | 0.805 | 0.883 | 85.2% | 92.6% | 0.0% | 0/3 |
+| dev | 62 | 74.9% | 91.1% | 0.783 | 0.867 | 82.3% | 95.2% | 0.0% | 1/6 |
+| heldout | 27 | 78.5% | 85.2% | 0.801 | 0.883 | 85.2% | 92.6% | 0.0% | 0/3 |
 
 ### No-answer queries
 
 Returned at least one result: 10/10 (100.0%); zero results: 0.0%.  
-lowConfidence (mode === "any" && top1.coverage < 0.5): flagged 7/10 no-answer (recall 70.0%), 4 answerable (0 with a relevant top-1); precision 63.6%.
+lowConfidence (mode === "any" && top1.coverage < 0.5): flagged 7/10 no-answer (recall 70.0%), 4 answerable (1 with a relevant top-1); precision 63.6%.
 
 | id | split | query | returned | mode | top-1 coverage | flagged |
 |---|---|---|---|---|---|---|
@@ -357,13 +357,13 @@ lowConfidence (mode === "any" && top1.coverage < 0.5): flagged 7/10 no-answer (r
 
 | metric | value |
 |---|---|
-| query latency p50 | 2.78 ms |
-| query latency p95 | 3.45 ms |
-| query latency mean / max | 2.84 / 4.35 ms |
-| OKF index build | 40.6 ms |
-| search index prepare | 48.2 ms |
-| warm-up pass | 345.8 ms |
-| RSS before build / after build / end | 113.2 / 152.2 / 152.3 MB |
+| query latency p50 | 3.09 ms |
+| query latency p95 | 4.30 ms |
+| query latency mean / max | 3.21 / 4.43 ms |
+| OKF index build | 41.7 ms |
+| search index prepare | 63.1 ms |
+| warm-up pass | 371.6 ms |
+| RSS before build / after build / end | 160.6 / 169.4 / 170 MB |
 
 ### Per query (answerable)
 
@@ -379,7 +379,7 @@ lowConfidence (mode === "any" && top1.coverage < 0.5): flagged 7/10 no-answer (r
 | A08 | dev | nl-task | en | what is the error budget for the API gateway? | 1 | 1 | 1 | atlas/slos/api-gateway-availability (2) | – |
 | A09 | dev | nl-task | it | perché il login SPID non funzionava ad aprile? | 10 | 1 | 1,5 | atlas/incidents/inc-2026-013-spid-login-down (2) | – |
 | A10 | dev | nl-task | en | where do we store the EMV token for tap-to-ride? | 1 | 1 | 1 | atlas/decisions/adr-014-emv-contactless-tokenization (2) | – |
-| A11 | dev | nl-task | en | what should happen before activating a new fare table? | 10 | 2 | 2 | atlas/services/fare-engine (0) | – |
+| A11 | dev | nl-task | en | what should happen before activating a new fare table? | 10 | 2 | 3 | atlas/services/fare-engine (0) | – |
 | A12 | heldout | nl-task | it | quale team possiede il warehouse? | 10 | 1 | 2 | atlas/services/reporting-warehouse (1) | – |
 | A13 | dev | keyword | en | fencing token | 2 | 1 | 1 | atlas/incidents/inc-2026-027-subscription-renewal-duplicate (2) | – |
 | A14 | heldout | keyword | en | RAPTOR | 2 | 1 | 1 | atlas/decisions/adr-005-raptor-trip-planner (2) | – |
@@ -390,13 +390,13 @@ lowConfidence (mode === "any" && top1.coverage < 0.5): flagged 7/10 no-answer (r
 | A19 | dev | keyword | en | advisory lock | 2 | 1 | 1 | atlas/incidents/inc-2026-027-subscription-renewal-duplicate (2) | – |
 | A20 | heldout | keyword | en | TTL | 6 | 1 | 1,2 | atlas/incidents/inc-2026-018-clickhouse-disk-full (2) | – |
 | A21 | dev | keyword | en | Temporal | 3 | 1 | 2 | atlas/runbooks/refund-queue-unstick (1) | – |
-| A22 | dev | mixed-lang | mixed | runbook riconciliazione wallet | 10 | 3 | 3 | atlas/runbooks/pagopa-reconciliation (0) | – |
+| A22 | dev | mixed-lang | mixed | runbook riconciliazione wallet | 10 | 5 | 5 | atlas/runbooks/pagopa-reconciliation (0) | – |
 | A23 | dev | mixed-lang | mixed | incident timeout nodo pagoPA | 3 | 1 | 1 | atlas/incidents/inc-2026-007-pagopa-timeout (2) | – |
 | A24 | heldout | mixed-lang | mixed | SLO freschezza cruscotti operatori | 1 | 1 | miss | atlas/questions/q-007-on-call-compensation (1) | – |
 | A25 | dev | mixed-lang | mixed | ADR dismissione SBE | 4 | 1 | 1 | atlas/decisions/adr-017-retire-legacy-sbe (2) | – |
 | A26 | dev | exact | en | INC-2026-011 | 2 | 1 | 1 | atlas/incidents/inc-2026-011-kafka-partition-lag (2) | – |
 | A27 | dev | exact | en | ADR-012 | 3 | 1 | 1 | atlas/decisions/adr-012-outbox-pattern (2) | – |
-| A28 | dev | exact | en | ticketing.validations.v2 | 10 | 1 | 1 | atlas/contracts/ticket-validated-v2 (2) | – |
+| A28 | dev | exact | en | ticketing.validations.v2 | 2 | 1 | 1 | atlas/contracts/ticket-validated-v2 (2) | – |
 | A29 | heldout | exact | en | partners.tessera.it | 2 | 1 | 1,2 | atlas/incidents/inc-2026-020-api-gateway-cert-expiry (2) | – |
 | A30 | dev | exact | en | kill.notification-hub.marketing | 2 | 1 | 1 | atlas/runbooks/notification-rate-limit (2) | – |
 | A31 | dev | exact | it | ORA-01653 | 1 | 1 | 1 | atlas/incidents/inc-2025-041-legacy-sbe-crash (2) | – |
@@ -407,7 +407,7 @@ lowConfidence (mode === "any" && top1.coverage < 0.5): flagged 7/10 no-answer (r
 | A36 | dev | morph | en | renewing certificates | 2 | 1 | 1 | atlas/runbooks/certificate-renewal (2) | – |
 | A37 | dev | morph | en | partitioned ledger tables | 3 | 1 | 1,miss | atlas/services/validation-ledger (2) | – |
 | A38 | heldout | morph | it | sanzione duplicata | 3 | 1 | 1 | atlas/incidents/inc-2026-025-inspector-app-sync (2) | – |
-| A39 | heldout | morph | en | consumers lagging | 6 | 1 | 1,2 | atlas/incidents/inc-2026-011-kafka-partition-lag (2) | – |
+| A39 | heldout | morph | en | consumers lagging | 6 | 1 | 1,4 | atlas/incidents/inc-2026-011-kafka-partition-lag (2) | – |
 | A40 | dev | accent | it | reperibilita team dati | 1 | 1 | 1 | atlas/questions/q-007-on-call-compensation (2) | – |
 | A41 | heldout | accent | it | team mobilita | 10 | 1 | 1 | atlas/teams/team-mobilita (2) | – |
 | A42 | dev | accent | it | nuove funzionalita SBE | 2 | 1 | 1,2 | atlas/services/legacy-sbe (2) | – |
@@ -427,9 +427,9 @@ lowConfidence (mode === "any" && top1.coverage < 0.5): flagged 7/10 no-answer (r
 | A56 | heldout | disambig | en | validator gateway latency SLO | 2 | 1 | 1 | atlas/slos/validator-gateway-ingest-latency (2) | no |
 | A57 | dev | disambig | it | post-mortem dei validatori in italiano | 10 | 1 | 1 | atlas/postmortems/pm-2026-001-validator-outage (2) | no |
 | A58 | dev | disambig | en | team that owns the API gateway | 3 | 1 | 2 | atlas/services/api-gateway (1) | no |
-| A69 | dev | standards | en | when must a post-mortem be written? | 10 | 10 | 10 | atlas/postmortems/pm-2026-020-cert-expiry (0) | – |
+| A69 | dev | standards | en | when must a post-mortem be written? | 10 | 9 | 9 | atlas/postmortems/pm-2026-020-cert-expiry (0) | – |
 | A70 | dev | standards | en | burn rate alert thresholds | 10 | 2 | 2 | atlas/runbooks/notification-rate-limit (0) | – |
-| A71 | dev | standards | it | convenzione per i nomi dei topic | 10 | 2 | 2 | atlas/runbooks/replay-kafka-topic (0) | – |
+| A71 | dev | standards | it | convenzione per i nomi dei topic | 10 | 1 | 1 | standards/standards/service-naming (2) | – |
 | A72 | heldout | standards | en | how long does a deprecated REST major live | 10 | 3 | 3,4 | atlas/contracts/ticket-validated-v1 (0) | – |
 | A73 | dev | nl-task | en | what are the consequences of the outbox decision? | 1 | 1 | 1 | atlas/decisions/adr-012-outbox-pattern (2) | – |
 | A74 | dev | nl-task | it | quali sono le conseguenze dell'integrazione diretta con pagoPA? | 1 | 1 | 1 | atlas/decisions/adr-009-pagopa-direct-integration (2) | – |
