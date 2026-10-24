@@ -465,8 +465,46 @@ test("write mode: refused batches and policy violations never echo catalog text"
   assert.equal(stderr(), "");
 });
 
-test("malformed frontmatter: diagnostics name the position, never the source text", async (t) => {
+test("malformed catalog values: diagnostics and receipts name positions and paths, never text", async (t) => {
   const { root } = makeFixture(t);
+  // An undeclared relation type and a duplicated computation parameter are
+  // named in their messages only when they are plain identifiers; these
+  // tokens contain a space, so they never are.
+  const badRelation = token("reltype", "4 x");
+  const badParameter = token("param", "5 x");
+  write(
+    root,
+    "broken/relation.md",
+    [
+      "---",
+      "type: Reference",
+      "title: Relation",
+      "relations:",
+      `  - type: "${badRelation}"`,
+      "    target: /concepts/concept-1.md",
+      "---",
+      "",
+      "# Relation",
+      "",
+    ].join("\n"),
+  );
+  write(
+    root,
+    "broken/computation.md",
+    [
+      "---",
+      "type: Attested Computation",
+      "title: Computation",
+      "runtime: python",
+      "parameters:",
+      `  - { name: "${badParameter}", type: string, required: true }`,
+      `  - { name: "${badParameter}", type: string, required: true }`,
+      "---",
+      "",
+      "# Computation",
+      "",
+    ].join("\n"),
+  );
   // js-yaml's own message would quote these lines in a code frame, and its
   // unknown-tag reason would quote the tag.
   write(
@@ -502,7 +540,44 @@ test("malformed frontmatter: diagnostics name the position, never the source tex
       })
     ).content[0].text,
   );
-  const messages = messagesIn([report, preview], []);
+  // A batch that itself carries a bad relation type: refused by apply,
+  // reported by the validator.
+  const relationBatch = {
+    changes: [
+      {
+        op: "create",
+        path: "ok/related.md",
+        type: "Reference",
+        title: "Related",
+        relations: [{ type: token("reltype", "6 x"), target: "/concepts/concept-2.md" }],
+      },
+    ],
+  };
+  const receipts = [];
+  for (const name of ["okf_validate_changes", "okf_apply_changes"]) {
+    const result = await client.callTool({ name, arguments: relationBatch });
+    receipts.push(JSON.parse(result.content[0].text));
+  }
+  assert.equal(receipts[1].applied, false);
+  const messages = messagesIn([report, preview, receipts], []);
+  assert.ok(
+    messages.some((message) =>
+      /^Unsupported relation type \(unlisted\) on okf:\/\/catalog\/broken\/relation$/.test(message),
+    ),
+    "the relation message names the concept",
+  );
+  assert.ok(
+    messages.some((message) =>
+      /^Unsupported relation type \(unlisted\) on okf:\/\/catalog\/ok\/related$/.test(message),
+    ),
+    "the candidate's relation message names the candidate",
+  );
+  assert.ok(
+    messages.includes(
+      "Duplicate computation parameter (unlisted) on broken/computation.md (parameters[1].name)",
+    ),
+    "the duplicate parameter message names the concept and field",
+  );
   const yamlMessages = new Set(
     messages.filter((message) => message.startsWith("Invalid YAML frontmatter")),
   );
@@ -516,8 +591,41 @@ test("malformed frontmatter: diagnostics name the position, never the source tex
       `${expected} among ${[...yamlMessages].join(" | ")}`,
     );
   }
-  for (const message of messages) assertClean("malformed frontmatter diagnostic", message);
+  for (const message of messages) assertClean("malformed catalog diagnostic", message);
+
+  // The proposal validator checks relation types on its own path.
+  const proposals = await connectBinary(t, ["--root", root, "--authoring"]);
+  const proposed = await failingCall(proposals.client, "okf_propose_concept", {
+    path: "ok/proposed.md",
+    frontmatter: {
+      type: "Reference",
+      title: "Proposed",
+      relations: [{ type: token("reltype", "7 x"), target: "/concepts/concept-3.md" }],
+    },
+    body: "# Proposed",
+  });
+  assert.ok(
+    proposed.messages.includes("Unsupported relation type (unlisted) on okf://catalog/ok/proposed"),
+    proposed.messages.join(" | "),
+  );
+  for (const message of proposed.messages) assertClean("proposal diagnostic", message);
+  // An identifier is still named, so an operator can fix it (custom types
+  // are allowed in --root mode, but not with a slash).
+  const typo = await failingCall(proposals.client, "okf_propose_concept", {
+    path: "ok/typo.md",
+    frontmatter: {
+      type: "Reference",
+      title: "Typo",
+      relations: [{ type: "relates/to", target: "/concepts/concept-3.md" }],
+    },
+    body: "# Typo",
+  });
+  assert.ok(
+    typo.messages.includes("Unsupported relation type relates/to on okf://catalog/ok/typo"),
+    typo.messages.join(" | "),
+  );
   assert.equal(stderr(), "");
+  assert.equal(proposals.stderr(), "");
 });
 
 test("YAML errors name a fixed category and the position, never the source", () => {

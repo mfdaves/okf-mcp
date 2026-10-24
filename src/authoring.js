@@ -14,6 +14,7 @@ const {
 const { deriveConceptPathSuggestion, normalizeConceptPath, slug } = require("./authoring/paths");
 const { renderConceptMarkdown, renderFrontmatter } = require("./authoring/render");
 const { isExternalReference, isLocalAssetReference, resolveBundleAssetPath } = require("./assets");
+const { displayIdentifier } = require("./catalog-text");
 const { buildV02MigrationPlan, checkV02Migration } = require("./migration");
 const { validateIndex } = require("./validation");
 
@@ -344,7 +345,7 @@ class ConceptAuthoringService {
             bundle: bundleId,
             path: doc.path,
             relationType: type,
-            message: `Unsupported relation type: ${type}`,
+            message: `Unsupported relation type ${displayIdentifier(type)} on ${doc.uri || doc.path}`,
           });
         }
         let target = index.byUri.get(targetUri);

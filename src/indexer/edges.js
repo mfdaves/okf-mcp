@@ -3,6 +3,7 @@
 const path = require("node:path");
 const { normalizeSlashes, safeRelativePath } = require("../parser");
 const { isExternalReference, isLocalAssetReference, mimeIsText } = require("../assets");
+const { displayIdentifier } = require("../catalog-text");
 
 function documentAtPath(documentsByPath, pathUri) {
   if (!documentsByPath || typeof documentsByPath.get !== "function") {
@@ -245,7 +246,7 @@ function documentEdges(doc, bundle, lookups, config) {
           bundle: doc.bundle,
           path: doc.path,
           relationType: type,
-          message: `Unsupported relation type: ${type}`,
+          message: `Unsupported relation type ${displayIdentifier(type)} on ${doc.uri || doc.path}`,
         });
       } else if (allowCustomRelationTypes && safeCustomType) {
         customRelationTypes.push(type);

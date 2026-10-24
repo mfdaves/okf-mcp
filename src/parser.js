@@ -484,7 +484,7 @@ function parseMarkdownText(bundle, relativePath, text, sourcePath, options) {
   const uri = `okf://${bundle.id}/${conceptId}`;
   const customId = customIdValid ? frontmatter.id : null;
   const signals = normalizeV02Signals(
-    { frontmatter, body: split.body },
+    { frontmatter, body: split.body, path: relativePath },
     {
       asOf: options && options.asOf,
     },

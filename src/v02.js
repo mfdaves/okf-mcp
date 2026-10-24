@@ -1,5 +1,6 @@
 "use strict";
 
+const { displayIdentifier } = require("./catalog-text");
 const { itemLiteral, markdownStructure, sectionNodes } = require("./markdown");
 
 function isPlainObject(value) {
@@ -435,7 +436,7 @@ function extractInlineComputation(body) {
   };
 }
 
-function normalizeParameters(value, diagnostics) {
+function normalizeParameters(value, diagnostics, location) {
   if (value === undefined) {
     return [];
   }
@@ -477,7 +478,7 @@ function normalizeParameters(value, diagnostics) {
         diagnostic(
           "duplicate_computation_parameter",
           `${field}.name`,
-          `Duplicate computation parameter: ${name}`,
+          `Duplicate computation parameter ${displayIdentifier(name)} on ${location || "this concept"} (${field}.name)`,
         ),
       );
       valid = false;
@@ -585,7 +586,7 @@ function normalizeAttester(value, diagnostics) {
   });
 }
 
-function normalizeAttestedComputation(frontmatter, body, diagnostics) {
+function normalizeAttestedComputation(frontmatter, body, diagnostics, location) {
   if (frontmatter.type !== "Attested Computation") {
     return null;
   }
@@ -607,7 +608,7 @@ function normalizeAttestedComputation(frontmatter, body, diagnostics) {
     runtime = String(frontmatter.runtime);
   }
 
-  const parameters = normalizeParameters(frontmatter.parameters, diagnostics);
+  const parameters = normalizeParameters(frontmatter.parameters, diagnostics, location);
   const inline = extractInlineComputation(body);
   const hasFileField = hasOwn(frontmatter, "computation");
   const filePath =
@@ -712,7 +713,9 @@ function normalizeV02Signals(documentOrFrontmatter, options) {
     diagnostics,
   );
   const lifecycle = normalizeLifecycle(frontmatter, asOf, diagnostics);
-  const computation = normalizeAttestedComputation(frontmatter, body, diagnostics);
+  // Where the document lives, for messages that must point an operator at it.
+  const location = document && typeof document.path === "string" ? document.path : null;
+  const computation = normalizeAttestedComputation(frontmatter, body, diagnostics, location);
 
   return {
     raw: frontmatter,
