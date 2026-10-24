@@ -324,6 +324,18 @@
             "minLength": 1,
             "type": "string"
           },
+          "minCoverage": {
+            "description": "Drop results that matched a smaller share of the query terms than this; off by default. Can leave total at 0.",
+            "maximum": 1,
+            "minimum": 0,
+            "type": "number"
+          },
+          "minRelevance": {
+            "description": "Drop results whose score relative to the top result is below this; off by default. Can leave total at 0.",
+            "maximum": 1,
+            "minimum": 0,
+            "type": "number"
+          },
           "mode": {
             "default": "auto",
             "description": "auto requires every term and falls back to any-term matching when that returns nothing; all requires every term (the pre-0.10 behaviour); any ranks concepts matching at least one term. The response's mode field says which one ran.",

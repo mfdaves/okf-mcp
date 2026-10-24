@@ -35,6 +35,8 @@ const CONTEXT_DESCRIPTION =
 // two tools read the same way and one sentinel test covers both.
 const SHARED_PARAMETERS = [
   "mode",
+  "minCoverage",
+  "minRelevance",
   "freshnessPrior",
   "bundle",
   "types",

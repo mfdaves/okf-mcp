@@ -103,11 +103,21 @@ test("get_context is advertised right after search_concepts, read-only and unpre
   assert.equal("conceptLimit" in properties, false);
   // The shared filters read exactly as they do on search_concepts.
   const search = searchTools.search_concepts.inputSchema.properties;
-  ["mode", "bundle", "types", "tagsAny", "statuses", "asOf", "frontmatter", "verifiedBy"].forEach(
-    (name) => {
-      assert.deepEqual(properties[name], search[name], name);
-    },
-  );
+  [
+    "mode",
+    "minCoverage",
+    "minRelevance",
+    "bundle",
+    "types",
+    "tagsAny",
+    "statuses",
+    "asOf",
+    "frontmatter",
+    "verifiedBy",
+  ].forEach((name) => {
+    assert.ok(properties[name], name);
+    assert.deepEqual(properties[name], search[name], name);
+  });
   assert.equal("detail" in properties, false);
   assert.equal("offset" in properties, false);
 });
@@ -241,6 +251,27 @@ test("the tool handler passes options through and translates invalid values", as
     await tools.get_context.handler(state, { query: "scarponi donna", budgetTokens: 300 }),
   );
   assert.ok(withProvenance.sections.every((section) => section.provenance));
+  // The candidate floors work as on search_concepts.
+  const floored = parse(
+    await tools.get_context.handler(state, {
+      query: "scarponi trekking donna",
+      mode: "any",
+      minCoverage: 1,
+    }),
+  );
+  const unfloored = parse(
+    await tools.get_context.handler(state, { query: "scarponi trekking donna", mode: "any" }),
+  );
+  assert.ok(floored.concepts.length > 0);
+  assert.ok(floored.concepts.every((concept) => concept.coverage === 1));
+  assert.ok(unfloored.concepts.some((concept) => concept.coverage < 1));
+  const relevant = parse(
+    await tools.get_context.handler(state, { query: "scarponi donna", minRelevance: 0.9 }),
+  );
+  assert.ok(relevant.concepts.every((concept) => concept.relevance >= 0.9));
+  assert.ok(
+    relevant.sections.every((section) => relevant.concepts.some((c) => c.uri === section.uri)),
+  );
   await assert.rejects(
     () => tools.get_context.handler(state, { query: "scarponi", mode: "bogus" }),
     /Search mode must be one of auto, all, any/,
