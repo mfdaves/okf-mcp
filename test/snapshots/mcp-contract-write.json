@@ -680,7 +680,7 @@
         "openWorldHint": false,
         "readOnlyHint": false
       },
-      "description": "Validate and apply one or more structured concept creates or updates to one local bundle as one batch.",
+      "description": "Validate and apply one or more structured concept creates or updates to one local bundle as one batch; a batch that violates the configured write policy is refused before any file is touched.",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -1126,6 +1126,15 @@
             "description": "Git policy and commit result.",
             "type": "object"
           },
+          "policyViolations": {
+            "description": "Write policy violations for this batch; present only when the server enforces a write policy (writePolicy in okf.project.yaml, or --policy with --root) and empty when the batch complies. Items: { code: 'policy_violation', rule: rule name or index (null when the default effect decided), reason: actor_denied | bundle_denied | path_denied | type_denied | missing_required_field | batch_too_large, field?, path?, bundleId?, uri?, limit?, count? }. Each violation also appears in validation.diagnostics with layer 'policy'. Any violation makes the batch invalid and apply refuses it before staging or touching disk.",
+            "items": {
+              "additionalProperties": true,
+              "description": "One structured write policy violation.",
+              "type": "object"
+            },
+            "type": "array"
+          },
           "preconditions": {
             "additionalProperties": true,
             "description": "Full-receipt revision and Git preconditions checked for the batch.",
@@ -1258,7 +1267,7 @@
         "openWorldHint": false,
         "readOnlyHint": true
       },
-      "description": "Validate a complete structured concept create or update batch without changing files.",
+      "description": "Validate a complete structured concept create or update batch without changing files; write policy violations are reported read-only alongside graph validation.",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -1699,6 +1708,15 @@
             "additionalProperties": true,
             "description": "Git policy and commit result.",
             "type": "object"
+          },
+          "policyViolations": {
+            "description": "Write policy violations for this batch; present only when the server enforces a write policy (writePolicy in okf.project.yaml, or --policy with --root) and empty when the batch complies. Items: { code: 'policy_violation', rule: rule name or index (null when the default effect decided), reason: actor_denied | bundle_denied | path_denied | type_denied | missing_required_field | batch_too_large, field?, path?, bundleId?, uri?, limit?, count? }. Each violation also appears in validation.diagnostics with layer 'policy'. Any violation makes the batch invalid and apply refuses it before staging or touching disk.",
+            "items": {
+              "additionalProperties": true,
+              "description": "One structured write policy violation.",
+              "type": "object"
+            },
+            "type": "array"
           },
           "preconditions": {
             "additionalProperties": true,

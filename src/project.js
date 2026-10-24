@@ -4,6 +4,7 @@ const fs = require("fs");
 const path = require("path");
 const { parseFrontmatterYaml, splitFrontmatter } = require("./parser");
 const { normalizeLanguages } = require("./search/languages");
+const { parseWritePolicy } = require("./policy/write-policy");
 
 const DEFAULT_RELATION_TYPES = [
   "depends_on",
@@ -435,6 +436,14 @@ function normalizeRemoteBundles(config, errors) {
   });
 }
 
+// `writePolicy`: per-actor rules for live writes (plan W-1), parsed here so
+// a malformed policy is a project error and no writable store starts on it.
+function normalizeWritePolicyConfig(config, errors) {
+  const parsed = parseWritePolicy(config.writePolicy);
+  errors.push(...parsed.errors);
+  return parsed.policy;
+}
+
 function loadProjectConfig(configPath) {
   const requestedPath = configPath ? path.resolve(configPath) : findProjectConfig(process.cwd());
   if (!requestedPath) {
@@ -478,6 +487,7 @@ function loadProjectConfig(configPath) {
   validatePlugins(config, path.dirname(resolvedPath), allBundleIds, errors);
   const producers = normalizeProducers(config, localBundleIds, errors);
   const languages = normalizeLanguagesConfig(config, errors);
+  const writePolicy = normalizeWritePolicyConfig(config, errors);
   return {
     path: resolvedPath,
     root: path.dirname(resolvedPath),
@@ -489,6 +499,7 @@ function loadProjectConfig(configPath) {
     producers,
     strictLinks: Boolean(config.strictLinks),
     languages,
+    writePolicy,
     errors,
     raw: config,
   };

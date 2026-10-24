@@ -227,7 +227,11 @@ async function createStateAsync(bundleArgs, options) {
     const liveAuthoringService =
       options.liveAuthoringService ||
       (options.allowWrite
-        ? new LiveAuthoringService(store, { actor: options.actor, gitCommit: options.gitCommit })
+        ? new LiveAuthoringService(store, {
+            actor: options.actor,
+            gitCommit: options.gitCommit,
+            writePolicy: options.writePolicy,
+          })
         : null);
     const initialIndex = attachProject(
       buildIndex(localBundleArgs.concat(initialRemoteBundles), {
@@ -267,7 +271,11 @@ async function createStateAsync(bundleArgs, options) {
     const liveAuthoringService =
       options.liveAuthoringService ||
       (options.allowWrite
-        ? new LiveAuthoringService(store, { actor: options.actor, gitCommit: options.gitCommit })
+        ? new LiveAuthoringService(store, {
+            actor: options.actor,
+            gitCommit: options.gitCommit,
+            writePolicy: options.writePolicy,
+          })
         : null);
     const localBundleArgs = store.getBundles();
     const remoteBundles = await fetchRemoteBundles(options.remoteBundles || []);
@@ -305,6 +313,7 @@ async function createStateAsync(bundleArgs, options) {
       ? new LiveAuthoringService(options.authoringService.store, {
           actor: options.actor,
           gitCommit: options.gitCommit,
+          writePolicy: options.writePolicy,
         })
       : null;
   if (options?.allowWrite && !liveAuthoringService) {

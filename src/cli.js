@@ -14,6 +14,7 @@ const { searchConcepts } = require("./search");
 const { conceptSummary } = require("./indexer");
 const { findOkfRoot, findProjectConfig, loadProjectConfig } = require("./project");
 const { normalizeLanguages } = require("./search/languages");
+const { loadWritePolicyFile } = require("./policy/write-policy");
 const {
   createSearchOptions,
   parseSearchOption,
@@ -116,6 +117,7 @@ function parseArgs(argv) {
   let authoring = false;
   let write = false;
   let actor = "";
+  let policy = "";
   let gitCommit = false;
   let allowRemoteTool = false;
   let strictLinks = false;
@@ -249,6 +251,16 @@ function parseArgs(argv) {
     }
     if (arg === "--git-commit") {
       gitCommit = true;
+      continue;
+    }
+    if (arg === "--policy" || arg.startsWith("--policy=")) {
+      const inline = arg.startsWith("--policy=");
+      const value = inline ? arg.slice("--policy=".length) : argv[index + 1];
+      if (policy) throw usageError("--policy may be supplied only once.");
+      if (!value || (!inline && value.startsWith("-")))
+        throw usageError("--policy requires a value.");
+      policy = value;
+      index += inline ? 0 : 1;
       continue;
     }
     if (arg === "--allow-remote-tool") {
@@ -398,6 +410,9 @@ function parseArgs(argv) {
   if (gitCommit && !write) {
     throw usageError("--git-commit requires --write.");
   }
+  if (policy && !write) {
+    throw usageError("--policy requires --write.");
+  }
   return {
     bundles,
     remoteBundles,
@@ -411,6 +426,7 @@ function parseArgs(argv) {
     authoring,
     write,
     actor,
+    policy,
     gitCommit,
     allowRemoteTool,
     allowComputationAuthoring,
@@ -475,6 +491,7 @@ function usage() {
     "  --write                     Enable direct validated-batch MCP concept writes (requires --actor).",
     "  --actor <actor>             Stamp live writes and producer runs with human:id, process:id, or provider/model.",
     "  --git-commit                Commit each live write batch when the catalog is in a clean Git repo.",
+    "  --policy <file>             Write policy (YAML) for --root live writes; a project workspace declares writePolicy in okf.project.yaml.",
     "  --allow-remote-tool         Enable runtime remote-bundle loading over MCP.",
     "  --allow-computation-authoring Enable coordinated computation proposals (also requires --authoring).",
     "  --strict-links              Treat broken internal Markdown links as project-invalid.",
@@ -592,6 +609,12 @@ function stdioServerOptions(args) {
   if (args.strictLinks) {
     options.strictLinks = true;
   }
+  if (args.policy && !args.root) {
+    throw usageError("--policy requires --root; declare writePolicy in okf.project.yaml instead.");
+  }
+  if (args.policy) {
+    options.writePolicy = loadWritePolicyFile(args.policy);
+  }
   if (args.languages) {
     options.languages = args.languages;
   }
@@ -678,6 +701,9 @@ async function main(argv, runtime) {
   }
   if (command === "producer" && args.gitCommit) {
     throw usageError("--git-commit is available only with the mcp command.");
+  }
+  if (command === "producer" && args.policy) {
+    throw usageError("--policy is available only with the mcp command.");
   }
   if (command === "mcp") {
     const bundles = resolveLegacyBundles(args);

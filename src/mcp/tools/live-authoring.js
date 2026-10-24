@@ -166,6 +166,12 @@ const LIVE_CHANGE_OUTPUT_PROPERTIES = {
     items: LIVE_CHANGE_SUMMARY_OUTPUT,
   },
   validation: objectParameter("Complete future-graph validation result."),
+  policyViolations: {
+    type: "array",
+    description:
+      "Write policy violations for this batch; present only when the server enforces a write policy (writePolicy in okf.project.yaml, or --policy with --root) and empty when the batch complies. Items: { code: 'policy_violation', rule: rule name or index (null when the default effect decided), reason: actor_denied | bundle_denied | path_denied | type_denied | missing_required_field | batch_too_large, field?, path?, bundleId?, uri?, limit?, count? }. Each violation also appears in validation.diagnostics with layer 'policy'. Any violation makes the batch invalid and apply refuses it before staging or touching disk.",
+    items: objectParameter("One structured write policy violation."),
+  },
   git: objectParameter("Git policy and commit result."),
 };
 
@@ -249,7 +255,7 @@ function requireLiveAuthoring(state) {
 const tools = {
   okf_validate_changes: {
     ...defineTool(
-      "Validate a complete structured concept create or update batch without changing files.",
+      "Validate a complete structured concept create or update batch without changing files; write policy violations are reported read-only alongside graph validation.",
       READ_ONLY,
       LIVE_CHANGE_TOOL_PROPERTIES,
       ["changes"],
@@ -274,7 +280,7 @@ const tools = {
   },
   okf_apply_changes: {
     ...defineTool(
-      "Validate and apply one or more structured concept creates or updates to one local bundle as one batch.",
+      "Validate and apply one or more structured concept creates or updates to one local bundle as one batch; a batch that violates the configured write policy is refused before any file is touched.",
       DESTRUCTIVE_WRITE,
       LIVE_CHANGE_TOOL_PROPERTIES,
       ["changes"],

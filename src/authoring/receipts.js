@@ -249,6 +249,39 @@ function preconditionsReceipt(plan) {
   };
 }
 
+// Present only when the service enforces a write policy, so receipts of a
+// server without one are unchanged.
+function policyReceipt(plan) {
+  return plan.policy ? { policyViolations: plan.policy.violations } : {};
+}
+
+// The receipt of a batch rolled back before publication: for a failure, one
+// whose files could not all be put back; without one, a batch whose
+// persisted state failed validation (rolled back completely or not).
+function rollbackReceipt(plan, rollback, error) {
+  const complete = !error && rollback.complete;
+  return {
+    applied: false,
+    readyToApply: false,
+    filesChanged: !complete,
+    status: complete ? "rolled_back" : "rollback_conflict",
+    snapshot: snapshotReceipt(plan),
+    preconditions: preconditionsReceipt(plan),
+    generated: plan.generated,
+    target: plan.target,
+    durability: durabilityReceipt(
+      null,
+      !complete,
+      complete ? "rolled_back" : "partial_filesystem_state",
+    ),
+    changes: plan.changes,
+    validation: plan.validation,
+    ...policyReceipt(plan),
+    rollback,
+    ...(error ? { error: error.message ? error.message : String(error) } : {}),
+  };
+}
+
 function validationReceipt(plan) {
   const git = {
     enabled: plan.gitPreflight.enabled,
@@ -278,6 +311,7 @@ function validationReceipt(plan) {
     durability: durabilityReceipt(git, false),
     changes: plan.changes,
     validation: plan.validation,
+    ...policyReceipt(plan),
     git,
   };
 }
@@ -285,8 +319,10 @@ function validationReceipt(plan) {
 module.exports = {
   candidateSummaries,
   durabilityReceipt,
+  policyReceipt,
   policyValidation,
   preconditionsReceipt,
+  rollbackReceipt,
   snapshotReceipt,
   targetReceipt,
   validationReceipt,

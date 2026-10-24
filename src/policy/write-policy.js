@@ -3,7 +3,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 
-const { resolveConcept } = require("../indexer");
+const { resolveConcept } = require("../indexer/resolve");
 const { normalizeSlashes, parseFrontmatterYaml } = require("../parser");
 
 // Per-actor write policy (plan W-1). The policy is trusted configuration: it

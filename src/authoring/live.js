@@ -41,11 +41,14 @@ const {
   validateRemovalKeys,
 } = require("./candidates");
 const { GitPublisher } = require("./git-publish");
+const { enforceWritePolicy, resolveWritePolicy, withPolicyViolations } = require("./policy-hook");
 const {
   candidateSummaries,
   durabilityReceipt,
+  policyReceipt,
   policyValidation,
   preconditionsReceipt,
+  rollbackReceipt,
   snapshotReceipt,
   targetReceipt,
   validationReceipt,
@@ -70,32 +73,6 @@ function candidateUpsert(candidate, persisted) {
   return persisted ? upsert : Object.assign(upsert, { text: candidate.markdown });
 }
 
-// The receipt of a batch rolled back before publication: for a failure, one
-// whose files could not all be put back; without one, a batch whose
-// persisted state failed validation (rolled back completely or not).
-function rollbackReceipt(plan, rollback, error) {
-  const complete = !error && rollback.complete;
-  return {
-    applied: false,
-    readyToApply: false,
-    filesChanged: !complete,
-    status: complete ? "rolled_back" : "rollback_conflict",
-    snapshot: snapshotReceipt(plan),
-    preconditions: preconditionsReceipt(plan),
-    generated: plan.generated,
-    target: plan.target,
-    durability: durabilityReceipt(
-      null,
-      !complete,
-      complete ? "rolled_back" : "partial_filesystem_state",
-    ),
-    changes: plan.changes,
-    validation: plan.validation,
-    rollback,
-    ...(error ? { error: error.message ? error.message : String(error) } : {}),
-  };
-}
-
 class LiveAuthoringService {
   constructor(store, options) {
     const config = options || {};
@@ -105,6 +82,7 @@ class LiveAuthoringService {
     this.spawnSync = config.spawnSync || nodeSpawnSync;
     this.now = config.now || (() => new Date());
     this.git = new GitPublisher({ gitCommit: this.gitCommit, spawnSync: this.spawnSync });
+    this.writePolicy = resolveWritePolicy(config, store);
     // One index kept between batches and refreshed before each (W-6); a host
     // hands one over through adoptIndex and takes it back via takePublication.
     this.indexCache = new IndexCache({ now: this.now });
@@ -482,6 +460,11 @@ class LiveAuthoringService {
         });
       }
     }
+    const policy = enforceWritePolicy(this.writePolicy, {
+      actor: this.actor,
+      candidates,
+      index: currentIndex,
+    });
     const targetPaths = new Set();
     candidates.forEach((candidate) => {
       const key = path.resolve(candidate.target.absolutePath);
@@ -532,19 +515,22 @@ class LiveAuthoringService {
               recommendedOperation: "merge_batch_changes",
             };
       throw new AuthoringPolicyError(
-        `The batch would leave more than one ${candidate.frontmatter.type} titled "${candidate.title}".`,
+        `The batch would leave more than one concept with the same type and title: ${candidate.uri}`,
         "concept_already_exists",
         details,
       );
     }
     const message = this.commitMessage(input, candidates);
-    const validation = this.validationResult(
-      updateIndex(
-        currentIndex,
-        { upserts: candidates.map((candidate) => candidateUpsert(candidate, false)) },
-        this.indexCache.options(),
+    const validation = withPolicyViolations(
+      this.validationResult(
+        updateIndex(
+          currentIndex,
+          { upserts: candidates.map((candidate) => candidateUpsert(candidate, false)) },
+          this.indexCache.options(),
+        ),
+        candidates,
       ),
-      candidates,
+      policy,
     );
     const gitPreflight = this.git.prepareGit(bundle, candidates);
     return {
@@ -556,6 +542,7 @@ class LiveAuthoringService {
       candidates,
       message,
       validation,
+      policy,
       gitPreflight,
       target: targetReceipt(this.store, bundle, candidates, gitPreflight),
       changes: candidateSummaries(candidates),
@@ -639,6 +626,7 @@ class LiveAuthoringService {
         durability: durabilityReceipt(null, false),
         changes: plan.changes,
         validation: plan.validation,
+        ...policyReceipt(plan),
         git: {
           enabled: plan.gitPreflight.enabled,
           repository: Boolean(plan.gitPreflight.repository),
@@ -751,6 +739,7 @@ class LiveAuthoringService {
           durability: durabilityReceipt(git, true, "partial_filesystem_state"),
           changes: plan.changes,
           validation: currentValidation,
+          ...policyReceipt(plan),
           git,
           error:
             git.error || "Validated concept bytes were replaced before Git persistence completed.",
@@ -786,6 +775,7 @@ class LiveAuthoringService {
       durability: durabilityReceipt(git, true),
       changes: plan.changes,
       validation: persistedValidation,
+      ...policyReceipt(plan),
       git,
     };
   }
