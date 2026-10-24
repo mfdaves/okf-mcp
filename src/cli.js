@@ -517,7 +517,7 @@ function usage() {
     "                  --mode auto|all|any, --min-coverage <0..1>, --min-relevance <0..1>, --freshness-prior.",
     "  Text search matches every term and falls back to any term (mode auto); it accepts at most",
     "  512 characters and 16 terms after stop words, and reports mode, coverage, and lowConfidence.",
-    "  context takes the search filters plus --budget <tokens> (default 1200) and --limit <sections> (default 20).",
+    "  context takes the search filters plus --budget <tokens> (default 1200), --limit <sections> (default 20), --provenance compact|full|none.",
     "  --version, -v               Print the package version.",
     "  --help, -h                  Print this help.",
     "  --debug                     Include stack traces in error output.",

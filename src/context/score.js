@@ -10,12 +10,20 @@
 // plus one stem per language of the concept's bundle. A plain term counts
 // where any of its forms meets any form of a token; a literal term counts
 // once per adjacent run of its pieces, or once when the whole compound is an
-// exact token of the section (identifiers, path, title and aliases on the
-// preamble; the heading elsewhere). Never through a stem.
+// exact token of the field. Never through a stem.
 //
-// Score: BM25 (k1 1.2, b 0.75) over the candidate sections, document
-// frequency and average length taken from that same set, so a term common to
-// every candidate section weighs little. The preamble's score is multiplied by
+// Evidence comes in two tiers. Own text: the section's text (on the
+// preamble, which stands for the concept, also its aliases and identifiers;
+// elsewhere the heading as an exact token). Concept metadata: the type, tags,
+// path and identifiers every section of the concept shares. The primary score
+// is BM25 (k1 1.2, b 0.75) over own text only, with document frequency and
+// average length taken from the candidate sections, so a term common to every
+// candidate section weighs little; `coverage` and the matched terms are
+// own-text only. Metadata adds a bonus of at most 20% of the own-text score,
+// in proportion to the IDF weight of the terms only metadata matched. A
+// section with no own-text match is kept (a runbook's "Steps" rarely repeats
+// its title) but as tier 0, which the caller ranks below every own-text
+// section of the same concept. The preamble's own score is multiplied by
 // `preambleWeight`: it carries the concept title, description and aliases,
 // which match most queries that selected the concept and would otherwise take
 // rank 1 over the section that answers.
@@ -25,6 +33,8 @@ const { foldDiacritics, stemForms } = require("../search/languages");
 
 const K1 = 1.2;
 const B = 0.75;
+// Ceiling of the metadata bonus as a share of the own-text score.
+const METADATA_BONUS = 0.2;
 // The splitter of src/search/lexical.js: spaces, punctuation and symbols.
 const TOKEN_SEPARATORS = /[\n\r\p{Z}\p{P}\p{S}]+/u;
 
@@ -46,26 +56,31 @@ function exactSegments(doc) {
     .filter(Boolean);
 }
 
-// The section as the lexical index would read it: its own text (plus the
-// aliases on the preamble), and the concept fields every section shares
-// (type, tags, path), so a section is found by what its concept is about even
-// when it never repeats the concept's name. `folded` (for literal runs) holds
-// the section text only; `forms` (for plain terms and length) holds both.
-// Stems are memoised per call and language set by `stemsOf`.
-function sectionTokens(doc, section, stemsOf) {
-  const preamble = section.heading === null;
-  const own = lowerTokens(
-    preamble ? [section.text].concat(doc.aliases || []).join("\n") : section.text,
-  );
-  const shared = lowerTokens([doc.type, (doc.tags || []).join(" "), doc.path].join("\n"));
-  const identifiers = preamble
-    ? exactSegments(doc)
-    : [doc.conceptId, customIdPath(doc.customId), doc.path, section.heading];
+// One evidence field: folded tokens (for literal runs), their forms with
+// stems (for plain terms) and the exact tokens (for whole literals).
+function evidenceField(lower, identifiers, stemsOf) {
   return {
-    folded: own.map((token) => foldDiacritics(token)),
-    forms: own.concat(shared).map(stemsOf),
+    folded: lower.map((token) => foldDiacritics(token)),
+    forms: lower.map(stemsOf),
     exact: new Set(exactTokens(identifiers.filter(Boolean).join("\n"))),
   };
+}
+
+// A section's own text and its concept's shared metadata. Stems are memoised
+// per call and language set by `stemsOf`.
+function sectionFields(doc, section, stemsOf) {
+  const preamble = section.heading === null;
+  const own = evidenceField(
+    lowerTokens(preamble ? [section.text].concat(doc.aliases || []).join("\n") : section.text),
+    preamble ? exactSegments(doc) : [section.heading],
+    stemsOf,
+  );
+  const metadata = evidenceField(
+    lowerTokens([doc.type, (doc.tags || []).join(" "), doc.path].join("\n")),
+    [doc.conceptId, customIdPath(doc.customId), doc.path],
+    stemsOf,
+  );
+  return { own, metadata };
 }
 
 function runCount(folded, pieces) {
@@ -85,10 +100,10 @@ function runCount(folded, pieces) {
   return count;
 }
 
-// Term frequency of every analysed term in one section.
-function termFrequencies(tokens, terms, leafOwners) {
+// Term frequency of every analysed term in one field.
+function termFrequencies(field, terms, leafOwners) {
   const tf = new Array(terms.length).fill(0);
-  for (const forms of tokens) {
+  for (const forms of field.forms) {
     const seen = new Set();
     for (const leaf of forms) {
       for (const owner of leafOwners.get(leaf) || []) {
@@ -99,6 +114,12 @@ function termFrequencies(tokens, terms, leafOwners) {
       }
     }
   }
+  terms.forEach((term, position) => {
+    if (term.kind !== "plain") {
+      const runs = runCount(field.folded, term.pieces);
+      tf[position] = field.exact.has(term.literal) ? Math.max(1, runs) : runs;
+    }
+  });
   return tf;
 }
 
@@ -114,10 +135,32 @@ function formsFor(languages, cache) {
   };
 }
 
+function leafOwnersOf(terms) {
+  const owners = new Map();
+  terms.forEach((term, position) => {
+    if (term.kind !== "plain") {
+      return;
+    }
+    term.leaves.forEach((leaf) => {
+      if (!owners.has(leaf)) {
+        owners.set(leaf, []);
+      }
+      if (!owners.get(leaf).includes(position)) {
+        owners.get(leaf).push(position);
+      }
+    });
+  });
+  return owners;
+}
+
 // entries: [{ doc, section, ... }]; analysis: analyzeQuery's result;
 // languagesFor(bundle): the stemming languages of a concept's bundle.
-// Returns, for every entry matching at least one term, { entry, score,
-// coverage, positions } with positions the indexes of the matched terms.
+// Returns, for every entry with evidence in either tier,
+// { entry, tier, score, metadataShare, coverage, positions }: tier 1 with
+// `score` the weighted own-text score plus the metadata bonus; tier 0 with
+// score 0 and `metadataShare` (the IDF share of the terms metadata matched),
+// for the caller to place below its concept's tier-1 sections. `positions`
+// index own-text terms.
 function scoreSections(entries, analysis, options) {
   const config = options || {};
   const preambleWeight = config.preambleWeight === undefined ? 1 : config.preambleWeight;
@@ -125,20 +168,7 @@ function scoreSections(entries, analysis, options) {
   if (!terms.length || !entries.length) {
     return [];
   }
-  const leafOwners = new Map();
-  terms.forEach((term, position) => {
-    if (term.kind !== "plain") {
-      return;
-    }
-    term.leaves.forEach((leaf) => {
-      if (!leafOwners.has(leaf)) {
-        leafOwners.set(leaf, []);
-      }
-      if (!leafOwners.get(leaf).includes(position)) {
-        leafOwners.get(leaf).push(position);
-      }
-    });
-  });
+  const leafOwners = leafOwnersOf(terms);
   const formCaches = new Map();
   const stemsFor = (bundle) => {
     const languages = config.languagesFor ? config.languagesFor(bundle) : [];
@@ -149,43 +179,56 @@ function scoreSections(entries, analysis, options) {
     return formCaches.get(key);
   };
   const rows = entries.map((entry) => {
-    const tokens = sectionTokens(entry.doc, entry.section, stemsFor(String(entry.doc.bundle)));
-    const tf = termFrequencies(tokens.forms, terms, leafOwners);
-    terms.forEach((term, position) => {
-      if (term.kind !== "plain") {
-        const runs = runCount(tokens.folded, term.pieces);
-        tf[position] = tokens.exact.has(term.literal) ? Math.max(1, runs) : runs;
-      }
-    });
-    return { entry, tf, length: Math.max(1, tokens.forms.length) };
+    const fields = sectionFields(entry.doc, entry.section, stemsFor(String(entry.doc.bundle)));
+    return {
+      entry,
+      own: termFrequencies(fields.own, terms, leafOwners),
+      metadata: termFrequencies(fields.metadata, terms, leafOwners),
+      length: Math.max(1, fields.own.folded.length),
+    };
   });
   const count = rows.length;
   const averageLength = rows.reduce((sum, row) => sum + row.length, 0) / count;
-  const idf = terms.map((_, position) => {
-    const df = rows.filter((row) => row.tf[position] > 0).length;
-    return Math.log(1 + (count - df + 0.5) / (df + 0.5));
-  });
+  const idfOver = (matches) =>
+    terms.map((_, position) => {
+      const df = rows.filter((row) => matches(row, position)).length;
+      return Math.log(1 + (count - df + 0.5) / (df + 0.5));
+    });
+  const idf = idfOver((row, position) => row.own[position] > 0);
+  // Metadata weights: IDF over either tier, so a term only metadata carries counts.
+  const anyIdf = idfOver((row, position) => row.own[position] > 0 || row.metadata[position] > 0);
+  const anyTotal = anyIdf.reduce((sum, value) => sum + value, 0) || 1;
   const scored = [];
   rows.forEach((row) => {
     const positions = [];
-    let score = 0;
-    row.tf.forEach((frequency, position) => {
-      if (!frequency) {
-        return;
+    let own = 0;
+    let metadataWeight = 0;
+    row.own.forEach((frequency, position) => {
+      if (frequency) {
+        positions.push(position);
+        const norm = K1 * (1 - B + (B * row.length) / averageLength);
+        own += (idf[position] * (frequency * (K1 + 1))) / (frequency + norm);
+      } else if (row.metadata[position]) {
+        metadataWeight += anyIdf[position];
       }
-      positions.push(position);
-      const norm = K1 * (1 - B + (B * row.length) / averageLength);
-      score += (idf[position] * (frequency * (K1 + 1))) / (frequency + norm);
     });
-    if (!positions.length) {
+    const metadataShare = metadataWeight / anyTotal;
+    if (!positions.length && !metadataShare) {
       return;
     }
     if (row.entry.section.heading === null) {
-      score *= preambleWeight;
+      own *= preambleWeight;
     }
-    scored.push({ entry: row.entry, score, coverage: positions.length / terms.length, positions });
+    scored.push({
+      entry: row.entry,
+      tier: positions.length ? 1 : 0,
+      score: positions.length ? own * (1 + METADATA_BONUS * metadataShare) : 0,
+      metadataShare,
+      coverage: positions.length / terms.length,
+      positions,
+    });
   });
   return scored;
 }
 
-module.exports = { scoreSections };
+module.exports = { METADATA_BONUS, scoreSections };

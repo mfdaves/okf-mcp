@@ -98,6 +98,10 @@ test("get_context is advertised right after search_concepts, read-only and unpre
     [properties.includeProvenance.type, properties.includeProvenance.default],
     ["boolean", true],
   );
+  assert.deepEqual(
+    [properties.provenance.enum, properties.provenance.default],
+    [["compact", "full", "none"], "compact"],
+  );
   assert.equal(properties.query.maxLength, 512);
   assert.equal("languages" in properties, false);
   assert.equal("conceptLimit" in properties, false);
@@ -128,11 +132,14 @@ test("the description explains budget, anchors and provenance and repeats the qu
     /budgetTokens/,
     /ceil\(characters \/ 4\)/,
     /never exceeded/,
+    /The budget covers what is delivered/,
+    /Provenance is compact by default/,
     /truncated/,
     /anchor/,
     /uri#heading-slug/,
     /okf-mcp extension/,
-    /provenance \(status, staleAfter, freshness, trustTier, verified, generated, sources\)/,
+    /set provenance to full/,
+    /Ranking follows the candidate concept order/,
     /keywords in the catalog's languages/,
     /identifiers/,
     /double quotes/,
@@ -333,8 +340,29 @@ test("the CLI context command parses --budget and --limit and prints the JSON re
   const index = buildProjectIndex(path.join(ALPINARIA, "okf.project.yaml"));
   result.sections.forEach((section) => {
     assert.equal(index.byUri.get(section.uri).type, "Landing Page");
-    assert.ok(section.provenance);
+    assert.deepEqual(Object.keys(section.provenance), [
+      "status",
+      "freshness",
+      "verified",
+      "sourceCount",
+    ]);
   });
+  assert.equal(parseArgs(["context", "x", "--provenance", "full"]).context.provenance, "full");
+  assert.throws(
+    () => parseArgs(["context", "x", "--provenance", "verbose"]),
+    (error) => error instanceof UsageError && /--provenance requires one of/.test(error.message),
+  );
+  const none = runCli([
+    "--root",
+    ALPINARIA_BUNDLE,
+    "context",
+    "scarponi trekking donna",
+    "--provenance",
+    "none",
+  ]);
+  assert.equal(none.status, 0, none.stderr);
+  assert.ok(JSON.parse(none.stdout).sections.every((section) => !("provenance" in section)));
+  assert.match(usage(), /--provenance compact\|full\|none/);
   const missing = runCli(["--root", ALPINARIA_BUNDLE, "context"]);
   assert.equal(missing.status, 2);
   assert.match(missing.stderr, /context requires a query/);

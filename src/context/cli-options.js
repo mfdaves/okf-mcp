@@ -1,14 +1,14 @@
 "use strict";
 
 // The `context` command of the CLI (plan WP3a, section 12), kept out of
-// src/cli.js so its line ratchet only shrinks: the token budget and section
-// cap flags, plus the dispatch. The search filters are parsed by the `search`
+// src/cli.js so its line ratchet only shrinks: the token budget, section
+// cap and provenance flags, plus the dispatch. The search filters are parsed by the `search`
 // command's flag parser and shared. `parseContextOption` consumes one flag at
 // `argv[index]` into `context` and returns how many extra arguments it used,
 // or -1 when the flag is not a context option; `fail` builds the CLI usage
 // error.
 
-const { assembleContext } = require("./assemble");
+const { PROVENANCE_MODES, assembleContext } = require("./assemble");
 
 const OPTIONS = Object.freeze({ "--budget": "budgetTokens", "--limit": "limit" });
 const POSITIVE_INTEGER = /^[1-9]\d*$/;
@@ -18,6 +18,14 @@ function createContextOptions() {
 }
 
 function parseContextOption(arg, argv, index, context, fail) {
+  if (arg === "--provenance") {
+    const mode = argv[index + 1];
+    if (!PROVENANCE_MODES.includes(mode)) {
+      throw fail(`--provenance requires one of ${PROVENANCE_MODES.join(", ")}.`);
+    }
+    context.provenance = mode;
+    return 1;
+  }
   if (!Object.hasOwn(OPTIONS, arg)) {
     return -1;
   }

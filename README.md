@@ -710,16 +710,25 @@ proposals receive a fresh index automatically.
 ### Budgeted context and section anchors (0.11)
 
 `get_context` (MCP, read-only) and `okf context <query> [--budget <tokens>]
-[--limit <n>]` (CLI, JSON) answer a question with the sections that matter
-instead of whole concepts. Candidates come from the same search as
-`search_concepts` (same filters, `mode`, `lowConfidence`, `queryTerms`); the
-sections of those candidates are then ranked against the query, deduplicated,
-and packed in rank order while they fit `budgetTokens` (default 1,200, never
-exceeded; tokens are estimated as `ceil(characters / 4)` and the estimator is
-named in the response). Each section carries `uri`, `anchor`, `heading`,
-`title`, `text`, `tokens`, `score`, `relevance`, `coverage`, `matchedTerms`
-and the concept's provenance (`status`, `staleAfter`, `freshness`,
-`trustTier`, `verified`, `generated`, `sources`). The library exposes
+[--limit <n>] [--provenance compact|full|none]` (CLI, JSON) answer a question
+with the sections that matter instead of whole concepts. Candidates come from
+the same search as `search_concepts` (same filters, `mode`, `minCoverage`,
+`minRelevance`, `lowConfidence`, `queryTerms`). Their sections are scored on
+their own text (BM25; the concept's type, tags and path add at most 20%) and
+ordered by the candidate concept rank; within a concept, sections whose text
+matches the query come before sections found only through that metadata, and
+a strongly matching section may move ahead of up to four weaker concepts.
+Sections are deduplicated and packed in that order while they fit
+`budgetTokens` (default 1,200, never exceeded). The budget covers what is
+delivered: each section costs `ceil(characters / 4)` of the JSON of its
+`uri`, `anchor`, `heading`, `title`, `text`, `truncated` and `provenance`; the
+scoring fields (`tokens`, `score`, `relevance`, `coverage`, `matchedTerms`)
+are not counted, and the estimator is named in the response. Provenance is
+`compact` by default (`status`, `freshness`, `verified` as a boolean,
+`sourceCount`); `provenance: "full"` returns `status`, `staleAfter`,
+`freshness`, `trustTier`, `verified`, `generated` and `sources`, and
+`provenance: "none"` (or `includeProvenance: false`) spends the whole budget
+on the sections. The library exposes
 `assembleContext(index, options)`, `conceptSections(doc)` and
 `sectionUnits(index)`.
 

@@ -7,9 +7,12 @@ const path = require("node:path");
 const test = require("node:test");
 
 const {
+  CONTEXT_CONTENT_FIELDS,
   CONTEXT_TOKEN_ESTIMATOR,
+  DEFAULT_CONCEPT_LIFT,
   DEFAULT_CONTEXT_BUDGET_TOKENS,
   DEFAULT_PREAMBLE_WEIGHT,
+  DEFAULT_PROVENANCE,
   assembleContext,
   estimateContextTokens,
 } = require("../src/context/assemble");
@@ -49,6 +52,20 @@ function note(title, body, extra) {
   return `---\ntype: Note\ntitle: "${title}"\ndescription: "About ${title}."\n${extra || ""}---\n\n# ${title}\n\n${body}\n`;
 }
 
+// A section's delivered size: its content fields serialised, scoring fields left out.
+const SCORING_FIELDS = ["tokens", "score", "relevance", "matchedTerms", "coverage"];
+const serialisedTokens = (section) => {
+  const content = Object.assign({}, section);
+  SCORING_FIELDS.forEach((name) => {
+    delete content[name];
+  });
+  assert.deepEqual(
+    Object.keys(content),
+    CONTEXT_CONTENT_FIELDS.filter((name) => name in section),
+  );
+  return estimateContextTokens(JSON.stringify(content));
+};
+
 const checkBudget = (result, budget, limit) => {
   assert.ok(result.usedTokens <= budget, `used ${result.usedTokens} > budget ${budget}`);
   assert.equal(
@@ -56,9 +73,12 @@ const checkBudget = (result, budget, limit) => {
     result.sections.reduce((sum, section) => sum + section.tokens, 0),
   );
   result.sections.forEach((section) => {
-    assert.equal(section.tokens, Math.ceil(section.text.length / 4));
-    assert.equal(section.tokens, estimateContextTokens(section.text));
+    assert.equal(section.tokens, serialisedTokens(section));
   });
+  assert.ok(
+    result.sections.reduce((sum, section) => sum + serialisedTokens(section), 0) <= budget,
+    "the serialised sections fit the budget",
+  );
   assert.ok(result.sections.length <= limit);
 };
 
@@ -70,12 +90,11 @@ test("the budget is never exceeded across random budgets, limits and queries", (
     const query = sidecar.queries[Math.floor(random() * sidecar.queries.length)];
     const budgetTokens = 1 + Math.floor(random() * 2500);
     const limit = 1 + Math.floor(random() * 30);
-    const result = assembleContext(index, {
-      query: query.query,
-      budgetTokens,
-      limit,
-      asOf: sidecar.as_of,
-    });
+    const provenance = [{}, { provenance: "compact" }, { includeProvenance: false }][round % 3];
+    const result = assembleContext(
+      index,
+      Object.assign({ query: query.query, budgetTokens, limit, asOf: sidecar.as_of }, provenance),
+    );
     checkBudget(result, budgetTokens, limit);
     assert.equal(result.budgetTokens, budgetTokens);
     assert.equal(result.estimator, "chars/4");
@@ -92,9 +111,31 @@ test("the budget is never exceeded across random budgets, limits and queries", (
   }
   assert.equal(CONTEXT_TOKEN_ESTIMATOR, "chars/4");
   assert.equal(DEFAULT_CONTEXT_BUDGET_TOKENS, 1200);
+  // The review's reproduction: 50 tokens used to deliver about 283 serialised.
+  ["full", "compact"].forEach((provenance) => {
+    const small = assembleContext(index, { query: "scarponi donna", budgetTokens: 50, provenance });
+    checkBudget(small, 50, 20);
+  });
+  const lean = assembleContext(index, {
+    query: "scarponi donna",
+    budgetTokens: 400,
+    includeProvenance: false,
+  });
+  const compact = assembleContext(index, {
+    query: "scarponi donna",
+    budgetTokens: 400,
+    provenance: "compact",
+  });
+  const full = assembleContext(index, { query: "scarponi donna", budgetTokens: 400 });
+  assert.ok(lean.sections.length >= compact.sections.length);
+  assert.ok(compact.sections.length >= full.sections.length);
+  assert.throws(
+    () => assembleContext(index, { query: "scarponi", provenance: "verbose" }),
+    /provenance must be one of compact, full, none/,
+  );
 });
 
-test("assembly is deterministic and ordered by score, candidate rank and document order", () => {
+test("assembly is deterministic and ordered by concept rank, own text first, with a bounded lift", () => {
   const index = buildProjectIndex(ALPINARIA);
   const options = { query: "scarponi da trekking donna", budgetTokens: 1200, asOf: "2026-10-24" };
   const first = assembleContext(index, options);
@@ -104,25 +145,34 @@ test("assembly is deterministic and ordered by score, candidate rank and documen
   assert.deepEqual(rebuilt, first);
   assert.ok(first.sections.length > 3);
   const rankOf = new Map(first.concepts.map((concept) => [concept.uri, concept.rank]));
+  // The sort key: concept rank, less up to DEFAULT_CONCEPT_LIFT for an own-text section in
+  // proportion to its relevance (score over the best own-text section).
+  const keyOf = (section) =>
+    rankOf.get(section.uri) - (section.coverage > 0 ? DEFAULT_CONCEPT_LIFT * section.relevance : 0);
   for (let position = 1; position < first.sections.length; position += 1) {
     const previous = first.sections[position - 1];
     const current = first.sections[position];
-    assert.ok(previous.score >= current.score, "scores descend");
-    if (previous.score === current.score) {
-      const previousRank = rankOf.get(previous.uri);
-      const currentRank = rankOf.get(current.uri);
-      assert.ok(previousRank <= currentRank, "ties fall back to candidate rank");
-      if (previousRank === currentRank) {
-        const anchors = conceptSections(index.byUri.get(current.uri)).map((s) => s.anchor);
-        assert.ok(anchors.indexOf(previous.anchor) < anchors.indexOf(current.anchor));
-      }
+    assert.ok(keyOf(previous) <= keyOf(current) + 1e-12, "keys ascend");
+    assert.ok(
+      rankOf.get(previous.uri) - DEFAULT_CONCEPT_LIFT <= rankOf.get(current.uri),
+      "no section passes more than the lift",
+    );
+    if (previous.uri === current.uri && previous.coverage === 0) {
+      assert.equal(current.coverage, 0, "own-text sections precede metadata-only ones");
+    }
+    if (keyOf(previous) === keyOf(current) && previous.uri === current.uri) {
+      const anchors = conceptSections(index.byUri.get(current.uri)).map((s) => s.anchor);
+      assert.ok(
+        previous.score > current.score ||
+          anchors.indexOf(previous.anchor) < anchors.indexOf(current.anchor),
+      );
     }
   }
-  assert.equal(first.sections[0].relevance, 1);
   first.sections.forEach((section) => {
     assert.ok(rankOf.has(section.uri), "every section belongs to a candidate concept");
-    assert.ok(section.coverage > 0 && section.coverage <= 1);
-    assert.ok(section.matchedTerms.length >= 1);
+    assert.ok(section.coverage >= 0 && section.coverage <= 1);
+    assert.equal(section.matchedTerms.length === 0, section.coverage === 0);
+    assert.ok(section.relevance > 0 && section.relevance <= 1);
   });
   // Both anchor forms occur: the concept URI for a preamble, uri#slug for a heading.
   assert.ok(first.sections.some((section) => !section.anchor.includes("#")));
@@ -180,8 +230,9 @@ test("a best section larger than the budget is returned alone, cut at a sentence
   const findings = full.sections.find((section) => section.anchor.endsWith("#findings"));
   assert.ok(findings && !findings.truncated && findings.tokens > 100);
   assert.equal(full.sections[0].anchor, findings.anchor, "the long section ranks first");
-  const budget = 60;
-  const cut = assembleContext(index, { query: "heron migration timing", budgetTokens: budget });
+  const budget = 120;
+  const lean = { query: "heron migration timing", includeProvenance: false };
+  const cut = assembleContext(index, Object.assign({ budgetTokens: budget }, lean));
   assert.equal(cut.truncated, true);
   assert.equal(cut.sections.length, 1);
   assert.equal(cut.omittedSections, full.totalSections - 1);
@@ -192,13 +243,20 @@ test("a best section larger than the budget is returned alone, cut at a sentence
   assert.equal(cut.usedTokens, section.tokens);
   assert.ok(findings.text.startsWith(section.text));
   assert.match(section.text, /timing\.$/, "ends at a sentence boundary");
-  assert.ok(section.text.length > budget * 4 * 0.5);
+  assert.equal(section.tokens, serialisedTokens(section));
+  // The fields around the text take their share; the text fills at least half of the rest.
+  const overhead = serialisedTokens(Object.assign({}, section, { text: "" }));
+  assert.ok(section.text.length > (budget - overhead) * 4 * 0.5);
   // A budget below any sentence falls back to a word boundary, still within budget.
-  const tiny = assembleContext(index, { query: "heron migration timing", budgetTokens: 6 });
-  assert.equal(tiny.sections.length, 1);
-  assert.ok(tiny.sections[0].tokens <= 6);
-  assert.ok(findings.text.startsWith(tiny.sections[0].text));
-  assert.doesNotMatch(tiny.sections[0].text, /\s$/);
+  const small = assembleContext(index, Object.assign({ budgetTokens: overhead + 6 }, lean));
+  assert.equal(small.sections.length, 1);
+  assert.ok(small.sections[0].tokens <= overhead + 6);
+  assert.ok(findings.text.startsWith(small.sections[0].text));
+  assert.doesNotMatch(small.sections[0].text, /\s$/);
+  // Below the fields themselves nothing is returned, and nothing is over budget.
+  const none = assembleContext(index, Object.assign({ budgetTokens: overhead - 1 }, lean));
+  assert.deepEqual([none.sections, none.usedTokens, none.truncated], [[], 0, false]);
+  assert.equal(none.omittedSections, none.totalSections);
 });
 
 test("filters, mode and asOf are honoured and the preamble carries the lead fields", () => {
@@ -272,7 +330,12 @@ test("a no-answer query is flagged lowConfidence and yields weak sections; nonse
 
 test("provenance comes from the concept's v0.2 signals and can be left out", () => {
   const index = buildProjectIndex(ALPINARIA);
-  const result = assembleContext(index, { query: "scarponi donna", budgetTokens: 600 });
+  assert.equal(DEFAULT_PROVENANCE, "compact");
+  const result = assembleContext(index, {
+    query: "scarponi donna",
+    budgetTokens: 600,
+    provenance: "full",
+  });
   assert.ok(result.sections.length > 0);
   result.sections.forEach((section) => {
     const doc = index.byUri.get(section.uri);
@@ -306,14 +369,40 @@ test("provenance comes from the concept's v0.2 signals and can be left out", () 
   bare.sections.forEach((section) => {
     assert.equal("provenance" in section, false);
   });
+  // Same ranking; the lighter payload packs at least the same prefix.
+  const anchors = bare.sections.map((section) => section.anchor);
   assert.deepEqual(
-    bare.sections.map((section) => section.anchor),
+    anchors.slice(0, result.sections.length),
     result.sections.map((section) => section.anchor),
+  );
+  const compact = assembleContext(index, {
+    query: "scarponi donna",
+    budgetTokens: 600,
+    provenance: "compact",
+  });
+  compact.sections.forEach((section) => {
+    const doc = index.byUri.get(section.uri);
+    assert.deepEqual(section.provenance, {
+      status: doc.signals.status,
+      freshness: doc.signals.freshness,
+      verified: doc.signals.verifiedEvents.length > 0,
+      sourceCount: doc.signals.sources.filter((source) => source.valid !== false).length,
+    });
+  });
+  // Compact is the default; none is the same as includeProvenance false.
+  assert.deepEqual(assembleContext(index, { query: "scarponi donna", budgetTokens: 600 }), compact);
+  assert.deepEqual(
+    assembleContext(index, { query: "scarponi donna", budgetTokens: 600, provenance: "none" }),
+    bare,
   );
 });
 
 test("invalid options are rejected with TypeErrors", () => {
   const index = buildProjectIndex(ALPINARIA);
+  assert.throws(
+    () => assembleContext(index, { query: "scarponi", conceptLift: -1 }),
+    /conceptLift must be a number from 0 through 10/,
+  );
   assert.throws(() => assembleContext(index, {}), /requires a query/);
   assert.throws(() => assembleContext(index, { query: "   " }), /requires a query/);
   ["0", 0, 1.5, "abc", -3, 100001].forEach((budgetTokens) => {
@@ -397,19 +486,66 @@ test("sections are computed per document, so an index update re-reads only chang
   assert.equal(anchors.includes("okf://demo/a#range"), false);
 });
 
-test("a section is found through its concept's type, tags and path", (t) => {
+test("concept metadata is a bounded secondary signal; own text ranks first within a concept", (t) => {
   const index = tempBundle(t, {
+    // The query terms live only in this concept's type, tags and path ...
     "runbooks/rotate-keys.md": note(
-      "Rotate keys",
-      "## Steps\n\nGenerate the new key and deploy it.\n",
+      "Credential rollover",
+      "## Steps\n\nGenerate the new secret and deploy it.\n",
       "tags: [security]\n",
+    ),
+    // ... and once in the text of a long section of another concept.
+    "notes/handbook.md": note(
+      "Handbook",
+      `## Practices\n\n${"Filler sentence about unrelated operations. ".repeat(30)}We rotate keys yearly.\n`,
     ),
   });
   const result = assembleContext(index, {
-    query: "rotate keys security steps",
-    budgetTokens: 1000,
+    query: "rotate keys security",
+    mode: "any",
+    budgetTokens: 5000,
   });
-  const steps = result.sections.find((section) => section.anchor.endsWith("#steps"));
-  assert.ok(steps);
-  assert.deepEqual(steps.matchedTerms.slice().sort(), ["keys", "rotate", "security", "steps"]);
+  const anchors = result.sections.map((section) => section.anchor);
+  const practices = anchors.indexOf("okf://demo/notes/handbook#practices");
+  const steps = anchors.indexOf("okf://demo/runbooks/rotate-keys#steps");
+  assert.ok(practices >= 0 && steps >= 0, JSON.stringify(anchors));
+  // The handbook's own-text match lifts it over the metadata-only sections of a higher concept.
+  assert.ok(practices < steps, "a strong own-text match passes metadata-only evidence");
+  const metadataOnly = result.sections[steps];
+  assert.equal(metadataOnly.coverage, 0);
+  assert.deepEqual(metadataOnly.matchedTerms, []);
+  // Within a concept, own-text sections come first and outscore metadata-only ones.
+  const byConcept = new Map();
+  result.sections.forEach((section, position) => {
+    if (!byConcept.has(section.uri)) byConcept.set(section.uri, []);
+    byConcept.get(section.uri).push(Object.assign({ position }, section));
+  });
+  byConcept.forEach((sections) => {
+    const own = sections.filter((section) => section.coverage > 0);
+    sections
+      .filter((section) => section.coverage === 0)
+      .forEach((section) => {
+        own.forEach((match) => {
+          assert.ok(match.position < section.position && match.score > section.score);
+        });
+      });
+  });
+});
+
+test("inherited metadata never inflates coverage or beats a section that holds the term", (t) => {
+  const index = tempBundle(t, {
+    "widgets/gizmo.md": note(
+      "Gizmo",
+      `Short lead.\n\n## Usage\n\n${"Background on the device and its history. ".repeat(20)}Calibrate the gizmo before use.\n`,
+      "tags: [calibrate]\n",
+    ),
+  });
+  const result = assembleContext(index, { query: "calibrate gizmo", budgetTokens: 5000 });
+  const byAnchor = new Map(result.sections.map((section) => [section.anchor, section]));
+  const usage = byAnchor.get("okf://demo/widgets/gizmo#usage");
+  const preamble = byAnchor.get("okf://demo/widgets/gizmo");
+  assert.equal(usage.coverage, 1);
+  // The preamble holds "gizmo" in its title but "calibrate" only in the tags.
+  assert.equal(preamble.coverage, 0.5);
+  assert.deepEqual(preamble.matchedTerms, ["gizmo"]);
 });

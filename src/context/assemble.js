@@ -4,20 +4,32 @@
 //
 // Candidate concepts come from the 0.10 `searchConcepts` with every filter,
 // mode and confidence field intact (at most `conceptLimit` of them). Only
-// their sections are then ranked, on the fly, against the same analysed query
-// (src/context/score.js: BM25 over those sections with the concept bundle's
-// stemming, literal terms verified as adjacent runs or exact tokens). Nothing
-// is indexed or cached per OKF index, so a write costs context assembly
-// nothing; the one memo is `conceptSections(doc)` per document object, which
-// a functional index update keeps for unchanged documents. Sections are ranked
-// under any-term matching (a concept can match every term across sections
-// while no single section does), ordered by score, then candidate rank, then
-// document order, deduplicated by anchor and by identical text hash, and
-// packed greedily in that order while they fit the budget. Tokens are
-// estimated as ceil(characters / 4); the estimator is named in the result and
-// the budget is never exceeded. When the best section alone is larger than
-// the budget it is returned on its own, cut at a sentence boundary, and
-// `truncated` says so.
+// their sections are then scored, on the fly, against the same analysed
+// query (src/context/score.js: BM25 over each section's own text with the
+// concept bundle's stemming, plus at most 20% for the concept's shared
+// metadata). Nothing is indexed or cached per OKF index, so a write costs
+// context assembly nothing; the one memo is `conceptSections(doc)` per
+// document object, which a functional index update keeps for unchanged
+// documents. Order: the concept rank from searchConcepts leads (it already
+// weighed title, description, tags and aliases); within a concept, sections
+// whose own text matches come before sections found through metadata only,
+// by score; an own-text section may move ahead of at most `conceptLift`
+// weaker concepts in proportion to its score over the best section's. Ties
+// fall back to document order. Sections are deduplicated by anchor and by
+// identical text hash and packed greedily in that order while they fit.
+//
+// The budget covers what is delivered, not only the text: a section costs
+// ceil(characters / 4) of the JSON serialisation of its content fields (uri,
+// anchor, heading, title, text, truncated, and provenance when included);
+// the scoring fields (tokens, score, relevance, matchedTerms, coverage) are
+// not counted. The estimator is named in the result and the budget is never
+// exceeded. Provenance is `compact` by default (status, freshness, verified,
+// sourceCount); `provenance: "full"` adds staleAfter, trustTier, the verified
+// and generated events and the sources, and `provenance: "none"` (or
+// `includeProvenance: false`) leaves it out. When the best
+// section alone is larger than the budget it is returned on its own with its
+// text cut at a sentence boundary, and `truncated` says so; when not even its
+// fields without text fit, nothing is returned.
 //
 // The result is structured JSON; catalog text appears only inside section
 // fields (B-6, C-3). Provenance per section is the concept's v0.2 signals.
@@ -45,16 +57,61 @@ const MAX_CONCEPT_LIMIT = 50;
 // among 1.0, 0.7 and 0.5 for the best labelled-anchor MRR without a lower
 // anchor hit rate (test/fixtures/retrieval/reports/context-0.11-2026-10-24).
 const DEFAULT_PREAMBLE_WEIGHT = 0.5;
+// Sections with metadata evidence only score at most this share of the
+// weakest section with own-text evidence.
+const METADATA_ONLY_CEILING = 0.5;
 // A truncation keeps the last sentence end in the allowed span only when it
 // leaves at least this share of the span; otherwise it cuts at a word.
 const MIN_SENTENCE_SHARE = 0.5;
 const SENTENCE_END = /[.!?](?=\s|$)|\n/g;
 // Options of assembleContext itself; everything else goes to searchConcepts.
-const CONTEXT_OPTIONS = ["budgetTokens", "includeProvenance", "conceptLimit", "preambleWeight"];
+const CONTEXT_OPTIONS = [
+  "budgetTokens",
+  "includeProvenance",
+  "provenance",
+  "conceptLimit",
+  "conceptLift",
+  "preambleWeight",
+];
 const SOURCE_FIELDS = ["id", "resource", "author"];
+const PROVENANCE_MODES = Object.freeze(["compact", "full", "none"]);
+const DEFAULT_PROVENANCE = "compact";
+// How many weaker concepts a strong own-text section may move ahead of (one
+// scoring as high as the best own-text section moves the full distance).
+// Chosen on the dev split among 0, 2 and 4 by the highest anchor hit summed
+// over both fixtures, then the highest anchor MRR (the sweep is in
+// test/fixtures/retrieval/reports/context-0.11-2026-10-24).
+const DEFAULT_CONCEPT_LIFT = 4;
+const MAX_CONCEPT_LIFT = 10;
+// The delivered fields a section's token cost is measured on.
+const CONTENT_FIELDS = Object.freeze([
+  "uri",
+  "anchor",
+  "heading",
+  "title",
+  "text",
+  "truncated",
+  "provenance",
+]);
 
 function estimateContextTokens(text) {
   return Math.ceil(String(text || "").length / CHARS_PER_TOKEN);
+}
+
+// Characters of the JSON serialisation of a section's content fields.
+function contentLength(section) {
+  const content = {};
+  CONTENT_FIELDS.forEach((name) => {
+    if (section[name] !== undefined) {
+      content[name] = section[name];
+    }
+  });
+  return JSON.stringify(content).length;
+}
+
+// The token cost of a section as returned (see the header).
+function sectionCost(section) {
+  return Math.ceil(contentLength(section) / CHARS_PER_TOKEN);
 }
 
 function integerOption(value, name, fallback, maximum) {
@@ -75,6 +132,31 @@ function weightOption(value) {
   const number = Number(value);
   if (!Number.isFinite(number) || number <= 0 || number > 1) {
     throw new TypeError("preambleWeight must be a number greater than 0 and at most 1.");
+  }
+  return number;
+}
+
+function provenanceOption(config) {
+  if (config.includeProvenance === false) {
+    return null;
+  }
+  const mode =
+    config.provenance === undefined || config.provenance === null
+      ? DEFAULT_PROVENANCE
+      : config.provenance;
+  if (!PROVENANCE_MODES.includes(mode)) {
+    throw new TypeError(`provenance must be one of ${PROVENANCE_MODES.join(", ")}.`);
+  }
+  return mode === "none" ? null : mode;
+}
+
+function liftOption(value) {
+  if (value === undefined || value === null || value === "") {
+    return DEFAULT_CONCEPT_LIFT;
+  }
+  const number = Number(value);
+  if (!Number.isFinite(number) || number < 0 || number > MAX_CONCEPT_LIFT) {
+    throw new TypeError(`conceptLift must be a number from 0 through ${MAX_CONCEPT_LIFT}.`);
   }
   return number;
 }
@@ -107,7 +189,20 @@ function compactSource(source) {
   return out;
 }
 
-function provenanceOf(signals) {
+const validSources = (signals) =>
+  (signals.sources || []).filter(
+    (source) => source && typeof source === "object" && source.valid !== false,
+  );
+
+function provenanceOf(signals, mode) {
+  if (mode === "compact") {
+    return {
+      status: signals.status ?? null,
+      freshness: signals.freshness ?? null,
+      verified: (signals.verifiedEvents || []).length > 0,
+      sourceCount: validSources(signals).length,
+    };
+  }
   return {
     status: signals.status ?? null,
     staleAfter: signals.staleAfter ?? null,
@@ -120,9 +215,7 @@ function provenanceOf(signals) {
     generated: signals.generated
       ? { by: signals.generated.by ?? null, at: signals.generated.at ?? null }
       : null,
-    sources: (signals.sources || [])
-      .filter((source) => source && typeof source === "object" && source.valid !== false)
-      .map(compactSource),
+    sources: validSources(signals).map(compactSource),
   };
 }
 
@@ -151,23 +244,47 @@ function rankSections(index, options, analysis, candidates, context) {
     languagesFor: bundleLanguages(index, options),
     preambleWeight: context.preambleWeight,
   });
-  const ranked = scored.map((hit) => {
-    const prior = options.freshnessPrior ? priorFactor(context.signalsOf(hit.entry.doc)) : 1;
-    return {
-      entry: hit.entry,
-      score: hit.score * prior,
-      coverage: hit.coverage,
-      positions: hit.positions,
-      conceptRank: hit.entry.conceptRank,
-    };
+  const prior = (hit) =>
+    options.freshnessPrior ? priorFactor(context.signalsOf(hit.entry.doc)) : 1;
+  const ranked = scored.map((hit) => ({
+    entry: hit.entry,
+    tier: hit.tier,
+    score: hit.tier ? hit.score * prior(hit) : 0,
+    coverage: hit.coverage,
+    positions: hit.positions,
+    conceptRank: hit.entry.conceptRank,
+  }));
+  // A metadata-only section scores below the weakest own-text section of its
+  // concept (of any candidate when its concept has none).
+  const weakest = new Map();
+  ranked.forEach((hit) => {
+    if (hit.tier) {
+      const uri = hit.entry.doc.uri;
+      weakest.set(uri, Math.min(weakest.get(uri) ?? Number.POSITIVE_INFINITY, hit.score));
+    }
+  });
+  const ownScores = ranked.filter((hit) => hit.tier).map((hit) => hit.score);
+  const fallback = ownScores.length ? Math.min(...ownScores) : 1;
+  const best = ownScores.length ? Math.max(...ownScores) : 0;
+  ranked.forEach((hit, position) => {
+    if (!hit.tier) {
+      const floor = weakest.get(hit.entry.doc.uri) ?? fallback;
+      hit.score =
+        METADATA_ONLY_CEILING * floor * scored[position].metadataShare * prior(scored[position]);
+    }
+    // Concept rank leads; an own-text section moves ahead of at most
+    // `conceptLift` weaker concepts, in proportion to its score over the best.
+    hit.key =
+      hit.conceptRank - (hit.tier && best > 0 ? context.conceptLift * (hit.score / best) : 0);
   });
   ranked.sort(
     (left, right) =>
+      left.key - right.key ||
+      right.tier - left.tier ||
       right.score - left.score ||
-      left.conceptRank - right.conceptRank ||
       left.entry.position - right.entry.position,
   );
-  const top = ranked.length ? ranked[0].score : 0;
+  const top = best;
   const anchors = new Set();
   const hashes = new Set();
   return ranked.filter((candidate) => {
@@ -204,53 +321,76 @@ function truncateText(text, maxChars) {
   return text.slice(0, cut).trimEnd();
 }
 
-// Greedy by rank: a section is taken when it fits what is left of the budget
-// and the limit, otherwise skipped. A best section larger than the whole
-// budget is returned alone, cut at a sentence boundary.
-function packSections(ranked, budgetTokens, limit) {
-  if (ranked.length && estimateContextTokens(ranked[0].entry.section.text) > budgetTokens) {
-    const text = truncateText(ranked[0].entry.section.text, budgetTokens * CHARS_PER_TOKEN);
-    const tokens = estimateContextTokens(text);
-    return {
-      packed: [Object.assign({ text, tokens, truncated: true }, ranked[0])],
-      usedTokens: tokens,
-      omitted: ranked.length - 1,
-      truncated: true,
-    };
+// The best section cut to fit the budget once serialised, or null when its
+// fields without any text already exceed it. JSON escaping can make the text
+// cost more than its length, so the allowance shrinks until it fits.
+function truncatedSection(build, text, budgetTokens) {
+  const limit = budgetTokens * CHARS_PER_TOKEN;
+  let allowance = limit - contentLength(build("", true));
+  while (allowance > 0) {
+    const section = build(truncateText(text, allowance), true);
+    const excess = contentLength(section) - limit;
+    if (excess <= 0) {
+      return section;
+    }
+    allowance -= excess;
+  }
+  return null;
+}
+
+// Greedy by rank: a section is taken when its serialised cost fits what is
+// left of the budget and the limit, otherwise skipped. A best section larger
+// than the whole budget is returned alone, cut.
+function packSections(ranked, budgetTokens, limit, build) {
+  if (ranked.length) {
+    const best = ranked[0];
+    if (sectionCost(build(best, best.entry.section.text, false)) > budgetTokens) {
+      const cut = truncatedSection(
+        (text, isCut) => build(best, text, isCut),
+        best.entry.section.text,
+        budgetTokens,
+      );
+      if (!cut) {
+        return { packed: [], usedTokens: 0, omitted: ranked.length, truncated: false };
+      }
+      cut.tokens = sectionCost(cut);
+      return { packed: [cut], usedTokens: cut.tokens, omitted: ranked.length - 1, truncated: true };
+    }
   }
   const packed = [];
   let usedTokens = 0;
   let omitted = 0;
   ranked.forEach((candidate) => {
-    const text = candidate.entry.section.text;
-    const tokens = estimateContextTokens(text);
+    const section = build(candidate, candidate.entry.section.text, false);
+    const tokens = sectionCost(section);
     if (packed.length >= limit || usedTokens + tokens > budgetTokens) {
       omitted += 1;
       return;
     }
-    packed.push(Object.assign({ text, tokens, truncated: false }, candidate));
+    section.tokens = tokens;
+    packed.push(section);
     usedTokens += tokens;
   });
   return { packed, usedTokens, omitted, truncated: false };
 }
 
-function sectionResult(candidate, analysis, includeProvenance, signalsOf) {
+function sectionResult(candidate, text, truncated, analysis, provenanceMode, signalsOf) {
   const { entry } = candidate;
   const result = {
     uri: entry.concept.uri,
     anchor: entry.section.anchor,
     heading: entry.section.heading,
     title: entry.concept.title,
-    text: candidate.text,
-    tokens: candidate.tokens,
-    truncated: candidate.truncated,
+    text,
+    tokens: 0,
+    truncated,
     score: candidate.score,
     relevance: candidate.relevance,
     matchedTerms: candidate.positions.map((position) => analysis.tokens[position].raw),
     coverage: candidate.coverage,
   };
-  if (includeProvenance) {
-    result.provenance = provenanceOf(signalsOf(entry.concept));
+  if (provenanceMode) {
+    result.provenance = provenanceOf(signalsOf(entry.concept), provenanceMode);
   }
   return result;
 }
@@ -275,7 +415,8 @@ function assembleContext(index, options) {
     MAX_CONCEPT_LIMIT,
   );
   const preambleWeight = weightOption(config.preambleWeight);
-  const includeProvenance = config.includeProvenance !== false;
+  const conceptLift = liftOption(config.conceptLift);
+  const provenanceMode = provenanceOption(config);
   const searchOptions = Object.assign({}, config, {
     query,
     limit: conceptLimit,
@@ -303,9 +444,15 @@ function assembleContext(index, options) {
   };
   const ranked =
     analysis.tokens.length && candidates.length
-      ? rankSections(index, searchOptions, analysis, candidates, { preambleWeight, signalsOf })
+      ? rankSections(index, searchOptions, analysis, candidates, {
+          preambleWeight,
+          conceptLift,
+          signalsOf,
+        })
       : [];
-  const packing = packSections(ranked, budgetTokens, limit);
+  const packing = packSections(ranked, budgetTokens, limit, (candidate, text, truncated) =>
+    sectionResult(candidate, text, truncated, analysis, provenanceMode, signalsOf),
+  );
   return {
     query,
     budgetTokens,
@@ -316,9 +463,7 @@ function assembleContext(index, options) {
     queryTerms: response.queryTerms || [],
     droppedTerms: response.droppedTerms || [],
     concepts: candidates,
-    sections: packing.packed.map((candidate) =>
-      sectionResult(candidate, analysis, includeProvenance, signalsOf),
-    ),
+    sections: packing.packed,
     totalSections: ranked.length,
     omittedSections: packing.omitted,
     truncated: packing.truncated,
@@ -336,10 +481,14 @@ const CONTEXT_LIMITS = Object.freeze({
 });
 
 module.exports = {
+  CONTEXT_CONTENT_FIELDS: CONTENT_FIELDS,
   CONTEXT_LIMITS,
+  PROVENANCE_MODES,
   CONTEXT_TOKEN_ESTIMATOR,
   DEFAULT_CONTEXT_BUDGET_TOKENS,
+  DEFAULT_CONCEPT_LIFT,
   DEFAULT_PREAMBLE_WEIGHT,
+  DEFAULT_PROVENANCE,
   assembleContext,
   estimateContextTokens,
 };
