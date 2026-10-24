@@ -3,6 +3,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 
+const { realpathOfExistingAncestors } = require("../cache/paths");
 const { resolveConcept } = require("../indexer/resolve");
 const { normalizeSlashes, parseFrontmatterYaml } = require("../parser");
 
@@ -591,12 +592,21 @@ function policyFileError(code, message, details) {
 
 // `--policy <file>` for --root mode: a YAML (or JSON) mapping holding the
 // writePolicy fields, optionally wrapped in a top-level `writePolicy:` key.
-// Path safety (S-1): a regular file, not a symbolic link, bounded in size.
-function loadWritePolicyFile(filePath) {
+// Path safety (S-1), as for the vector cache directory: ancestors resolve
+// through their real paths first (a relocated home is common), the file
+// itself must be a regular file and not a symbolic link, and it is opened
+// without following links and checked to be the very file that was
+// inspected, with no symbolic link left anywhere on its resolved path. A
+// component swapped for a link between the check and the read is refused.
+function readPolicyFile(filePath) {
   if (typeof filePath !== "string" || !filePath.trim()) {
     throw policyFileError("invalid_policy_path", "--policy requires a file path.");
   }
-  const resolved = path.resolve(filePath);
+  const requested = path.resolve(filePath);
+  const resolved = path.join(
+    realpathOfExistingAncestors(path.dirname(requested)),
+    path.basename(requested),
+  );
   let stat;
   try {
     stat = fs.lstatSync(resolved);
@@ -615,7 +625,30 @@ function loadWritePolicyFile(filePath) {
       `Write policy file must not exceed ${MAX_POLICY_FILE_BYTES} bytes.`,
     );
   }
-  const text = fs.readFileSync(resolved, "utf8");
+  const descriptor = fs.openSync(resolved, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0));
+  try {
+    const opened = fs.fstatSync(descriptor);
+    const sameFile = opened.dev === stat.dev && (opened.ino === 0 || opened.ino === stat.ino);
+    if (!opened.isFile() || !sameFile || fs.realpathSync(resolved) !== resolved) {
+      throw policyFileError(
+        "policy_file_symlink",
+        "Write policy file path changed or gained a symbolic link while it was read.",
+      );
+    }
+    if (opened.size > MAX_POLICY_FILE_BYTES) {
+      throw policyFileError(
+        "policy_file_too_large",
+        `Write policy file must not exceed ${MAX_POLICY_FILE_BYTES} bytes.`,
+      );
+    }
+    return { resolved, text: fs.readFileSync(descriptor, "utf8") };
+  } finally {
+    fs.closeSync(descriptor);
+  }
+}
+
+function loadWritePolicyFile(filePath) {
+  const { resolved, text } = readPolicyFile(filePath);
   let raw;
   try {
     raw = resolved.endsWith(".json") ? JSON.parse(text) : parseFrontmatterYaml(text);

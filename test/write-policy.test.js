@@ -623,3 +623,47 @@ test("loadWritePolicyFile applies path safety and parses bare or wrapped YAML an
     );
   }
 });
+
+test("loadWritePolicyFile resolves linked ancestors and refuses links on the resolved path", (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "okf-policy-ancestors-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const real = path.join(fs.realpathSync(root), "real");
+  fs.mkdirSync(real);
+  const policyFile = path.join(real, "policy.yaml");
+  fs.writeFileSync(
+    policyFile,
+    "defaultEffect: deny\nrules: [{ actors: ['**'], paths: ['../x'] }]\n",
+  );
+
+  // A component swapped for a link after the check is refused at read time.
+  const original = fs.realpathSync;
+  t.mock.method(fs, "realpathSync", (target, ...rest) =>
+    target === policyFile ? path.join(root, "elsewhere.yaml") : original(target, ...rest),
+  );
+  assert.throws(
+    () => loadWritePolicyFile(policyFile),
+    (error) => error.code === "policy_file_symlink" && /changed/.test(error.message),
+  );
+  t.mock.restoreAll();
+
+  if (process.platform === "win32") return;
+  // A linked ancestor directory is resolved: the policy is read from, and
+  // reported at, its real location.
+  const alias = path.join(root, "alias");
+  fs.symlinkSync(real, alias, "dir");
+  assert.throws(
+    () => loadWritePolicyFile(path.join(alias, "policy.yaml")),
+    (error) => error.code === "invalid_write_policy" && error.message.includes(`in ${policyFile}:`),
+  );
+  fs.writeFileSync(policyFile, "defaultEffect: deny\n");
+  assert.equal(loadWritePolicyFile(path.join(alias, "policy.yaml")).defaultEffect, "deny");
+  // The final component is never followed, whether it links a file or a directory.
+  fs.symlinkSync(policyFile, path.join(real, "file-link.yaml"));
+  fs.symlinkSync(real, path.join(real, "dir-link"), "dir");
+  for (const linked of [path.join(alias, "file-link.yaml"), path.join(alias, "dir-link")]) {
+    assert.throws(
+      () => loadWritePolicyFile(linked),
+      (error) => error.code === "policy_file_symlink",
+    );
+  }
+});
