@@ -76,14 +76,17 @@ async function captureContract(args) {
     { versionNegotiation: { mode: "legacy" } },
   );
   let contract;
+  let toolOrder;
   try {
     await client.connect(transport);
     const serverInfo = Object.assign({}, client.getServerVersion());
     delete serverInfo.version;
     const instructions = client.getInstructions();
-    const tools = (await client.listTools()).tools
-      .map((tool) => pick(tool, TOOL_FIELDS))
-      .sort(byName);
+    const listed = (await client.listTools()).tools;
+    // Registration order is kept separately: the contract below sorts tools by
+    // name so schema diffs stay readable, which would hide an order regression.
+    toolOrder = listed.map((tool) => tool.name);
+    const tools = listed.map((tool) => pick(tool, TOOL_FIELDS)).sort(byName);
     const templates = (await client.listResourceTemplates()).resourceTemplates;
     contract = sortedJson({
       initialize: {
@@ -98,28 +101,42 @@ async function captureContract(args) {
     await client.close();
   }
   assert.equal(stderr, "");
-  return contract;
+  return { contract, toolOrder };
 }
 
 function snapshotPath(name) {
   return path.join(snapshotRoot, `mcp-contract-${name}.json`);
 }
 
+function toolOrderPath(name) {
+  return path.join(snapshotRoot, `mcp-tool-order-${name}.json`);
+}
+
+function writeSnapshot(file, value) {
+  fs.mkdirSync(snapshotRoot, { recursive: true });
+  fs.writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+}
+
+function readSnapshot(file) {
+  assert.equal(
+    fs.existsSync(file),
+    true,
+    `Missing snapshot ${path.relative(repositoryRoot, file)}; run with OKF_UPDATE_SNAPSHOTS=1 to create it.`,
+  );
+  return JSON.parse(fs.readFileSync(file, "utf8"));
+}
+
 MODES.forEach((mode) => {
   test(`MCP contract snapshot matches for ${mode.name} mode`, async () => {
-    const actual = await captureContract(mode.args);
-    const file = snapshotPath(mode.name);
+    const { contract, toolOrder } = await captureContract(mode.args);
+    const contractFile = snapshotPath(mode.name);
+    const orderFile = toolOrderPath(mode.name);
     if (UPDATE_SNAPSHOTS) {
-      fs.mkdirSync(snapshotRoot, { recursive: true });
-      fs.writeFileSync(file, `${JSON.stringify(actual, null, 2)}\n`, "utf8");
+      writeSnapshot(contractFile, contract);
+      writeSnapshot(orderFile, toolOrder);
     }
-    assert.equal(
-      fs.existsSync(file),
-      true,
-      `Missing snapshot ${path.relative(repositoryRoot, file)}; run with OKF_UPDATE_SNAPSHOTS=1 to create it.`,
-    );
-    const expected = JSON.parse(fs.readFileSync(file, "utf8"));
-    assert.deepEqual(actual, expected);
+    assert.deepEqual(contract, readSnapshot(contractFile));
+    assert.deepEqual(toolOrder, readSnapshot(orderFile), "tools/list registration order changed");
   });
 });
 
