@@ -45,6 +45,10 @@ function embedderFor(server, overrides) {
   return { embedder, sleeps };
 }
 
+function idFor(server, model, dimension, maxInputChars) {
+  return `openai:${server.baseUrl}/v1/embeddings:${model}:${dimension}:${maxInputChars || 32000}`;
+}
+
 function assertClose(actual, expected) {
   assert.equal(actual.length, expected.length);
   for (let index = 0; index < actual.length; index += 1) {
@@ -70,7 +74,7 @@ test("embeds in input order across batches and workers, and reports usage", asyn
   const server = await serverFor(t);
   const { embedder } = embedderFor(server, { batchSize: 3, concurrency: 3 });
   validateEmbedder(embedder);
-  assert.equal(embedder.id, `openai:${new URL(server.baseUrl).host}:fake-embed:8`);
+  assert.equal(embedder.id, idFor(server, "fake-embed", 8));
   assert.equal(embedder.remote, false);
   assert.equal(embedder.dimension, 8);
   assert.equal(embedder.maxBatch, 3);
@@ -155,6 +159,7 @@ test("truncates inputs at maxInputChars and counts the truncations", async (t) =
   const { embedder: narrow } = embedderFor(server, { maxInputChars: 100 });
   await narrow.embed(["b".repeat(1000)]);
   assert.equal(server.requests[1].body.input[0].length, 100);
+  assert.equal(narrow.id, idFor(server, "fake-embed", 8, 100));
   assert.throws(
     () => embedderFor(server, { maxInputChars: 32769 }),
     (error) => error.details.field === "maxInputChars",
@@ -196,6 +201,30 @@ test("rejects malformed responses without retrying", async (t) => {
   assert.deepEqual(sleeps, []);
 });
 
+test("rejects vectors that are not finite as float32 without retrying", async (t) => {
+  const server = await serverFor(t);
+  const { embedder, sleeps } = embedderFor(server, { maxRetries: 3 });
+  const texts = ["unit-alpha-7f3e", "unit-beta-9c1d"];
+  for (const component of [1e40, -1e40, null, "0.5"]) {
+    server.script({ component });
+    await assert.rejects(embedder.embed(texts), (error) => {
+      assertMasked(error, texts);
+      return error.code === "embedder_invalid_vector";
+    });
+  }
+  server.script({ emptyVector: true });
+  await assert.rejects(
+    embedder.embed(texts),
+    (error) => error.code === "embedder_invalid_vector" && error.details.reason === "empty",
+  );
+  assert.equal(server.requests.length, 5);
+  assert.deepEqual(sleeps, [], "an invalid vector is not retried");
+  // A value inside the float32 range survives.
+  server.script({ component: 3.4e38 });
+  const [vector] = await embedder.embed(["unit-alpha-7f3e"]);
+  assert.equal(Number.isFinite(vector[0]), true);
+});
+
 test("retries 429 and 5xx honouring Retry-After in seconds and as an HTTP date", async (t) => {
   const server = await serverFor(t);
   const nowMs = Date.UTC(2026, 9, 24, 12, 0, 0);
@@ -225,15 +254,15 @@ test("stops after maxRetries, never retries 4xx, and keeps the status in the err
     assertMasked(error, ["unlucky"]);
     assert.equal(error.code, "embedder_http_error");
     assert.equal(error.status, 500);
-    assert.equal(error.details.attempts, 2);
+    assert.deepEqual(error.details, { status: 500, serverCode: "server_error", attempts: 2 });
     return true;
   });
   assert.deepEqual(sleeps, [375]);
   server.script({ status: 400, code: "invalid_request" });
   await assert.rejects(embedder.embed(["bad"]), (error) => {
     assertMasked(error, ["bad"]);
-    assert.match(error.message, /HTTP 400 \(invalid_request\)/);
-    assert.equal(error.details.attempts, 1);
+    assert.equal(error.message, "Embeddings request failed with HTTP 400.");
+    assert.deepEqual(error.details, { status: 400, serverCode: "invalid_request", attempts: 1 });
     return true;
   });
   assert.equal(server.requests.length, 3);
@@ -260,6 +289,22 @@ test("times out with an AbortController and retries within the budget", async (t
     embedder.embed(["never"], { signal: external.signal }),
     (error) => error.code === "embedder_aborted",
   );
+});
+
+test("an abort during a retry wait clears the timer and rejects promptly", async (t) => {
+  const server = await serverFor(t);
+  const { embedder } = embedderFor(server, { maxRetries: 3, sleep: undefined });
+  server.script({ status: 429, retryAfter: "30" });
+  const controller = new AbortController();
+  const started = Date.now();
+  setTimeout(() => controller.abort(), 50);
+  await assert.rejects(
+    embedder.embed(["unit-alpha-7f3e"], { signal: controller.signal }),
+    (error) => error.code === "embedder_aborted",
+  );
+  assert.ok(Date.now() - started < 5000, "the 30 s Retry-After wait was cut short");
+  assert.equal(embedder.usage().retries, 1);
+  assert.equal(server.requests.length, 1);
 });
 
 test("names a missing key variable without its value and sends no header without one", async (t) => {
@@ -293,8 +338,7 @@ test("masks input text and the key in every error path", async (t) => {
   server.script({ echoInput: true });
   await assert.rejects(embedder.embed([secretInput]), (error) => {
     assertMasked(error, [secretInput]);
-    assert.equal(error.details.server.code, "invalid_input");
-    assert.equal(error.details.server.message, undefined);
+    assert.equal(error.details.serverCode, "invalid_request");
     return true;
   });
   server.script({
@@ -309,20 +353,20 @@ test("masks input text and the key in every error path", async (t) => {
   });
   await assert.rejects(embedder.embed([secretInput]), (error) => {
     assertMasked(error, [secretInput]);
-    assert.equal(error.details.server.message, undefined);
+    assert.equal(error.details.serverCode, "invalid_api_key");
     return true;
   });
   server.script({ status: 500, body: "<html>gateway exploded</html>" });
   await assert.rejects(embedder.embed([secretInput]), (error) => {
     assertMasked(error, [secretInput]);
-    assert.equal(error.details.server.message, "<html>gateway exploded</html>");
+    assert.equal(error.details.serverCode, "server_error");
     return true;
   });
   const wrongKey = await serverFor(t, { apiKey: "sk-other-key-9876543210" });
   const { embedder: unauthorised } = embedderFor(wrongKey, { maxRetries: 0 });
   await assert.rejects(unauthorised.embed([secretInput]), (error) => {
     assertMasked(error, [secretInput]);
-    return error.status === 401 && /invalid_api_key/.test(error.message);
+    return error.status === 401 && error.details.serverCode === "invalid_api_key";
   });
   const closed = await startFakeEmbeddingsServer({ apiKey: KEY });
   const { baseUrl } = closed;
@@ -332,6 +376,90 @@ test("masks input text and the key in every error path", async (t) => {
     assertMasked(error, [secretInput]);
     return error.code === "embedder_network_error";
   });
+});
+
+test("returns constant-shaped errors whatever an error body contains", async (t) => {
+  const server = await serverFor(t);
+  const { embedder } = embedderFor(server, { maxRetries: 0 });
+  const secretInput = "confidential catalogue text that must never surface";
+  const encodedKey = encodeURIComponent(KEY);
+  const base64Key = Buffer.from(KEY).toString("base64");
+  const forbidden = [
+    KEY,
+    encodedKey,
+    base64Key,
+    secretInput,
+    secretInput.toUpperCase(),
+    secretInput.slice(5, 25),
+    Buffer.from(secretInput).toString("base64"),
+  ];
+  const bodies = [
+    JSON.stringify({
+      error: {
+        code: KEY,
+        type: `Bearer ${KEY}`,
+        param: secretInput,
+        message: "x".repeat(1000),
+      },
+    }),
+    JSON.stringify({ error: { code: encodedKey, message: `key=${encodedKey}` } }),
+    JSON.stringify({ error: { code: base64Key, type: base64Key } }),
+    JSON.stringify({
+      error: { code: KEY.slice(0, 10), type: KEY.slice(10, 20), param: KEY.slice(20) },
+    }),
+    JSON.stringify({
+      error: { message: secretInput.toUpperCase(), param: secretInput.slice(5, 25) },
+    }),
+    JSON.stringify({ error: { code: "totally_made_up_code", type: "also_made_up" } }),
+    JSON.stringify({ message: secretInput, code: "flat_shape" }),
+    JSON.stringify([KEY, secretInput]),
+    `Authorization: Bearer ${encodedKey} / ${base64Key} / ${secretInput}`,
+    "<html>upstream exploded</html>",
+    "",
+  ];
+  const shapes = new Set();
+  for (const body of bodies) {
+    server.script({ status: 400, body });
+    await assert.rejects(embedder.embed([secretInput]), (error) => {
+      assert.equal(error.message, "Embeddings request failed with HTTP 400.");
+      assert.deepEqual(error.details, { status: 400, serverCode: "invalid_request", attempts: 1 });
+      const serialized = JSON.stringify({
+        message: error.message,
+        details: error.details,
+        stack: error.stack,
+        own: Object.keys(error),
+      });
+      for (const needle of forbidden) {
+        assert.equal(serialized.includes(needle), false, `leaked: ${needle}`);
+      }
+      shapes.add(JSON.stringify([error.message, Object.keys(error.details).sort()]));
+      return true;
+    });
+  }
+  assert.equal(shapes.size, 1, "every adversarial body produced the same error shape");
+
+  // The server code is one of our constants, chosen from status and code.
+  const cases = [
+    [401, JSON.stringify({ error: { code: null } }), "invalid_api_key"],
+    [400, JSON.stringify({ error: { code: "invalid_api_key" } }), "invalid_api_key"],
+    [429, "", "rate_limited"],
+    [400, JSON.stringify({ error: { code: "rate_limit_exceeded" } }), "rate_limited"],
+    [429, JSON.stringify({ error: { type: "insufficient_quota" } }), "insufficient_quota"],
+    [404, JSON.stringify({ error: { code: "model_not_found" } }), "model_not_found"],
+    [404, JSON.stringify({ error: { message: "Invalid URL" } }), "invalid_request"],
+    [418, "teapot", "invalid_request"],
+    [500, "<html>gateway exploded</html>", "server_error"],
+    [503, JSON.stringify({ error: { code: KEY } }), "server_error"],
+  ];
+  for (const [status, body, expected] of cases) {
+    server.script({ status, body });
+    await assert.rejects(embedder.embed([secretInput]), (error) => {
+      assert.equal(error.message, `Embeddings request failed with HTTP ${status}.`);
+      assert.equal(error.details.serverCode, expected, `${status} ${body}`);
+      assert.deepEqual(Object.keys(error.details).sort(), ["attempts", "serverCode", "status"]);
+      return true;
+    });
+  }
 });
 
 test("derives id, endpoint and remote from the base URL and discovers the dimension", async (t) => {
@@ -344,7 +472,10 @@ test("derives id, endpoint and remote from the base URL and discovers the dimens
     dimensions: 512,
     fetch: never,
   });
-  assert.equal(hosted.id, "openai:api.openai.com:text-embedding-3-small:512");
+  assert.equal(
+    hosted.id,
+    "openai:https://api.openai.com/v1/embeddings:text-embedding-3-small:512:32000",
+  );
   assert.equal(hosted.endpoint, "https://api.openai.com/v1/embeddings");
   assert.equal(hosted.remote, true);
   assert.deepEqual(hosted.languages, []);
@@ -357,7 +488,7 @@ test("derives id, endpoint and remote from the base URL and discovers the dimens
   assert.equal(local.endpoint, "http://localhost:11434/v1/embeddings");
   assert.equal(local.remote, false);
   assert.deepEqual(local.languages, ["en", "it"]);
-  assert.equal(local.id, "openai:localhost:11434:nomic-embed-text:?");
+  assert.equal(local.id, "openai:http://localhost:11434/v1/embeddings:nomic-embed-text:?:32000");
   assert.equal(local.dimension, null);
   assert.throws(
     () => validateEmbedder(local),
@@ -367,9 +498,19 @@ test("derives id, endpoint and remote from the base URL and discovers the dimens
     baseUrl: "http://[::1]:8000/openai",
     model: "m",
     fetch: never,
+    dimensions: 4,
   });
   assert.equal(gateway.endpoint, "http://[::1]:8000/openai/v1/embeddings");
   assert.equal(gateway.remote, false);
+  assert.equal(gateway.id, "openai:http://[::1]:8000/openai/v1/embeddings:m:4:32000");
+  // Gateways that differ only by path key different caches.
+  const otherPath = createOpenAiEmbedder({
+    baseUrl: "http://[::1]:8000/other",
+    model: "m",
+    fetch: never,
+    dimensions: 4,
+  });
+  assert.notEqual(otherPath.id, gateway.id);
   assert.equal(
     createOpenAiEmbedder({ baseUrl: "http://10.0.0.5:8000", model: "m", fetch: never }).remote,
     true,
@@ -379,7 +520,7 @@ test("derives id, endpoint and remote from the base URL and discovers the dimens
   const { embedder } = embedderFor(server, { dimensions: undefined });
   assert.equal(embedder.dimension, null);
   assert.deepEqual(await embedder.probe(), {
-    id: `openai:${new URL(server.baseUrl).host}:fake-embed:12`,
+    id: idFor(server, "fake-embed", 12),
     dimension: 12,
   });
   assert.equal(server.requests.length, 1);
@@ -395,7 +536,7 @@ test("derives id, endpoint and remote from the base URL and discovers the dimens
   const { embedder: unsupported } = embedderFor(strict, { maxRetries: 0 });
   await assert.rejects(
     unsupported.embed(["x"]),
-    (error) => error.status === 400 && /unknown_parameter/.test(error.message),
+    (error) => error.status === 400 && error.details.serverCode === "invalid_request",
   );
 });
 
@@ -468,79 +609,6 @@ test("never follows a redirect, so no request reaches the redirect target", asyn
   assert.equal(embedder.remote, false);
 });
 
-test("keeps server-supplied strings out of error messages and drops tainted fields", async (t) => {
-  const server = await serverFor(t);
-  const { embedder } = embedderFor(server, { maxRetries: 0 });
-  const secretInput = "confidential catalogue text that must never surface";
-  const body = (error) => ({ status: 400, body: JSON.stringify({ error }) });
-
-  // Key as code, bearer token as type, input as param, oversized message.
-  server.script(
-    body({
-      code: KEY,
-      type: `Bearer ${KEY}`,
-      param: `field ${secretInput} end`,
-      message: `${"long ".repeat(300)}tail`,
-    }),
-  );
-  await assert.rejects(embedder.embed([secretInput]), (error) => {
-    assertMasked(error, [secretInput]);
-    assert.equal(error.message, "Embeddings request failed with HTTP 400.");
-    assert.deepEqual(Object.keys(error.details.server), ["message"]);
-    assert.equal(error.details.server.message.length, 200);
-    return true;
-  });
-
-  // A lowercase code reaches the message only when it carries no input text.
-  server.script(body({ code: "invalid_api_key" }));
-  await assert.rejects(
-    embedder.embed([secretInput]),
-    (error) =>
-      error.message === "Embeddings request failed with HTTP 400 (invalid_api_key)." &&
-      error.details.server.code === "invalid_api_key",
-  );
-  server.script(body({ code: "invalid_api_key" }));
-  await assert.rejects(embedder.embed(["key"]), (error) => {
-    assertMasked(error, ["key"]);
-    return (
-      error.message === "Embeddings request failed with HTTP 400." &&
-      error.details.server.code === undefined
-    );
-  });
-
-  // Mixed case, digits or punctuation never enter the message; a short input
-  // of any length taints a field that contains it, and the key is matched in
-  // any case.
-  server.script(body({ code: "Invalid-Key-01", type: "x", param: "y" }));
-  await assert.rejects(embedder.embed(["x"]), (error) => {
-    assert.equal(error.message, "Embeddings request failed with HTTP 400.");
-    assert.deepEqual(error.details.server, { code: "Invalid-Key-01", param: "y" });
-    return true;
-  });
-  const lowerKey = "abcdefghijklmnopqrstuvwxyz";
-  const lowerServer = await serverFor(t, { apiKey: lowerKey });
-  const { embedder: lowerKeyed } = embedderFor(lowerServer, {
-    maxRetries: 0,
-    apiKeyEnv: "OKF_LOWER_KEY",
-    env: { OKF_LOWER_KEY: lowerKey },
-  });
-  lowerServer.script(body({ code: lowerKey, type: lowerKey.toUpperCase(), message: "fine" }));
-  await assert.rejects(lowerKeyed.embed([secretInput]), (error) => {
-    const serialized = JSON.stringify({ message: error.message, details: error.details });
-    assert.equal(serialized.toLowerCase().includes(lowerKey), false);
-    assert.deepEqual(error.details.server, { message: "fine" });
-    return true;
-  });
-
-  // A non-JSON body that echoes the input is dropped entirely.
-  server.script({ status: 502, body: `upstream rejected: ${secretInput}` });
-  await assert.rejects(embedder.embed([secretInput]), (error) => {
-    assertMasked(error, [secretInput]);
-    assert.deepEqual(error.details.server, {});
-    return error.status === 502;
-  });
-});
-
 test("keeps every input within the request token budget", async (t) => {
   const server = await serverFor(t);
   assert.throws(
@@ -575,6 +643,17 @@ test("keeps every input within the request token budget", async (t) => {
     planBatches(["a", "b", oversized, "c"], 2048, 1000).map((batch) => batch.offset),
     [0, 2, 3],
   );
+});
+
+test("caps the requests in flight per call through options.concurrency", async (t) => {
+  const server = await serverFor(t, { delayMs: 30 });
+  const { embedder } = embedderFor(server, { batchSize: 1, concurrency: 3 });
+  const texts = ["a1", "b2", "c3", "d4", "e5", "f6"];
+  await embedder.embed(texts, { concurrency: 1 });
+  assert.equal(server.stats.maxInFlight, 1);
+  await embedder.embed(texts, { concurrency: 9 });
+  assert.ok(server.stats.maxInFlight <= 3, "the configured concurrency stays the ceiling");
+  assert.equal(server.requests.length, 12);
 });
 
 test("a retry wait keeps a process alive until the retried request completes", async (t) => {

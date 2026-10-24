@@ -5,9 +5,10 @@
 // of Node 22+. Every setting arrives through the options object from trusted
 // project configuration; nothing here reads tool arguments. The API key is read
 // once from the named environment variable and lives only in this closure.
-// Errors carry a code and an HTTP status; error.message never contains a
-// server-supplied string other than a checked lowercase code, and nothing
-// retained can carry input text or the key (B-6, S-2).
+// No server-controlled string is ever retained: an HTTP error carries a fixed
+// message with the status, and its details hold the status plus a server code
+// mapped onto a fixed enumeration (B-6, S-2). Filtering cannot promise
+// secrecy; not retaining can.
 
 const { EmbedderError } = require("./interface");
 const { version: PACKAGE_VERSION } = require("../../package.json");
@@ -35,11 +36,18 @@ const BACKOFF_BASE_MS = 500;
 const BACKOFF_CAP_MS = 30000;
 const RETRY_AFTER_CAP_MS = 60000;
 const MAX_RESPONSE_BYTES = 256 * 1024 * 1024;
-const MAX_SERVER_MESSAGE_CHARS = 200;
-const MAX_SERVER_FIELD_CHARS = 64;
 const PROBE_TEXT = "okf-mcp";
-// The only shape of server-supplied code allowed into error.message.
-const SERVER_CODE = /^[a-z][a-z_]{0,39}$/;
+// The only server-derived value an error may carry: one of these constants,
+// chosen from the HTTP status and the OpenAI-style error code or type.
+const OPENAI_SERVER_CODES = Object.freeze([
+  "invalid_api_key",
+  "insufficient_quota",
+  "rate_limited",
+  "model_not_found",
+  "invalid_request",
+  "server_error",
+  "unknown",
+]);
 // Node and undici error codes and names, which are not server-supplied.
 const NODE_ERROR_CODE = /^[A-Za-z_]{1,48}$/;
 const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
@@ -141,58 +149,29 @@ function planBatches(inputs, batchSize, maxRequestTokens) {
   return batches;
 }
 
-function scrubSecret(text, secret) {
-  let out = String(text);
-  if (secret) out = out.split(secret).join("[redacted]");
-  return out
-    .replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/gi, "Bearer [redacted]")
-    .replace(/\bsk-[A-Za-z0-9_-]{8,}/g, "[redacted]");
-}
-
-// Every string in an error body is untrusted: a server may echo the request,
-// the key, or anything else. A string is retained, under details only, when
-// it contains neither the key (in any case), nor a bearer token, nor any
-// non-blank input of the batch at any length; it is then scrubbed and cut.
-function retainServerString(value, maxChars, inputs, secret) {
-  if (typeof value !== "string" || !value.trim()) return null;
-  const lower = value.toLowerCase();
-  if (secret && lower.includes(secret.toLowerCase())) return null;
-  if (/bearer\s+\S+/i.test(value)) return null;
-  if (inputs.some((input) => input.trim().length > 0 && value.includes(input.trim()))) {
-    return null;
-  }
-  return scrubSecret(value, secret).slice(0, maxChars);
-}
-
-// Returns { server, diagnostic }: `server` holds the retained fields for
-// details; `diagnostic` is the server code, only when it is a bare lowercase
-// identifier that passed the same checks, and is the one server-derived
-// token error.message may carry.
-function serverErrorDetails(bodyText, inputs, secret) {
-  const server = {};
-  let parsed = null;
+// Maps an error response onto SERVER_CODES. The body's code and type are
+// compared with constants and then forgotten; the result is one of our own
+// strings, so nothing a server sent can reach an error, a log or a receipt.
+function classifyServerError(status, bodyText) {
+  let code = null;
+  let type = null;
   try {
-    parsed = JSON.parse(bodyText);
-  } catch {
-    parsed = null;
-  }
-  const source = parsed && typeof parsed === "object" ? parsed.error || parsed : null;
-  if (source && typeof source === "object") {
-    for (const field of ["type", "code", "param"]) {
-      const kept = retainServerString(source[field], MAX_SERVER_FIELD_CHARS, inputs, secret);
-      if (kept !== null) server[field] = kept;
+    const parsed = JSON.parse(bodyText);
+    const source = parsed?.error && typeof parsed.error === "object" ? parsed.error : parsed;
+    if (source && typeof source === "object") {
+      code = typeof source.code === "string" ? source.code : null;
+      type = typeof source.type === "string" ? source.type : null;
     }
-    const message = retainServerString(source.message, MAX_SERVER_MESSAGE_CHARS, inputs, secret);
-    if (message !== null) server.message = message;
-  } else if (parsed === null) {
-    const message = retainServerString(bodyText, MAX_SERVER_MESSAGE_CHARS, inputs, secret);
-    if (message !== null) server.message = message;
+  } catch {
+    // A body that is not JSON contributes nothing.
   }
-  const diagnostic =
-    typeof server.code === "string" && server.code === source.code && SERVER_CODE.test(server.code)
-      ? server.code
-      : null;
-  return { server, diagnostic };
+  if (status === 401 || code === "invalid_api_key") return "invalid_api_key";
+  if (code === "insufficient_quota" || type === "insufficient_quota") return "insufficient_quota";
+  if (status === 429 || code === "rate_limit_exceeded") return "rate_limited";
+  if (code === "model_not_found") return "model_not_found";
+  if (status >= 400 && status < 500) return "invalid_request";
+  if (status >= 500 && status < 600) return "server_error";
+  return "unknown";
 }
 
 function abortError(reason) {
@@ -223,6 +202,19 @@ async function readBody(response, controller) {
   return Buffer.concat(chunks).toString("utf8");
 }
 
+function invalidVector(reason) {
+  return new EmbedderError(
+    "Embeddings response contained an invalid vector.",
+    "embedder_invalid_vector",
+    { reason },
+  );
+}
+
+// Structural problems (no list, wrong count, bad indices) return null and
+// become embedder_bad_response. A vector that is empty, ragged, or holds a
+// value that is not a finite number once stored as float32 (1e40 becomes
+// Infinity and would poison every cosine score) throws
+// embedder_invalid_vector; neither is retried.
 function parseVectors(payload, expectedCount) {
   const data = payload && typeof payload === "object" ? payload.data : null;
   if (!Array.isArray(data) || data.length !== expectedCount) return null;
@@ -235,19 +227,21 @@ function parseVectors(payload, expectedCount) {
       !Number.isSafeInteger(index) ||
       index < 0 ||
       index >= expectedCount ||
-      vectors[index] !== undefined ||
-      !Array.isArray(embedding) ||
-      embedding.length === 0
+      vectors[index] !== undefined
     ) {
       return null;
     }
+    if (!Array.isArray(embedding) || embedding.length === 0) throw invalidVector("empty");
     if (dimension === null) dimension = embedding.length;
-    if (embedding.length !== dimension) return null;
+    if (embedding.length !== dimension) throw invalidVector("ragged");
     const vector = new Float32Array(dimension);
     for (let position = 0; position < dimension; position += 1) {
       const value = embedding[position];
-      if (typeof value !== "number" || !Number.isFinite(value)) return null;
+      if (typeof value !== "number" || !Number.isFinite(value)) {
+        throw invalidVector("not_a_number");
+      }
       vector[position] = value;
+      if (!Number.isFinite(vector[position])) throw invalidVector("not_finite_as_float32");
     }
     vectors[index] = vector;
   }
@@ -263,7 +257,7 @@ function usageOf(payload) {
 
 function createOpenAiEmbedder(options) {
   const config = options && typeof options === "object" ? options : {};
-  const { host, hostname, endpoint } = parseBaseUrl(config.baseUrl);
+  const { hostname, endpoint } = parseBaseUrl(config.baseUrl);
   const model = config.model;
   if (
     typeof model !== "string" ||
@@ -426,11 +420,10 @@ function createOpenAiEmbedder(options) {
         };
       }
       if (!response.ok) {
-        const { server, diagnostic } = serverErrorDetails(bodyText, batch.texts, apiKey);
         const error = new EmbedderError(
-          `Embeddings request failed with HTTP ${response.status}${diagnostic ? ` (${diagnostic})` : ""}.`,
+          `Embeddings request failed with HTTP ${response.status}.`,
           "embedder_http_error",
-          { status: response.status, server },
+          { status: response.status, serverCode: classifyServerError(response.status, bodyText) },
         );
         error.status = response.status;
         const retryable = RETRYABLE_STATUSES.has(response.status);
@@ -527,6 +520,14 @@ function createOpenAiEmbedder(options) {
     const external = embedOptions?.signal;
     const run = new AbortController();
     const signal = external ? AbortSignal.any([external, run.signal]) : run.signal;
+    // A host that runs several calls at once passes concurrency: 1 so the
+    // requests in flight equal its own bound; the configured value stays the
+    // ceiling either way.
+    const requested = embedOptions?.concurrency;
+    const parallel =
+      Number.isSafeInteger(requested) && requested > 0
+        ? Math.min(concurrency, requested)
+        : concurrency;
     const batches = planBatches(inputs, batchSize, maxRequestTokens);
     const out = new Array(inputs.length);
     let next = 0;
@@ -546,15 +547,19 @@ function createOpenAiEmbedder(options) {
         }
       }
     };
-    await Promise.all(Array.from({ length: Math.min(concurrency, batches.length) }, worker));
+    await Promise.all(Array.from({ length: Math.min(parallel, batches.length) }, worker));
     if (failure) throw failure;
     return out;
   }
 
+  // The id keys the cache: the normalised endpoint (gateways differ by path),
+  // the model, the dimension and the truncation length all change what a
+  // stored vector means, so each is part of it.
   const embedder = {
     kind: "openai",
     get id() {
-      return `openai:${host}:${model}:${state.dimension === null ? "?" : state.dimension}`;
+      const dimension = state.dimension === null ? "?" : state.dimension;
+      return `openai:${endpoint}:${model}:${dimension}:${maxInputChars}`;
     },
     get dimension() {
       return state.dimension;
@@ -581,6 +586,8 @@ function createOpenAiEmbedder(options) {
 module.exports = {
   OPENAI_EMBEDDER_DEFAULTS,
   OPENAI_EMBEDDING_LIMITS,
+  OPENAI_SERVER_CODES,
+  classifyServerError,
   createOpenAiEmbedder,
   isLoopbackHost,
   parseRetryAfter,

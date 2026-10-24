@@ -60,11 +60,20 @@ async function startFakeEmbeddingsServer(options) {
   const apiKey = config.apiKey === undefined ? null : config.apiKey;
   const defaultDimension = config.dimension || 8;
   const supportsDimensions = config.supportsDimensions !== false;
+  const defaultDelayMs = config.delayMs || 0;
   const script = [];
   const requests = [];
   const sockets = new Set();
+  // Requests being served right now and the most ever seen at once, so tests
+  // can check how many requests a client keeps in flight.
+  const stats = { inFlight: 0, maxInFlight: 0 };
 
   const server = http.createServer(async (request, response) => {
+    stats.inFlight += 1;
+    stats.maxInFlight = Math.max(stats.maxInFlight, stats.inFlight);
+    response.once("close", () => {
+      stats.inFlight -= 1;
+    });
     const bodyText = await readJson(request);
     const record = {
       method: request.method,
@@ -74,9 +83,12 @@ async function startFakeEmbeddingsServer(options) {
     };
     requests.push(record);
     const behaviour = script.length ? script.shift() : {};
-    if (behaviour.delayMs) {
-      await new Promise((resolve) => setTimeout(resolve, behaviour.delayMs));
-      if (request.destroyed || response.destroyed) return;
+    const delayMs = behaviour.delayMs || defaultDelayMs;
+    if (delayMs) {
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+      // The request stream is auto-destroyed once its body is read, so only
+      // the response tells whether the client is still there.
+      if (response.destroyed || response.socket?.destroyed) return;
     }
     if (request.method !== "POST" || request.url !== "/v1/embeddings") {
       send(response, 404, {}, openAiError("Not found", "invalid_request_error", "not_found"));
@@ -194,6 +206,8 @@ async function startFakeEmbeddingsServer(options) {
     }));
     if (behaviour.reverse) data = data.slice().reverse();
     if (behaviour.dropLast) data = data.slice(0, -1);
+    if (behaviour.component !== undefined) data[0].embedding[0] = behaviour.component;
+    if (behaviour.emptyVector) data[0].embedding = [];
     send(
       response,
       200,
@@ -215,6 +229,7 @@ async function startFakeEmbeddingsServer(options) {
   return {
     baseUrl: `http://127.0.0.1:${port}`,
     requests,
+    stats,
     // Queue behaviours consumed one per request, in order; an exhausted script
     // answers normally.
     script(...behaviours) {

@@ -9,8 +9,10 @@
 // Required fields:
 //
 //   id             string   stable identity of the model as seen by the cache;
-//                           a different id rebuilds every stored vector.
-//                           Convention: "<kind>:<provider or host>:<model>:<dimension>".
+//                           a different id rebuilds every stored vector. It
+//                           must cover everything that changes what a stored
+//                           vector means: for the OpenAI client
+//                           "openai:<endpoint>:<model>:<dimension>:<maxInputChars>".
 //   dimension      integer  length of every vector returned by embed().
 //   languages      string[] ISO 639-1 codes the model is known to cover; an
 //                           empty array means "not declared" and disables
@@ -21,9 +23,16 @@
 //                           (the host splits larger inputs at this size).
 //   maxInputChars  integer  per-text truncation point the implementation applies
 //                           before encoding, so callers can report truncation.
-//   embed(texts)   async    texts: string[] -> Promise<Float32Array[]>, same
-//                           length and order as texts; every vector has
-//                           `dimension` entries. Must never log or echo texts.
+//   embed(texts, options?)  async; texts: string[] -> Promise<Float32Array[]>,
+//                           same length and order as texts; every vector has
+//                           `dimension` entries, all finite. Must never log or
+//                           echo texts. options.signal aborts the call;
+//                           options.concurrency caps the requests in flight
+//                           inside the call (never above the implementation's
+//                           own bound). One rule keeps the request count
+//                           predictable: a host that runs several calls at
+//                           once passes concurrency: 1, so the requests in
+//                           flight equal the host's bound, never the product.
 //
 // Optional members:
 //
