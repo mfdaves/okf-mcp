@@ -25,4 +25,5 @@ module.exports = {
   ...require("./embed/openai"),
   ...require("./embed/prepare"),
   ...require("./cache/store"),
+  ...require("./policy/write-policy"),
 };
