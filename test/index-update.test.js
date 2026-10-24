@@ -410,9 +410,14 @@ function runSequence(t, seed, steps, options, project) {
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const world = new World(root, prng(seed));
   const args = world.bundles.concat([REMOTE]);
+  // Root mode puts the stemming languages on the index object itself, after
+  // the build; every update has to carry them to the index it produces.
+  const languages = ["it", "en"];
   const fresh = () => {
     const index = buildIndex(args, options);
-    return project ? attachProject(index, project) : index;
+    const attached = project ? attachProject(index, project) : index;
+    attached.languages = languages;
+    return attached;
   };
   let current = fresh();
   const modes = { incremental: 0, full: 0, refresh: 0 };
@@ -442,6 +447,7 @@ function runSequence(t, seed, steps, options, project) {
       // the refresh has to find it from the files.
       const refreshed = refreshIndex(current);
       assert.deepEqual(refreshed, fresh(), `${label} (refresh)`);
+      assert.equal(refreshed.languages, languages, `${label} (refresh): languages`);
       modes.refresh += 1;
       current = refreshed;
       observe(current);
@@ -454,6 +460,7 @@ function runSequence(t, seed, steps, options, project) {
     const next = updateIndex(current, changes, { maxChangeRatio: world.chance(0.15) ? 0 : 1 });
     assert.deepEqual(current, snapshot, `${label}: the input index changed`);
     assert.deepEqual(next, fresh(), label);
+    assert.equal(next.languages, languages, `${label}: languages`);
     modes[indexUpdateStats(next).mode] += 1;
     current = next;
     observe(current);

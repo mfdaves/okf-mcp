@@ -501,6 +501,16 @@ function applyIncrementally(record, plan, stats) {
   });
 }
 
+// Settings a host puts on the index object itself rather than through the
+// project (root mode sets the stemming `languages` there) travel to the index
+// an update produces; a value assembly already took from the project is kept.
+function carryIndexSettings(from, to) {
+  if (to !== from && to.languages === undefined && from.languages !== undefined) {
+    to.languages = from.languages;
+  }
+  return to;
+}
+
 // Returns a new index with the given documents added, replaced or removed.
 // The input index is never mutated; unchanged documents, edges and derived
 // lists are shared with it. Only the changed documents and the documents
@@ -528,9 +538,9 @@ function updateIndex(index, changes, options) {
   const ratio = plan.changed / Math.max(1, total);
   const stats = { mode: null, changed: plan.changed, total, ratio, maxChangeRatio };
   if (ratio > maxChangeRatio) {
-    return rebuildIndex(record, plan, stats);
+    return carryIndexSettings(index, rebuildIndex(record, plan, stats));
   }
-  return applyIncrementally(record, plan, stats);
+  return carryIndexSettings(index, applyIncrementally(record, plan, stats));
 }
 
 // Whether the file on disk is what the entry already describes. A disk-backed
