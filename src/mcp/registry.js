@@ -183,6 +183,7 @@ const TOOL_ORDER = [
   "list_concepts",
   "get_concept",
   "search_concepts",
+  "get_context",
   "list_types",
   "list_tags",
   "list_relation_types",

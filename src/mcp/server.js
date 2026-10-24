@@ -31,6 +31,7 @@ const MAX_MCP_MESSAGE_BYTES = 1024 * 1024;
 const registry = composeRegistry([
   require("./tools/catalog"),
   require("./tools/search"),
+  require("./tools/context"),
   require("./tools/graph"),
   require("./tools/provenance"),
   require("./tools/computation"),

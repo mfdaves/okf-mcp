@@ -354,7 +354,18 @@ function assembleContext(index, options) {
   };
 }
 
+// Defaults and ceilings of the sizing options, for the tool schema and CLI.
+const CONTEXT_LIMITS = Object.freeze({
+  budgetTokens: Object.freeze({
+    default: DEFAULT_CONTEXT_BUDGET_TOKENS,
+    maximum: MAX_CONTEXT_BUDGET_TOKENS,
+  }),
+  limit: Object.freeze({ default: DEFAULT_CONTEXT_LIMIT, maximum: MAX_CONTEXT_LIMIT }),
+  conceptLimit: Object.freeze({ default: DEFAULT_CONCEPT_LIMIT, maximum: MAX_CONCEPT_LIMIT }),
+});
+
 module.exports = {
+  CONTEXT_LIMITS,
   CONTEXT_TOKEN_ESTIMATOR,
   DEFAULT_CONTEXT_BUDGET_TOKENS,
   assembleContext,

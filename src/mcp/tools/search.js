@@ -175,4 +175,4 @@ const tools = {
   },
 };
 
-module.exports = { tools };
+module.exports = { QUERY_GUIDANCE, tools };

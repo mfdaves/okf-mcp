@@ -250,6 +250,175 @@
         "openWorldHint": false,
         "readOnlyHint": true
       },
+      "description": "Assemble a token-budgeted context for a question from the sections of the best-matching OKF concepts. Candidates come from the same search as search_concepts (every filter applies; the response repeats mode, lowConfidence, queryTerms and droppedTerms and lists the candidate concepts); their sections are ranked against the query, deduplicated and packed in score order while they fit budgetTokens. Tokens are estimated as ceil(characters / 4), the estimator is named in the response and the budget is never exceeded; when the best section alone is larger than the budget it is returned on its own, cut at a sentence boundary, with truncated true, and omittedSections counts what did not fit. Each section carries uri, anchor (the concept URI for the text before the first heading, uri#heading-slug otherwise; an okf-mcp extension: body and whitespace edits leave it unchanged, renaming the heading or adding a same-named heading before it changes it), heading, title, text, tokens, score, relevance, coverage, matchedTerms and the concept's provenance (status, staleAfter, freshness, trustTier, verified, generated, sources). For the query, write it as keywords in the catalog's languages (Italian and English word endings and accents are normalised) and put identifiers, codes, paths, SKUs and exact titles in double quotes: quoted text is matched literally (no stemming, accents and single letters kept) against ids, paths, aliases, titles and raw tokens, and unquoted tokens with digits or hyphens stay literal too. Leave out question words; unquoted stop words and single letters are dropped.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "asOf": {
+            "description": "UTC ISO date or datetime used for deterministic freshness evaluation.",
+            "minLength": 1,
+            "type": "string"
+          },
+          "attestationReady": {
+            "description": "Require static Attested Computation readiness.",
+            "type": "boolean"
+          },
+          "budgetTokens": {
+            "default": 1200,
+            "description": "Token budget for the packed sections, estimated as ceil(characters / 4) and never exceeded.",
+            "maximum": 100000,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "bundle": {
+            "description": "Limit results to this bundle id.",
+            "minLength": 1,
+            "type": "string"
+          },
+          "freshness": {
+            "description": "Limit results to unspecified, fresh, stale, or invalid freshness states.",
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "freshnessPrior": {
+            "default": false,
+            "description": "Multiply scores by 0.5 for deprecated, 0.7 for stale, and 0.85 for draft concepts before ranking; off by default.",
+            "type": "boolean"
+          },
+          "frontmatter": {
+            "additionalProperties": true,
+            "description": "Exact frontmatter filters; array fields use contains matching.",
+            "type": "object"
+          },
+          "generatedBy": {
+            "description": "Limit results to this generator actor.",
+            "minLength": 1,
+            "type": "string"
+          },
+          "hasSources": {
+            "description": "Require concepts to have or not have normalized sources.",
+            "type": "boolean"
+          },
+          "includeProvenance": {
+            "default": true,
+            "description": "Attach each section's concept provenance: status, staleAfter, freshness, trustTier, verified, generated, sources.",
+            "type": "boolean"
+          },
+          "limit": {
+            "default": 20,
+            "description": "Maximum number of sections to return; the budget is the primary constraint.",
+            "maximum": 250,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "linkedFrom": {
+            "description": "Require an incoming edge from this concept URI.",
+            "minLength": 1,
+            "type": "string"
+          },
+          "linkedTo": {
+            "description": "Require an outgoing edge to this concept URI.",
+            "minLength": 1,
+            "type": "string"
+          },
+          "mode": {
+            "default": "auto",
+            "description": "auto requires every term and falls back to any-term matching when that returns nothing; all requires every term (the pre-0.10 behaviour); any ranks concepts matching at least one term. The response's mode field says which one ran.",
+            "enum": [
+              "auto",
+              "all",
+              "any"
+            ],
+            "type": "string"
+          },
+          "orphanOnly": {
+            "default": false,
+            "description": "Return only concepts without incoming or outgoing resolved edges.",
+            "type": "boolean"
+          },
+          "pathPrefix": {
+            "description": "Limit results to bundle relative paths beginning with this prefix.",
+            "type": "string"
+          },
+          "query": {
+            "description": "Text to assemble context for, matched against concept metadata and section text; maximum 16 terms after stop words. Write it as keywords in the catalog's languages (Italian and English word endings and accents are normalised) and put identifiers, codes, paths, SKUs and exact titles in double quotes: quoted text is matched literally (no stemming, accents and single letters kept) against ids, paths, aliases, titles and raw tokens, and unquoted tokens with digits or hyphens stay literal too. Leave out question words; unquoted stop words and single letters are dropped.",
+            "maxLength": 512,
+            "minLength": 1,
+            "type": "string"
+          },
+          "relationType": {
+            "description": "Limit results to concepts with an outgoing relation of this type.",
+            "minLength": 1,
+            "type": "string"
+          },
+          "runtime": {
+            "description": "Limit results to this Attested Computation runtime.",
+            "minLength": 1,
+            "type": "string"
+          },
+          "statuses": {
+            "description": "Limit results to lifecycle statuses.",
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "tagsAll": {
+            "description": "Require all of these tags.",
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "tagsAny": {
+            "description": "Require at least one of these tags.",
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "trustTiers": {
+            "description": "Limit results to unverified, machine-confirmed, or human-reviewed trust tiers.",
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "types": {
+            "description": "Limit results to any of these concept types.",
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "verifiedBy": {
+            "description": "Limit results to concepts verified by this actor.",
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "type": "object"
+      },
+      "name": "get_context"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
       "description": "Return a bounded set of OKF graph nodes and edges with optional concept filters.",
       "inputSchema": {
         "additionalProperties": false,
