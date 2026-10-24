@@ -92,13 +92,34 @@ async function smokeMcp(okfMcp, installedRoot, mode) {
       arguments: { query: "server stdio", limit: 1 },
     });
     const searchPayload = JSON.parse(search.content[0].text);
+    // The 0.10 response shape (R-4): mode and confidence fields at the top level, compact
+    // results carrying coverage and relevance. Kept strict so drift is caught here.
+    assert.deepEqual(Object.keys(searchPayload).sort(), [
+      "allTermsTotal",
+      "droppedTerms",
+      "limit",
+      "lowConfidence",
+      "mode",
+      "offset",
+      "queryTerms",
+      "results",
+      "total",
+    ]);
+    assert.equal(searchPayload.mode, "all");
+    assert.equal(searchPayload.lowConfidence, false);
+    assert.deepEqual(searchPayload.queryTerms, ["server", "stdio"]);
+    assert.equal(searchPayload.allTermsTotal, searchPayload.total);
     assert.equal(searchPayload.results[0].uri, "okf://okf-mcp/runtime/mcp-server");
     assert.deepEqual(Object.keys(searchPayload.results[0]).sort(), [
+      "coverage",
       "description",
+      "relevance",
       "title",
       "type",
       "uri",
     ]);
+    assert.equal(searchPayload.results[0].coverage, 1);
+    assert.equal(searchPayload.results[0].relevance, 1);
   } finally {
     await client.close();
   }
