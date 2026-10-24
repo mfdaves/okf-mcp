@@ -8,14 +8,25 @@
 //
 // Layout of a cache directory:
 //
-//   manifest.json  { format, formatVersion, embedderId, dimension, count, updatedAt }
-//   units.json     [{ id, hash }] in row order; hash = sha256 of the unit text
-//   vectors.f32    little-endian float32, row-major, count x dimension
+//   manifest.json            { format, formatVersion, embedderId, dimension, count,
+//                              generation, files: { units, vectors },
+//                              digests: { units, vectors }, updatedAt }
+//   units.<generation>.json  [{ id, hash }] in row order; hash = sha256 of the unit text
+//   vectors.<generation>.f32 little-endian float32, row-major, count x dimension
 //
 // Rows are keyed by hash: a second unit with identical text shares the row.
-// The manifest is written last and is the commit point; any inconsistency
-// between the three files, a different embedder, dimension or format, or a
-// missing directory opens an empty cache and reports why.
+// Every write produces a new generation of the two data files and then
+// replaces the manifest atomically, so a reader never sees rows of one
+// generation paired with vectors of another; the manifest's SHA-256 digests
+// are verified on open and older generations are removed after a successful
+// write. A different embedder, dimension or format, a corrupt or tampered
+// file, or a missing directory opens an empty cache and reports why.
+//
+// Path rules (S-1): the directory is an absolute path without parent segments
+// or reserved names, it is judged against the bundle root on real paths, it
+// must not itself be a symbolic link, and no cache file is ever read or
+// written through one. Ancestors may be links (a relocated ~/.cache is
+// common); they are resolved before any check.
 
 const crypto = require("node:crypto");
 const fs = require("node:fs");
@@ -25,8 +36,9 @@ const path = require("node:path");
 const VECTOR_CACHE_FORMAT = "okf-vector-cache";
 const VECTOR_CACHE_FORMAT_VERSION = 1;
 const MANIFEST_FILE = "manifest.json";
-const UNITS_FILE = "units.json";
-const VECTORS_FILE = "vectors.f32";
+const GENERATION_PATTERN = /^[0-9a-z]{1,16}-[0-9a-f]{8}$/;
+const GENERATION_FILE = /^(units|vectors)\.[0-9a-z]{1,16}-[0-9a-f]{8}\.(json|f32)$/;
+const STALE_TEMP_MS = 5 * 60 * 1000;
 const HASH_PATTERN = /^[a-f0-9]{64}$/;
 const WINDOWS_RESERVED = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/i;
 const MAX_DIMENSION = 65536;
@@ -41,9 +53,12 @@ class VectorCacheError extends Error {
   }
 }
 
+// Segment-aware containment: "..cache" is inside, ".." and "../x" are not.
 function isInside(root, target, platformPath) {
   const relative = platformPath.relative(root, target);
-  return relative === "" || (!relative.startsWith("..") && !platformPath.isAbsolute(relative));
+  if (relative === "") return true;
+  if (platformPath.isAbsolute(relative)) return false;
+  return relative !== ".." && !relative.startsWith(`..${platformPath.sep}`);
 }
 
 function hasUnsafeSegment(value) {
@@ -83,6 +98,44 @@ function realpathOrResolve(target) {
   }
 }
 
+// Real path of the deepest existing ancestor joined with the missing tail, so
+// containment is judged on real locations before the directory exists.
+function realpathOfExistingAncestors(target) {
+  const missing = [];
+  let current = target;
+  for (;;) {
+    try {
+      const real = fs.realpathSync(current);
+      return missing.length ? path.join(real, ...missing) : real;
+    } catch {
+      const parent = path.dirname(current);
+      if (parent === current) return target;
+      missing.unshift(path.basename(current));
+      current = parent;
+    }
+  }
+}
+
+// The cache directory itself is never a symbolic link (its ancestors may be).
+function assertNotSymlink(dir) {
+  let stat;
+  try {
+    stat = fs.lstatSync(dir);
+  } catch {
+    return;
+  }
+  if (stat.isSymbolicLink()) {
+    throw new VectorCacheError("Cache directory must not be a symbolic link.", "invalid_cache_dir");
+  }
+}
+
+// Resolves the directory the way the store will use it: ancestors through
+// their real paths, the directory itself checked not to be a link.
+function realCacheDir(dir) {
+  assertNotSymlink(dir);
+  return path.join(realpathOfExistingAncestors(path.dirname(dir)), path.basename(dir));
+}
+
 function defaultCacheBase(env, platform, homedir, platformPath) {
   const xdg = env.XDG_CACHE_HOME;
   if (typeof xdg === "string" && xdg.trim() && platformPath.isAbsolute(xdg)) {
@@ -106,15 +159,20 @@ function defaultCacheBase(env, platform, homedir, platformPath) {
 
 // Explicit cacheDir (relative to root) wins; otherwise
 // $XDG_CACHE_HOME/okf-mcp/<sha256(realpath root)>/, falling back to
-// ~/.cache on POSIX and %LOCALAPPDATA% on Windows. The derived location is
-// refused when it would land inside the root (R-9, B-5). `env`, `platform`
-// and `homedir` exist for tests.
+// ~/.cache on POSIX and %LOCALAPPDATA% on Windows. Either location is
+// refused inside the root (R-9, B-5) unless the caller passes
+// allowInsideRoot: true for an explicit cacheDir and takes responsibility
+// for ignoring it in Git. `env`, `platform` and `homedir` exist for tests.
 function resolveCacheDir(options) {
   const config = options || {};
   const platform = config.platform || process.platform;
   const platformPath = platform === "win32" ? path.win32 : path.posix;
+  const hostPlatform = platform === process.platform;
   const env = config.env || process.env;
   const homedir = config.homedir || os.homedir;
+  const hasRoot = typeof config.root === "string" && config.root.trim() !== "";
+  const realRoot = hasRoot ? realpathOrResolve(config.root) : null;
+  const realDirOf = (dir) => (hostPlatform ? realCacheDir(dir) : dir);
   if (config.cacheDir !== undefined && config.cacheDir !== null) {
     const cacheDir = config.cacheDir;
     if (
@@ -125,19 +183,27 @@ function resolveCacheDir(options) {
     ) {
       throw new VectorCacheError("Cache directory must be a safe path.", "invalid_cache_dir");
     }
-    const base = config.root ? platformPath.resolve(config.root) : process.cwd();
-    return assertSafeCachePath(platformPath.resolve(base, cacheDir), platformPath);
+    const base = hasRoot ? platformPath.resolve(config.root) : process.cwd();
+    const dir = realDirOf(assertSafeCachePath(platformPath.resolve(base, cacheDir), platformPath));
+    if (realRoot && config.allowInsideRoot !== true && isInside(realRoot, dir, platformPath)) {
+      throw new VectorCacheError(
+        "The configured cacheDir falls inside the root, where it would dirty the worktree; move it or pass allowInsideRoot.",
+        "cache_inside_root",
+      );
+    }
+    return dir;
   }
-  if (typeof config.root !== "string" || !config.root.trim()) {
+  if (!hasRoot) {
     throw new VectorCacheError(
       "A bundle or project root is required to derive the cache location.",
       "cache_root_required",
     );
   }
-  const realRoot = realpathOrResolve(config.root);
   const base = defaultCacheBase(env, platform, homedir, platformPath);
   const digest = crypto.createHash("sha256").update(realRoot, "utf8").digest("hex");
-  const dir = assertSafeCachePath(platformPath.join(base, "okf-mcp", digest), platformPath);
+  const dir = realDirOf(
+    assertSafeCachePath(platformPath.join(base, "okf-mcp", digest), platformPath),
+  );
   if (isInside(realRoot, dir, platformPath)) {
     throw new VectorCacheError(
       "The default cache location falls inside the bundle root; set cacheDir explicitly.",
@@ -178,6 +244,14 @@ function littleEndian(buffer) {
   return swapped;
 }
 
+function sha256Hex(buffer) {
+  return crypto.createHash("sha256").update(buffer).digest("hex");
+}
+
+function newGeneration() {
+  return `${Date.now().toString(36)}-${crypto.randomBytes(4).toString("hex")}`;
+}
+
 function parseManifest(buffer, embedderId, dimension) {
   if (!buffer) return { reason: "manifest_missing" };
   let manifest;
@@ -197,12 +271,24 @@ function parseManifest(buffer, embedderId, dimension) {
   }
   if (manifest.embedderId !== embedderId) return { reason: "embedder_mismatch" };
   if (manifest.dimension !== dimension) return { reason: "dimension_mismatch" };
-  if (manifest.count < 0) return { reason: "manifest_corrupt" };
+  const { generation, files, digests } = manifest;
+  if (
+    manifest.count < 0 ||
+    typeof generation !== "string" ||
+    !GENERATION_PATTERN.test(generation) ||
+    !files ||
+    files.units !== `units.${generation}.json` ||
+    files.vectors !== `vectors.${generation}.f32` ||
+    !digests ||
+    !HASH_PATTERN.test(String(digests.units)) ||
+    !HASH_PATTERN.test(String(digests.vectors))
+  ) {
+    return { reason: "manifest_corrupt" };
+  }
   return { manifest };
 }
 
 function parseUnits(buffer, count) {
-  if (!buffer) return null;
   let rows;
   try {
     rows = JSON.parse(buffer.toString("utf8"));
@@ -245,6 +331,7 @@ class VectorCache {
     this.dir = dir;
     this.embedderId = embedderId;
     this.dimension = dimension;
+    this.generation = null;
     this.rows = [];
     this.byHash = new Map();
     this.data = new Float32Array(0);
@@ -263,7 +350,12 @@ class VectorCache {
       this.opened = { rebuilt: true, reason: "missing", rows: 0 };
       return this.opened;
     }
-    if (directory.isSymbolicLink()) directory = fs.statSync(this.dir);
+    if (directory.isSymbolicLink()) {
+      throw new VectorCacheError(
+        "Cache directory must not be a symbolic link.",
+        "invalid_cache_dir",
+      );
+    }
     if (!directory.isDirectory()) {
       throw new VectorCacheError("Cache directory path is not a directory.", "invalid_cache_dir");
     }
@@ -279,6 +371,7 @@ class VectorCache {
     }
     this.rows = outcome.rows;
     this.data = outcome.data;
+    this.generation = outcome.generation;
     this.byHash = new Map(this.rows.map((row, index) => [row.hash, index]));
     this.opened = { rebuilt: false, reason: null, rows: this.rows.length };
     return this.opened;
@@ -291,16 +384,20 @@ class VectorCache {
       this.dimension,
     );
     if (parsed.reason) return parsed;
-    const count = parsed.manifest.count;
-    const rows = parseUnits(readRegularFile(path.join(this.dir, UNITS_FILE)), count);
+    const { manifest } = parsed;
+    const count = manifest.count;
+    const unitBytes = readRegularFile(path.join(this.dir, manifest.files.units));
+    if (!unitBytes) return { reason: "units_corrupt" };
+    if (sha256Hex(unitBytes) !== manifest.digests.units) return { reason: "integrity_mismatch" };
+    const rows = parseUnits(unitBytes, count);
     if (!rows) return { reason: "units_corrupt" };
-    const bytes = readRegularFile(path.join(this.dir, VECTORS_FILE));
-    if (!bytes || bytes.byteLength !== count * this.dimension * 4) {
-      return { reason: "vectors_corrupt" };
-    }
+    const bytes = readRegularFile(path.join(this.dir, manifest.files.vectors));
+    if (!bytes) return { reason: "vectors_corrupt" };
+    if (sha256Hex(bytes) !== manifest.digests.vectors) return { reason: "integrity_mismatch" };
+    if (bytes.byteLength !== count * this.dimension * 4) return { reason: "vectors_corrupt" };
     const data = new Float32Array(Math.max(count, MIN_CAPACITY_ROWS) * this.dimension);
     new Uint8Array(data.buffer, 0, bytes.byteLength).set(littleEndian(bytes));
-    return { rows, data };
+    return { rows, data, generation: manifest.generation };
   }
 
   has(hash) {
@@ -403,29 +500,76 @@ class VectorCache {
     return removed;
   }
 
-  // Rewrites the three files atomically, manifest last. Recreates the
-  // directory when it was deleted underneath a running process.
+  // Writes a new generation of the data files, then replaces the manifest
+  // atomically as the commit point, then removes older generations.
+  // Recreates the directory when it was deleted underneath a running process.
   flush() {
     fs.mkdirSync(this.dir, { recursive: true });
+    assertNotSymlink(this.dir);
     const count = this.rows.length;
-    const bytes = Buffer.from(this.data.buffer, this.data.byteOffset, count * this.dimension * 4);
-    writeAtomic(path.join(this.dir, VECTORS_FILE), littleEndian(bytes));
-    writeAtomic(path.join(this.dir, UNITS_FILE), `${JSON.stringify(this.rows)}\n`);
+    const generation = newGeneration();
+    const files = { units: `units.${generation}.json`, vectors: `vectors.${generation}.f32` };
+    const unitBytes = Buffer.from(`${JSON.stringify(this.rows)}\n`, "utf8");
+    const vectorBytes = littleEndian(
+      Buffer.from(this.data.buffer, this.data.byteOffset, count * this.dimension * 4),
+    );
+    writeAtomic(path.join(this.dir, files.units), unitBytes);
+    writeAtomic(path.join(this.dir, files.vectors), vectorBytes);
     const manifest = {
       format: VECTOR_CACHE_FORMAT,
       formatVersion: VECTOR_CACHE_FORMAT_VERSION,
       embedderId: this.embedderId,
       dimension: this.dimension,
       count,
+      generation,
+      files,
+      digests: { units: sha256Hex(unitBytes), vectors: sha256Hex(vectorBytes) },
       updatedAt: new Date().toISOString(),
     };
     writeAtomic(path.join(this.dir, MANIFEST_FILE), `${JSON.stringify(manifest, null, 2)}\n`);
+    this.generation = generation;
+    this.collectGarbage();
+  }
+
+  // Older generations and stale temporary files are removed best effort;
+  // a failure here never fails the write that just completed.
+  collectGarbage() {
+    let entries;
+    try {
+      entries = fs.readdirSync(this.dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    const keep = new Set([
+      MANIFEST_FILE,
+      `units.${this.generation}.json`,
+      `vectors.${this.generation}.f32`,
+    ]);
+    const cutoff = Date.now() - STALE_TEMP_MS;
+    for (const entry of entries) {
+      if (keep.has(entry.name) || entry.isDirectory()) continue;
+      const target = path.join(this.dir, entry.name);
+      let remove = GENERATION_FILE.test(entry.name);
+      if (!remove && entry.name.endsWith(".tmp")) {
+        try {
+          remove = fs.lstatSync(target).mtimeMs < cutoff;
+        } catch {
+          remove = false;
+        }
+      }
+      if (!remove) continue;
+      try {
+        fs.unlinkSync(target);
+      } catch {
+        // Another process may have removed it first; the next write retries.
+      }
+    }
   }
 }
 
 function openVectorCache(dir, options) {
   const config = options || {};
-  const resolvedDir = assertSafeCachePath(dir, path);
+  const resolvedDir = realCacheDir(assertSafeCachePath(dir, path));
   const { embedderId, dimension } = config;
   if (
     typeof embedderId !== "string" ||

@@ -290,7 +290,7 @@ test("a populated cache outside the root leaves git-backed apply free to commit"
   const cache = openVectorCache(dir, { embedderId: embedder.id, dimension: 6 });
   const first = await prepareEmbeddings(buildIndex([{ id: "catalog", root }]), embedder, cache);
   assert.equal(first.embedded, 1);
-  assert.equal(fs.existsSync(path.join(dir, "vectors.f32")), true);
+  assert.ok(fs.readdirSync(dir).some((name) => /^vectors\.[0-9a-z-]+\.f32$/.test(name)));
   assert.equal(git(root, ["status", "--porcelain=v1", "--untracked-files=all"]), "");
 
   const service = new LiveAuthoringService(FileConceptStore.fromRoot(root), {
@@ -313,10 +313,13 @@ test("a populated cache outside the root leaves git-backed apply free to commit"
   assert.equal(git(root, ["status", "--porcelain=v1", "--untracked-files=all"]), "");
 
   // The same cache inside the root is exactly what blocks the commit.
-  const inside = openVectorCache(resolveCacheDir({ root, cacheDir: ".okf-vectors" }), {
-    embedderId: embedder.id,
-    dimension: 6,
-  });
+  const inside = openVectorCache(
+    resolveCacheDir({ root, cacheDir: ".okf-vectors", allowInsideRoot: true }),
+    {
+      embedderId: embedder.id,
+      dimension: 6,
+    },
+  );
   await prepareEmbeddings(buildIndex([{ id: "catalog", root }]), embedder, inside);
   await assert.rejects(
     service.applyChanges({
