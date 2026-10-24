@@ -1,0 +1,18 @@
+project: tessera-atlas
+bundles:
+  - id: atlas
+    root: bundles/atlas
+    include: ["*.md", "**/*.md"]
+  - id: standards
+    root: bundles/standards
+    include: ["*.md", "**/*.md"]
+relationTypes:
+  - implements
+  - affects
+  - resolved_by
+  - measured_by
+  - measures
+  - documents
+  - documented_in
+  - runbook_for
+strictLinks: true

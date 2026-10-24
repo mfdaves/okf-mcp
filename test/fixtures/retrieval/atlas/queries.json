@@ -1,0 +1,1713 @@
+{
+  "version": 1,
+  "description": "Retrieval evaluation queries for an architecture-catalog agent over the Tessera 'atlas' OKF bundle (+ shared engineering standards). Second-domain fixture for agent-agnosticism (WP0). Graded relevance: 2 = must appear, 1 = acceptable. distractors are near-duplicates that should rank BELOW the grade-2 concept. All queries were written from the generated text before any search run (added: wp0). split is the seeded 70/30 dev/heldout assignment stratified by category x lang; the plan gates this fixture on its full set until it reaches 150 queries. sectionAnchor marks queries whose answer lives in one section of one concept (WP3a).",
+  "as_of": "2026-10-24",
+  "categories": {
+    "nl-task": "Natural-language task sentence, as an engineering agent would phrase a question mid-task",
+    "keyword": "Short keyword query (1-3 content words)",
+    "mixed-lang": "Query mixing Italian and English terms",
+    "exact": "Exact-string lookup: incident key, ADR number, topic, hostname, error code, path",
+    "morph": "Morphological variant of indexed words (singular/plural, verb forms)",
+    "accent": "Accent variant: query without the accent the text has (or control with accent)",
+    "synonym": "Paraphrase using words that do not occur in the relevant text",
+    "freshness": "Current concept expected above a deprecated or superseded twin",
+    "disambig": "Near-duplicate disambiguation by version, language, sibling or type",
+    "standards": "Expected concept lives in the shared standards bundle (project mode only)",
+    "no-answer": "Plausible agent question with no relevant concept; the system should return nothing or score low"
+  },
+  "queries": [
+    {
+      "id": "A01",
+      "query": "why did validators in Bologna go offline in January?",
+      "lang": "en",
+      "category": "nl-task",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "atlas",
+          "id": "incidents/inc-2026-001-validator-outage-bologna",
+          "grade": 2
+        },
+        {
+          "bundle": "atlas",
+          "id": "postmortems/pm-2026-001-validator-outage",
+          "grade": 2
+        },
+        {
+          "bundle": "atlas",
+          "id": "services/validator-gateway",
+          "grade": 1
+        },
+        {
+          "bundle": "atlas",
+          "id": "decisions/adr-020-mqtt-for-validators",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "The incident and post-mortem are Italian ('validatori', 'gennaio'); the service and ADR-020 mention the January outage in English.",
+      "added": "wp0"
+    },
+    {
+      "id": "A02",
+      "query": "cosa succede ai biglietti quando il validatore è offline?",
+      "lang": "it",
+      "category": "nl-task",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "atlas",
+          "id": "decisions/adr-010-offline-validation-window",
+          "grade": 2
+        },
+        {
+          "bundle": "atlas",
+          "id": "services/validator-gateway",
+          "grade": 1
+        },
+        {
+          "bundle": "atlas",
+          "id": "runbooks/validator-offline-queue-drain",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "Italian question; the decision is English (offline validation window).",
+      "added": "wp0"
+    },
+    {
+      "id": "A03",
+      "query": "how long do we keep raw validations?",
+      "lang": "en",
+      "category": "nl-task",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "atlas",
+          "id": "decisions/adr-019-data-retention-validations",
+          "grade": 2
+        },
+        {
+          "bundle": "atlas",
+          "id": "services/validation-ledger",
+          "grade": 2
+        },
+        {
+          "bundle": "atlas",
+          "id": "contracts/ticket-validated-v2",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "The retention ADR is Italian; the ledger service states 24 months in English.",
+      "added": "wp0"
+    },
+    {
+      "id": "A04",
+      "query": "chi è il reperibile per i problemi di pagamento?",
+      "lang": "it",
+      "category": "nl-task",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "atlas",
+          "id": "teams/team-pagamenti",
+          "grade": 2
+        },
+        {
+          "bundle": "atlas",
+          "id": "runbooks/on-call-escalation",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "'reperibile' vs 'on-call'; the team page has the PagerDuty rota.",
+      "added": "wp0"
+    },
+    {
+      "id": "A05",
+      "query": "what caused the duplicate subscription renewals?",
+      "lang": "en",
+      "category": "nl-task",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "atlas",
+          "id": "incidents/inc-2026-027-subscription-renewal-duplicate",
+          "grade": 2
+        },
+        {
+          "bundle": "atlas",
+          "id": "services/subscription-manager",
+          "grade": 1
+        },
+        {
+          "bundle": "atlas",
+          "id": "runbooks/postgres-failover",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "'caused' vs 'root cause'; 'renewals' vs 'renewed'.",
+      "added": "wp0"
+    },
+    {
+      "id": "A06",
+      "query": "come si riconciliano gli avvisi pagoPA non pagati?",
+      "lang": "it",
+      "category": "nl-task",
+      "split": "heldout",
+      "expected": [
+        {
+          "bundle": "atlas",
+          "id": "runbooks/pagopa-reconciliation",
+          "grade": 2
+        },
+        {
+          "bundle": "atlas",
+          "id": "services/pagopa-adapter",
+          "grade": 1
+        },
+        {
+          "bundle": "atlas",
+          "id": "postmortems/pm-2026-007-pagopa-timeout",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "'riconciliano' vs 'riconciliazione'.",
+      "added": "wp0"
+    },
+    {
+      "id": "A07",
+      "query": "which PSP do we use and is there a fallback?",
+      "lang": "en",
+      "category": "nl-task",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "atlas",
+          "id": "decisions/adr-018-nexi-primary-psp",
+          "grade": 2
+        },
+        {
+          "bundle": "atlas",
+          "id": "services/payments-orchestrator",
+          "grade": 1
+        },
+        {
+          "bundle": "atlas",
+          "id": "dependencies/nexi-xpay",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "",
+      "added": "wp0"
+    },
+    {
+      "id": "A08",
+      "query": "what is the error budget for the API gateway?",
+      "lang": "en",
+      "category": "nl-task",
+      "split": "heldout",
+      "expected": [
+        {
+          "bundle": "atlas",
+          "id": "slos/api-gateway-availability",
+          "grade": 2
+        },
+        {
+          "bundle": "standards",
+          "id": "standards/slo-policy",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "Answer lives in the SLO's Error budget section.",
+      "added": "wp0"
+    },
+    {
+      "id": "A09",
+      "query": "perché il login SPID non funzionava ad aprile?",
+      "lang": "it",
+      "category": "nl-task",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "atlas",
+          "id": "incidents/inc-2026-013-spid-login-down",
+          "grade": 2
+        },
+        {
+          "bundle": "atlas",
+          "id": "postmortems/pm-2026-013-spid-login",
+          "grade": 2
+        },
+        {
+          "bundle": "atlas",
+          "id": "services/identity-service",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "The post-mortem is English, the incident Italian.",
+      "added": "wp0"
+    },
+    {
+      "id": "A10",
+      "query": "where do we store the EMV token for tap-to-ride?",
+      "lang": "en",
+      "category": "nl-task",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "atlas",
+          "id": "decisions/adr-014-emv-contactless-tokenization",
+          "grade": 2
+        },
+        {
+          "bundle": "atlas",
+          "id": "contracts/ticket-validated-v2",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "The ledger stores only a hash (ADR-014).",
+      "added": "wp0"
+    },
+    {
+      "id": "A11",
+      "query": "what should happen before activating a new fare table?",
+      "lang": "en",
+      "category": "nl-task",
+      "split": "heldout",
+      "expected": [
+        {
+          "bundle": "atlas",
+          "id": "runbooks/fare-table-hotfix",
+          "grade": 2
+        },
+        {
+          "bundle": "atlas",
+          "id": "postmortems/pm-2026-015-fare-cap",
+          "grade": 1
+        },
+        {
+          "bundle": "atlas",
+          "id": "incidents/inc-2026-015-fare-cap-miscalculation",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "The runbook is Italian ('prova in ombra'); the English post-mortem action item says 'shadow run'.",
+      "added": "wp0"
+    },
+    {
+      "id": "A12",
+      "query": "quale team possiede il warehouse?",
+      "lang": "it",
+      "category": "nl-task",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "atlas",
+          "id": "teams/team-dati",
+          "grade": 2
+        },
+        {
+          "bundle": "atlas",
+          "id": "services/reporting-warehouse",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "'possiede' vs 'Owns'.",
+      "added": "wp0"
+    },
+    {
+      "id": "A13",
+      "query": "fencing token",
+      "lang": "en",
+      "category": "keyword",
+      "split": "heldout",
+      "expected": [
+        {
+          "bundle": "atlas",
+          "id": "incidents/inc-2026-027-subscription-renewal-duplicate",
+          "grade": 2
+        },
+        {
+          "bundle": "atlas",
+          "id": "runbooks/postgres-failover",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "",
+      "added": "wp0"
+    },
+    {
+      "id": "A14",
+      "query": "RAPTOR",
+      "lang": "en",
+      "category": "keyword",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "atlas",
+          "id": "decisions/adr-005-raptor-trip-planner",
+          "grade": 2
+        },
+        {
+          "bundle": "atlas",
+          "id": "services/trip-planner",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "Algorithm name.",
+      "added": "wp0"
+    },
+    {
+      "id": "A15",
+      "query": "ricevute telematiche",
+      "lang": "it",
+      "category": "keyword",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "atlas",
+          "id": "services/pagopa-adapter",
+          "grade": 2
+        },
+        {
+          "bundle": "atlas",
+          "id": "incidents/inc-2026-007-pagopa-timeout",
+          "grade": 2
+        },
+        {
+          "bundle": "atlas",
+          "id": "runbooks/pagopa-reconciliation",
+          "grade": 1
+        },
+        {
+          "bundle": "atlas",
+          "id": "postmortems/pm-2026-007-pagopa-timeout",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "",
+      "added": "wp0"
+    },
+    {
+      "id": "A16",
+      "query": "outbox",
+      "lang": "en",
+      "category": "keyword",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "atlas",
+          "id": "decisions/adr-012-outbox-pattern",
+          "grade": 2
+        },
+        {
+          "bundle": "atlas",
+          "id": "services/payments-orchestrator",
+          "grade": 1
+        },
+        {
+          "bundle": "atlas",
+          "id": "contracts/payment-authorized-v1",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "",
+      "added": "wp0"
+    },
+    {
+      "id": "A17",
+      "query": "kill switch",
+      "lang": "en",
+      "category": "keyword",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "atlas",
+          "id": "runbooks/feature-flag-kill-switch",
+          "grade": 2
+        },
+        {
+          "bundle": "atlas",
+          "id": "decisions/adr-016-feature-flags-unleash",
+          "grade": 1
+        },
+        {
+          "bundle": "atlas",
+          "id": "dependencies/unleash",
+          "grade": 1
+        },
+        {
+          "bundle": "atlas",
+          "id": "runbooks/notification-rate-limit",
+          "grade": 1
+        },
+        {
+          "bundle": "standards",
+          "id": "standards/service-naming",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "",
+      "added": "wp0"
+    },
+    {
+      "id": "A18",
+      "query": "tablespace Oracle",
+      "lang": "it",
+      "category": "keyword",
+      "split": "heldout",
+      "expected": [
+        {
+          "bundle": "atlas",
+          "id": "incidents/inc-2025-041-legacy-sbe-crash",
+          "grade": 2
+        },
+        {
+          "bundle": "atlas",
+          "id": "services/legacy-sbe",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "Only the historical incident has the term.",
+      "added": "wp0"
+    },
+    {
+      "id": "A19",
+      "query": "advisory lock",
+      "lang": "en",
+      "category": "keyword",
+      "split": "heldout",
+      "expected": [
+        {
+          "bundle": "atlas",
+          "id": "incidents/inc-2026-027-subscription-renewal-duplicate",
+          "grade": 2
+        },
+        {
+          "bundle": "atlas",
+          "id": "runbooks/postgres-failover",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "'locks' plural in the runbook.",
+      "added": "wp0"
+    },
+    {
+      "id": "A20",
+      "query": "TTL",
+      "lang": "en",
+      "category": "keyword",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "atlas",
+          "id": "incidents/inc-2026-018-clickhouse-disk-full",
+          "grade": 2
+        },
+        {
+          "bundle": "atlas",
+          "id": "runbooks/clickhouse-disk-cleanup",
+          "grade": 2
+        },
+        {
+          "bundle": "atlas",
+          "id": "services/reporting-warehouse",
+          "grade": 1
+        },
+        {
+          "bundle": "atlas",
+          "id": "decisions/adr-006-clickhouse-warehouse",
+          "grade": 1
+        },
+        {
+          "bundle": "atlas",
+          "id": "dependencies/clickhouse",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "Acronym present in several concepts.",
+      "added": "wp0"
+    },
+    {
+      "id": "A21",
+      "query": "Temporal",
+      "lang": "en",
+      "category": "keyword",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "atlas",
+          "id": "services/refund-service",
+          "grade": 2
+        },
+        {
+          "bundle": "atlas",
+          "id": "runbooks/refund-queue-unstick",
+          "grade": 1
+        },
+        {
+          "bundle": "atlas",
+          "id": "incidents/inc-2026-022-refund-queue-stuck",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "Product name that is also an English adjective.",
+      "added": "wp0"
+    },
+    {
+      "id": "A22",
+      "query": "runbook riconciliazione wallet",
+      "lang": "mixed",
+      "category": "mixed-lang",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "atlas",
+          "id": "runbooks/wallet-balance-reconciliation",
+          "grade": 2
+        }
+      ],
+      "distractors": [],
+      "notes": "'riconciliazione' vs 'reconciliation'.",
+      "added": "wp0"
+    },
+    {
+      "id": "A23",
+      "query": "incident timeout nodo pagoPA",
+      "lang": "mixed",
+      "category": "mixed-lang",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "atlas",
+          "id": "incidents/inc-2026-007-pagopa-timeout",
+          "grade": 2
+        },
+        {
+          "bundle": "atlas",
+          "id": "postmortems/pm-2026-007-pagopa-timeout",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "",
+      "added": "wp0"
+    },
+    {
+      "id": "A24",
+      "query": "SLO freschezza cruscotti operatori",
+      "lang": "mixed",
+      "category": "mixed-lang",
+      "split": "heldout",
+      "expected": [
+        {
+          "bundle": "atlas",
+          "id": "slos/reporting-warehouse-freshness",
+          "grade": 2
+        },
+        {
+          "bundle": "atlas",
+          "id": "questions/q-007-on-call-compensation",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "'freschezza' vs 'freshness', 'cruscotti' vs 'dashboards'.",
+      "added": "wp0"
+    },
+    {
+      "id": "A25",
+      "query": "ADR dismissione SBE",
+      "lang": "mixed",
+      "category": "mixed-lang",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "atlas",
+          "id": "decisions/adr-017-retire-legacy-sbe",
+          "grade": 2
+        },
+        {
+          "bundle": "atlas",
+          "id": "services/legacy-sbe",
+          "grade": 1
+        },
+        {
+          "bundle": "atlas",
+          "id": "questions/q-010-legacy-sbe-data-archive",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "",
+      "added": "wp0"
+    },
+    {
+      "id": "A26",
+      "query": "INC-2026-011",
+      "lang": "en",
+      "category": "exact",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "atlas",
+          "id": "incidents/inc-2026-011-kafka-partition-lag",
+          "grade": 2
+        },
+        {
+          "bundle": "atlas",
+          "id": "postmortems/pm-2026-011-kafka-lag",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "Incident key (alias).",
+      "added": "wp0"
+    },
+    {
+      "id": "A27",
+      "query": "ADR-012",
+      "lang": "en",
+      "category": "exact",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "atlas",
+          "id": "decisions/adr-012-outbox-pattern",
+          "grade": 2
+        },
+        {
+          "bundle": "atlas",
+          "id": "services/payments-orchestrator",
+          "grade": 1
+        },
+        {
+          "bundle": "atlas",
+          "id": "contracts/payment-authorized-v1",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "ADR number (alias).",
+      "added": "wp0"
+    },
+    {
+      "id": "A28",
+      "query": "ticketing.validations.v2",
+      "lang": "en",
+      "category": "exact",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "atlas",
+          "id": "contracts/ticket-validated-v2",
+          "grade": 2
+        }
+      ],
+      "distractors": [],
+      "notes": "Topic name; dots split into tokens.",
+      "added": "wp0"
+    },
+    {
+      "id": "A29",
+      "query": "partners.tessera.it",
+      "lang": "en",
+      "category": "exact",
+      "split": "heldout",
+      "expected": [
+        {
+          "bundle": "atlas",
+          "id": "incidents/inc-2026-020-api-gateway-cert-expiry",
+          "grade": 2
+        },
+        {
+          "bundle": "atlas",
+          "id": "postmortems/pm-2026-020-cert-expiry",
+          "grade": 2
+        }
+      ],
+      "distractors": [],
+      "notes": "Hostname.",
+      "added": "wp0"
+    },
+    {
+      "id": "A30",
+      "query": "kill.notification-hub.marketing",
+      "lang": "en",
+      "category": "exact",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "atlas",
+          "id": "runbooks/notification-rate-limit",
+          "grade": 2
+        }
+      ],
+      "distractors": [],
+      "notes": "Flag name.",
+      "added": "wp0"
+    },
+    {
+      "id": "A31",
+      "query": "ORA-01653",
+      "lang": "it",
+      "category": "exact",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "atlas",
+          "id": "incidents/inc-2025-041-legacy-sbe-crash",
+          "grade": 2
+        }
+      ],
+      "distractors": [],
+      "notes": "Oracle error code in the historical incident.",
+      "added": "wp0"
+    },
+    {
+      "id": "A32",
+      "query": "/v1/planner/plan",
+      "lang": "en",
+      "category": "exact",
+      "split": "heldout",
+      "expected": [
+        {
+          "bundle": "atlas",
+          "id": "contracts/api-planner-v1",
+          "grade": 2
+        },
+        {
+          "bundle": "atlas",
+          "id": "incidents/inc-2026-029-storefront-ddos",
+          "grade": 1
+        },
+        {
+          "bundle": "atlas",
+          "id": "slos/trip-planner-latency",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "Endpoint path.",
+      "added": "wp0"
+    },
+    {
+      "id": "A33",
+      "query": "eu-south-1",
+      "lang": "en",
+      "category": "exact",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "atlas",
+          "id": "dependencies/kubernetes-eks",
+          "grade": 2
+        },
+        {
+          "bundle": "atlas",
+          "id": "questions/q-001-multi-region-active-active",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "Region identifier.",
+      "added": "wp0"
+    },
+    {
+      "id": "A34",
+      "query": "rotating credentials",
+      "lang": "en",
+      "category": "morph",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "atlas",
+          "id": "runbooks/rotate-psp-credentials",
+          "grade": 2
+        },
+        {
+          "bundle": "standards",
+          "id": "standards/security-baseline",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "'rotating' vs 'rotate' / 'rotation'.",
+      "added": "wp0"
+    },
+    {
+      "id": "A35",
+      "query": "coda offline validatore",
+      "lang": "it",
+      "category": "morph",
+      "split": "heldout",
+      "expected": [
+        {
+          "bundle": "atlas",
+          "id": "runbooks/validator-offline-queue-drain",
+          "grade": 2
+        },
+        {
+          "bundle": "atlas",
+          "id": "incidents/inc-2026-001-validator-outage-bologna",
+          "grade": 1
+        },
+        {
+          "bundle": "atlas",
+          "id": "decisions/adr-010-offline-validation-window",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "Singular forms; the runbook title has 'code offline dei validatori'.",
+      "added": "wp0"
+    },
+    {
+      "id": "A36",
+      "query": "renewing certificates",
+      "lang": "en",
+      "category": "morph",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "atlas",
+          "id": "runbooks/certificate-renewal",
+          "grade": 2
+        },
+        {
+          "bundle": "atlas",
+          "id": "incidents/inc-2026-020-api-gateway-cert-expiry",
+          "grade": 1
+        },
+        {
+          "bundle": "atlas",
+          "id": "postmortems/pm-2026-020-cert-expiry",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "'renewing' vs 'renewal'.",
+      "added": "wp0"
+    },
+    {
+      "id": "A37",
+      "query": "partitioned ledger tables",
+      "lang": "en",
+      "category": "morph",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "atlas",
+          "id": "services/validation-ledger",
+          "grade": 2
+        },
+        {
+          "bundle": "atlas",
+          "id": "questions/q-006-postgres-partitioning-validations",
+          "grade": 2
+        }
+      ],
+      "distractors": [],
+      "notes": "'tables' vs 'table'; 'partitioned' vs 'partitions' / 'partitioning'.",
+      "added": "wp0"
+    },
+    {
+      "id": "A38",
+      "query": "sanzione duplicata",
+      "lang": "it",
+      "category": "morph",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "atlas",
+          "id": "incidents/inc-2026-025-inspector-app-sync",
+          "grade": 2
+        },
+        {
+          "bundle": "atlas",
+          "id": "services/inspector-app-backend",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "Singular; the incident says 'sanzioni duplicate'.",
+      "added": "wp0"
+    },
+    {
+      "id": "A39",
+      "query": "consumers lagging",
+      "lang": "en",
+      "category": "morph",
+      "split": "heldout",
+      "expected": [
+        {
+          "bundle": "atlas",
+          "id": "incidents/inc-2026-011-kafka-partition-lag",
+          "grade": 2
+        },
+        {
+          "bundle": "atlas",
+          "id": "postmortems/pm-2026-011-kafka-lag",
+          "grade": 2
+        },
+        {
+          "bundle": "atlas",
+          "id": "incidents/inc-2026-023-avl-feed-stale",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "'lagging' vs 'lag'; 'consumers' vs 'consumer'.",
+      "added": "wp0"
+    },
+    {
+      "id": "A40",
+      "query": "reperibilita team dati",
+      "lang": "it",
+      "category": "accent",
+      "split": "heldout",
+      "expected": [
+        {
+          "bundle": "atlas",
+          "id": "questions/q-007-on-call-compensation",
+          "grade": 2
+        },
+        {
+          "bundle": "atlas",
+          "id": "teams/team-dati",
+          "grade": 1
+        },
+        {
+          "bundle": "standards",
+          "id": "standards/on-call-policy",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "Unaccented 'reperibilita' vs 'reperibilità'.",
+      "added": "wp0"
+    },
+    {
+      "id": "A41",
+      "query": "team mobilita",
+      "lang": "it",
+      "category": "accent",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "atlas",
+          "id": "teams/team-mobilita",
+          "grade": 2
+        }
+      ],
+      "distractors": [],
+      "notes": "Unaccented; the concept path is unaccented too, the title is not.",
+      "added": "wp0"
+    },
+    {
+      "id": "A42",
+      "query": "nuove funzionalita SBE",
+      "lang": "it",
+      "category": "accent",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "atlas",
+          "id": "services/legacy-sbe",
+          "grade": 2
+        },
+        {
+          "bundle": "atlas",
+          "id": "decisions/adr-017-retire-legacy-sbe",
+          "grade": 2
+        }
+      ],
+      "distractors": [],
+      "notes": "Unaccented 'funzionalita'.",
+      "added": "wp0"
+    },
+    {
+      "id": "A43",
+      "query": "proprietà e runtime di pagopa-adapter",
+      "lang": "it",
+      "category": "accent",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "atlas",
+          "id": "services/pagopa-adapter",
+          "grade": 2
+        }
+      ],
+      "distractors": [],
+      "notes": "Control: accent typed exactly as the section heading.",
+      "added": "wp0"
+    },
+    {
+      "id": "A44",
+      "query": "double billing of season passes",
+      "lang": "en",
+      "category": "synonym",
+      "split": "heldout",
+      "expected": [
+        {
+          "bundle": "atlas",
+          "id": "incidents/inc-2026-027-subscription-renewal-duplicate",
+          "grade": 2
+        },
+        {
+          "bundle": "atlas",
+          "id": "services/subscription-manager",
+          "grade": 1
+        },
+        {
+          "bundle": "atlas",
+          "id": "slos/subscription-manager-renewal-success",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "'billing' never occurs; texts say charged twice.",
+      "added": "wp0"
+    },
+    {
+      "id": "A45",
+      "query": "procedura per spegnere una funzione in emergenza",
+      "lang": "it",
+      "category": "synonym",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "atlas",
+          "id": "runbooks/feature-flag-kill-switch",
+          "grade": 2
+        },
+        {
+          "bundle": "atlas",
+          "id": "decisions/adr-016-feature-flags-unleash",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "Italian paraphrase of the English kill switch runbook.",
+      "added": "wp0"
+    },
+    {
+      "id": "A46",
+      "query": "vehicle locations stuck",
+      "lang": "en",
+      "category": "synonym",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "atlas",
+          "id": "incidents/inc-2026-023-avl-feed-stale",
+          "grade": 2
+        },
+        {
+          "bundle": "atlas",
+          "id": "runbooks/avl-feed-restart",
+          "grade": 1
+        },
+        {
+          "bundle": "atlas",
+          "id": "services/avl-collector",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "'locations' vs 'positions'.",
+      "added": "wp0"
+    },
+    {
+      "id": "A47",
+      "query": "who to call at night when the warehouse breaks",
+      "lang": "en",
+      "category": "synonym",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "atlas",
+          "id": "questions/q-007-on-call-compensation",
+          "grade": 2
+        },
+        {
+          "bundle": "atlas",
+          "id": "teams/team-dati",
+          "grade": 1
+        },
+        {
+          "bundle": "atlas",
+          "id": "runbooks/on-call-escalation",
+          "grade": 1
+        },
+        {
+          "bundle": "standards",
+          "id": "standards/on-call-policy",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "The open question is Italian; 'night' vs 'notturni'.",
+      "added": "wp0"
+    },
+    {
+      "id": "A48",
+      "query": "doppio addebito sul borsellino",
+      "lang": "it",
+      "category": "synonym",
+      "split": "heldout",
+      "expected": [
+        {
+          "bundle": "atlas",
+          "id": "incidents/inc-2026-004-wallet-double-charge",
+          "grade": 2
+        },
+        {
+          "bundle": "atlas",
+          "id": "postmortems/pm-2026-004-wallet-double-charge",
+          "grade": 1
+        },
+        {
+          "bundle": "atlas",
+          "id": "services/wallet-service",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "'borsellino' never occurs; the concepts say wallet / debit.",
+      "added": "wp0"
+    },
+    {
+      "id": "A49",
+      "query": "attack on the website",
+      "lang": "en",
+      "category": "synonym",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "atlas",
+          "id": "incidents/inc-2026-029-storefront-ddos",
+          "grade": 2
+        },
+        {
+          "bundle": "atlas",
+          "id": "postmortems/pm-2026-029-storefront-ddos",
+          "grade": 1
+        },
+        {
+          "bundle": "atlas",
+          "id": "services/web-storefront",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "'website' never occurs (storefront).",
+      "added": "wp0"
+    },
+    {
+      "id": "A50",
+      "query": "repository structure monorepo or polyrepo",
+      "lang": "en",
+      "category": "freshness",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "atlas",
+          "id": "decisions/adr-015-polyrepo-per-team",
+          "grade": 2
+        },
+        {
+          "bundle": "atlas",
+          "id": "decisions/adr-007-monorepo",
+          "grade": 1
+        }
+      ],
+      "distractors": [
+        {
+          "bundle": "atlas",
+          "id": "decisions/adr-007-monorepo",
+          "reason": "superseded ADR"
+        }
+      ],
+      "notes": "",
+      "added": "wp0"
+    },
+    {
+      "id": "A51",
+      "query": "escalation procedure",
+      "lang": "en",
+      "category": "freshness",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "atlas",
+          "id": "runbooks/on-call-escalation",
+          "grade": 2
+        },
+        {
+          "bundle": "atlas",
+          "id": "runbooks/incident-severity-triage",
+          "grade": 1
+        },
+        {
+          "bundle": "standards",
+          "id": "standards/incident-severity-levels",
+          "grade": 1
+        },
+        {
+          "bundle": "atlas",
+          "id": "runbooks/escalation-reperibilita-2025",
+          "grade": 1
+        }
+      ],
+      "distractors": [
+        {
+          "bundle": "atlas",
+          "id": "runbooks/escalation-reperibilita-2025",
+          "reason": "deprecated 2025 version"
+        }
+      ],
+      "notes": "",
+      "added": "wp0"
+    },
+    {
+      "id": "A52",
+      "query": "validation event schema",
+      "lang": "en",
+      "category": "freshness",
+      "split": "heldout",
+      "expected": [
+        {
+          "bundle": "atlas",
+          "id": "contracts/ticket-validated-v2",
+          "grade": 2
+        },
+        {
+          "bundle": "atlas",
+          "id": "questions/q-005-ticket-validated-v3-schema",
+          "grade": 1
+        },
+        {
+          "bundle": "atlas",
+          "id": "contracts/ticket-validated-v1",
+          "grade": 1
+        }
+      ],
+      "distractors": [
+        {
+          "bundle": "atlas",
+          "id": "contracts/ticket-validated-v1",
+          "reason": "deprecated v1 contract"
+        }
+      ],
+      "notes": "",
+      "added": "wp0"
+    },
+    {
+      "id": "A53",
+      "query": "incidente storico del legacy SBE",
+      "lang": "it",
+      "category": "disambig",
+      "split": "heldout",
+      "expected": [
+        {
+          "bundle": "atlas",
+          "id": "incidents/inc-2025-041-legacy-sbe-crash",
+          "grade": 2
+        },
+        {
+          "bundle": "atlas",
+          "id": "services/legacy-sbe",
+          "grade": 1
+        }
+      ],
+      "distractors": [
+        {
+          "bundle": "atlas",
+          "id": "decisions/adr-017-retire-legacy-sbe",
+          "reason": "fresh decision about the same system; the question asks for the historical incident"
+        }
+      ],
+      "notes": "A freshness prior must not hide an explicitly requested historical record.",
+      "added": "wp0"
+    },
+    {
+      "id": "A54",
+      "query": "deprecated validation event v1",
+      "lang": "en",
+      "category": "disambig",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "atlas",
+          "id": "contracts/ticket-validated-v1",
+          "grade": 2
+        },
+        {
+          "bundle": "atlas",
+          "id": "contracts/ticket-validated-v2",
+          "grade": 1
+        }
+      ],
+      "distractors": [
+        {
+          "bundle": "atlas",
+          "id": "contracts/ticket-validated-v2",
+          "reason": "current version; the question asks for v1"
+        }
+      ],
+      "notes": "",
+      "added": "wp0"
+    },
+    {
+      "id": "A55",
+      "query": "Italian version of the escalation runbook",
+      "lang": "en",
+      "category": "disambig",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "atlas",
+          "id": "runbooks/escalation-reperibilita-2025",
+          "grade": 2
+        },
+        {
+          "bundle": "atlas",
+          "id": "runbooks/on-call-escalation",
+          "grade": 1
+        }
+      ],
+      "distractors": [
+        {
+          "bundle": "atlas",
+          "id": "runbooks/on-call-escalation",
+          "reason": "current English version"
+        }
+      ],
+      "notes": "",
+      "added": "wp0"
+    },
+    {
+      "id": "A56",
+      "query": "validator gateway latency SLO",
+      "lang": "en",
+      "category": "disambig",
+      "split": "heldout",
+      "expected": [
+        {
+          "bundle": "atlas",
+          "id": "slos/validator-gateway-ingest-latency",
+          "grade": 2
+        },
+        {
+          "bundle": "atlas",
+          "id": "services/validator-gateway",
+          "grade": 1
+        },
+        {
+          "bundle": "atlas",
+          "id": "slos/validator-gateway-availability",
+          "grade": 1
+        }
+      ],
+      "distractors": [
+        {
+          "bundle": "atlas",
+          "id": "slos/validator-gateway-availability",
+          "reason": "sibling SLO of the same service"
+        }
+      ],
+      "notes": "",
+      "added": "wp0"
+    },
+    {
+      "id": "A57",
+      "query": "post-mortem dei validatori in italiano",
+      "lang": "it",
+      "category": "disambig",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "atlas",
+          "id": "postmortems/pm-2026-001-validator-outage",
+          "grade": 2
+        },
+        {
+          "bundle": "atlas",
+          "id": "incidents/inc-2026-001-validator-outage-bologna",
+          "grade": 1
+        }
+      ],
+      "distractors": [
+        {
+          "bundle": "atlas",
+          "id": "incidents/inc-2026-001-validator-outage-bologna",
+          "reason": "the incident, not the post-mortem"
+        }
+      ],
+      "notes": "",
+      "added": "wp0"
+    },
+    {
+      "id": "A58",
+      "query": "team that owns the API gateway",
+      "lang": "en",
+      "category": "disambig",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "atlas",
+          "id": "teams/team-piattaforma",
+          "grade": 2
+        },
+        {
+          "bundle": "atlas",
+          "id": "services/api-gateway",
+          "grade": 1
+        }
+      ],
+      "distractors": [
+        {
+          "bundle": "atlas",
+          "id": "dependencies/kong-gateway",
+          "reason": "the product, not the owning team"
+        }
+      ],
+      "notes": "",
+      "added": "wp0"
+    },
+    {
+      "id": "A59",
+      "query": "Jira ticket workflow for feature requests",
+      "lang": "en",
+      "category": "no-answer",
+      "split": "dev",
+      "expected": [],
+      "distractors": [],
+      "notes": "No project-management concepts.",
+      "added": "wp0"
+    },
+    {
+      "id": "A60",
+      "query": "contratto di pulizia degli uffici",
+      "lang": "it",
+      "category": "no-answer",
+      "split": "heldout",
+      "expected": [],
+      "distractors": [],
+      "notes": "Out of domain.",
+      "added": "wp0"
+    },
+    {
+      "id": "A61",
+      "query": "Android app release schedule",
+      "lang": "en",
+      "category": "no-answer",
+      "split": "heldout",
+      "expected": [],
+      "distractors": [],
+      "notes": "The BFF mentions app versions; no release schedule.",
+      "added": "wp0"
+    },
+    {
+      "id": "A62",
+      "query": "orario delle corse della linea 27",
+      "lang": "it",
+      "category": "no-answer",
+      "split": "dev",
+      "expected": [],
+      "distractors": [],
+      "notes": "Timetables are data, not catalog concepts; 'linea' matches.",
+      "added": "wp0"
+    },
+    {
+      "id": "A63",
+      "query": "GraphQL gateway migration",
+      "lang": "en",
+      "category": "no-answer",
+      "split": "dev",
+      "expected": [],
+      "distractors": [],
+      "notes": "The gateway is REST (Kong); no GraphQL.",
+      "added": "wp0"
+    },
+    {
+      "id": "A64",
+      "query": "stipendio dei controllori",
+      "lang": "it",
+      "category": "no-answer",
+      "split": "dev",
+      "expected": [],
+      "distractors": [],
+      "notes": "'controllori' matches the inspector concepts.",
+      "added": "wp0"
+    },
+    {
+      "id": "A65",
+      "query": "MongoDB cluster sizing",
+      "lang": "en",
+      "category": "no-answer",
+      "split": "dev",
+      "expected": [],
+      "distractors": [],
+      "notes": "No MongoDB.",
+      "added": "wp0"
+    },
+    {
+      "id": "A66",
+      "query": "fattura elettronica per le aziende",
+      "lang": "it",
+      "category": "no-answer",
+      "split": "dev",
+      "expected": [],
+      "distractors": [],
+      "notes": "'aziendali' appears for company subscriptions; no invoicing concept.",
+      "added": "wp0"
+    },
+    {
+      "id": "A67",
+      "query": "Terraform module for the VPC",
+      "lang": "en",
+      "category": "no-answer",
+      "split": "dev",
+      "expected": [],
+      "distractors": [],
+      "notes": "No infrastructure-as-code concepts.",
+      "added": "wp0"
+    },
+    {
+      "id": "A68",
+      "query": "numero verde assistenza clienti",
+      "lang": "it",
+      "category": "no-answer",
+      "split": "dev",
+      "expected": [],
+      "distractors": [],
+      "notes": "No customer-service concepts.",
+      "added": "wp0"
+    },
+    {
+      "id": "A69",
+      "query": "when must a post-mortem be written?",
+      "lang": "en",
+      "category": "standards",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "standards",
+          "id": "standards/incident-severity-levels",
+          "grade": 2
+        },
+        {
+          "bundle": "atlas",
+          "id": "runbooks/on-call-escalation",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "Severity levels define the mandatory post-mortem.",
+      "added": "wp0"
+    },
+    {
+      "id": "A70",
+      "query": "burn rate alert thresholds",
+      "lang": "en",
+      "category": "standards",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "standards",
+          "id": "standards/slo-policy",
+          "grade": 2
+        },
+        {
+          "bundle": "atlas",
+          "id": "slos/fare-engine-latency-p99",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "",
+      "added": "wp0"
+    },
+    {
+      "id": "A71",
+      "query": "convenzione per i nomi dei topic",
+      "lang": "it",
+      "category": "standards",
+      "split": "dev",
+      "expected": [
+        {
+          "bundle": "standards",
+          "id": "standards/service-naming",
+          "grade": 2
+        },
+        {
+          "bundle": "atlas",
+          "id": "decisions/adr-002-kafka-as-event-backbone",
+          "grade": 1
+        },
+        {
+          "bundle": "standards",
+          "id": "standards/data-contract-versioning",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "Italian query; English standard.",
+      "added": "wp0"
+    },
+    {
+      "id": "A72",
+      "query": "how long does a deprecated REST major live",
+      "lang": "en",
+      "category": "standards",
+      "split": "heldout",
+      "expected": [
+        {
+          "bundle": "standards",
+          "id": "standards/data-contract-versioning",
+          "grade": 2
+        },
+        {
+          "bundle": "atlas",
+          "id": "decisions/adr-008-api-versioning-url-path",
+          "grade": 2
+        },
+        {
+          "bundle": "atlas",
+          "id": "contracts/api-tickets-v3",
+          "grade": 1
+        }
+      ],
+      "distractors": [],
+      "notes": "'live' vs 'lives'.",
+      "added": "wp0"
+    }
+  ],
+  "split": {
+    "seed": 20261024,
+    "devRatio": 0.7,
+    "strata": "category x lang"
+  }
+}
