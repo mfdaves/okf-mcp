@@ -56,9 +56,11 @@ test("hybrid search finds a concept that shares no word with the query", async (
   assert.equal(top.relevance, 1);
   assert.equal(top.coverage, 0);
   assert.deepEqual(top.matchedTerms, []);
-  // mode and lowConfidence keep their lexical meaning.
+  // mode keeps its lexical meaning; lowConfidence reads the displayed top result,
+  // which matched none of the terms.
   assert.equal(hybrid.mode, lexical.mode);
-  assert.equal(hybrid.lowConfidence, lexical.lowConfidence);
+  assert.equal(hybrid.mode, "any");
+  assert.equal(hybrid.lowConfidence, true);
   assert.equal(hybrid.allTermsTotal, lexical.allTermsTotal);
 });
 

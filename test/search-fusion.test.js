@@ -146,3 +146,26 @@ test("theoretical-minimum normalization keeps the weakest lexical hit above a mi
     );
   }
 });
+
+test("ties follow the dominant side: dense order at alpha 1, lexical order at alpha 0", () => {
+  const lexical = [
+    { id: "b", score: 2 },
+    { id: "a", score: 2 },
+  ];
+  const dense = [
+    { id: "a", score: 0.5 },
+    { id: "b", score: 0.5 },
+  ];
+  for (const normalization of ["minmax", "tmm", "lexical-tmm"]) {
+    const one = fuseRankings({ lexical, dense, alpha: 1, normalization });
+    assert.deepEqual(
+      one.map((entry) => entry.id),
+      ["a", "b"],
+    );
+    const zero = fuseRankings({ lexical, dense, alpha: 0, normalization });
+    assert.deepEqual(
+      zero.map((entry) => entry.id),
+      ["b", "a"],
+    );
+  }
+});

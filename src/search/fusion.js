@@ -16,7 +16,7 @@
 // A candidate missing from one list contributes 0 from that side. alpha 0 returns the
 // lexical list and alpha 1 the dense list exactly (the other side is not
 // merged in), so both ends reduce to a single retriever. Ties are broken by
-// lexical rank, then dense rank, then id, so the order is deterministic.
+// the dominant side's rank, then the other side's, then id, so the order is deterministic.
 
 // Both chosen on the development split of both fixtures with text-embedding-3-small at 512
 // dimensions: the best mean dev Recall@5 over alpha 0..1 under minmax, tmm and lexical-tmm
@@ -124,11 +124,15 @@ function fuseRankings(options) {
       denseRank: right ? right.rank : Infinity,
     };
   });
+  // Ties follow the dominant side's order first (dense when alpha > 0.5), so
+  // alpha 1 keeps dense ties in dense order and alpha 0 lexical ties in
+  // lexical order. Infinity - Infinity is NaN, which falls through.
+  const [first, second] = alpha > 0.5 ? ["denseRank", "lexicalRank"] : ["lexicalRank", "denseRank"];
   fused.sort(
     (a, b) =>
       b.fusedScore - a.fusedScore ||
-      a.lexicalRank - b.lexicalRank ||
-      a.denseRank - b.denseRank ||
+      a[first] - b[first] ||
+      a[second] - b[second] ||
       (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
   );
   return fused.map(({ lexicalRank, denseRank, ...entry }) => entry);

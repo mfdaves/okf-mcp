@@ -63,7 +63,12 @@ for (const name of ["alpinaria", "atlas"]) {
       if (response.hybrid) hybrid += 1;
       assert.equal(response.embedder.degraded, false);
       assert.equal(response.mode, lexical.mode, "mode keeps its lexical meaning");
-      assert.equal(response.lowConfidence, lexical.lowConfidence);
+      // lowConfidence reads the displayed top result.
+      const top = response.results[0];
+      assert.equal(
+        response.lowConfidence,
+        response.mode === "any" && Boolean(top) && top.coverage < 0.5,
+      );
       assert.equal(response.alpha, DEFAULT_FUSION_ALPHA);
     }
     assert.equal(hybrid, 40);

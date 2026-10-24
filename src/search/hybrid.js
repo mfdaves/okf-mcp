@@ -12,7 +12,7 @@
 const { performance } = require("node:perf_hooks");
 
 const { openVectorCache, resolveCacheDir } = require("../cache/store");
-const { describeEmbedder, validateEmbedder } = require("../embed/interface");
+const { EmbedderError, describeEmbedder, validateEmbedder } = require("../embed/interface");
 const { OPENAI_SERVER_CODES, createOpenAiEmbedder } = require("../embed/openai");
 const { prepareEmbeddings } = require("../embed/prepare");
 const { denseCoverage, resolveUnits, unitMemo } = require("./dense");
@@ -63,6 +63,37 @@ function localUnits(unitsOf) {
       return !doc || !remote.has(doc.bundle);
     });
   };
+}
+
+function withTimeout(promise, ms) {
+  let timer = null;
+  const timeout = new Promise((_resolve, reject) => {
+    timer = setTimeout(
+      () => reject(new EmbedderError("Embedder probe timed out.", "embedder_timeout")),
+      ms,
+    );
+    timer.unref?.();
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
+// A query vector must match the cache before it is used or kept: same
+// length, every value finite (a client that discovered another dimension,
+// or a broken server, must not poison the query LRU).
+function checkQueryVector(vector, dimension) {
+  const length = vector && typeof vector.length === "number" ? vector.length : null;
+  let finite = length !== null;
+  for (let index = 0; finite && index < length; index += 1) {
+    finite = Number.isFinite(vector[index]);
+  }
+  if (length !== dimension || !finite) {
+    throw new EmbedderError(
+      "The query vector does not match the vector cache.",
+      "embedder_invalid_vector",
+      { expected: dimension, received: length },
+    );
+  }
+  return vector;
 }
 
 function usageOf(embedder) {
@@ -123,6 +154,7 @@ class EmbeddingRuntime {
     this.syncedIndex = null;
     this.syncing = null;
     this.syncingIndex = null;
+    this.latestIndex = null;
     this.syncQueue = Promise.resolve();
     this.lastSync = null;
     this.syncError = null;
@@ -140,9 +172,13 @@ class EmbeddingRuntime {
       this.embedders = embeddersFor(config.embedder, this.context);
       const documents = this.embedders.documents;
       if (!Number.isSafeInteger(documents.dimension)) {
-        // probe() takes no signal; one bounded call records the dimension.
-        await documents.embed(["okf-mcp"], { signal: AbortSignal.timeout(PROBE_TIMEOUT_MS) });
-        if (typeof documents.probe === "function") await documents.probe();
+        // The interface's order: probe() discovers the dimension before any
+        // embed(). It takes no signal, so the wait is bounded here.
+        if (typeof documents.probe === "function") {
+          await withTimeout(documents.probe(), PROBE_TIMEOUT_MS);
+        } else {
+          await documents.embed(["okf-mcp"], { signal: AbortSignal.timeout(PROBE_TIMEOUT_MS) });
+        }
       }
       validateEmbedder(documents);
       const dir = resolveCacheDir({
@@ -211,10 +247,11 @@ class EmbeddingRuntime {
       this.queryVectors.set(key, cached);
       return { vector: cached, cached: true };
     }
-    const [vector] = await this.embedders.queries.embed([key], {
+    const [raw] = await this.embedders.queries.embed([key], {
       signal: AbortSignal.timeout(QUERY_TIMEOUT_MS),
       concurrency: 1,
     });
+    const vector = checkQueryVector(raw, this.cache.dimension);
     this.queryVectors.set(key, vector);
     if (this.queryVectors.size > QUERY_CACHE_SIZE) {
       this.queryVectors.delete(this.queryVectors.keys().next().value);
@@ -258,19 +295,28 @@ class EmbeddingRuntime {
       }
     }
     const searchStarted = performance.now();
-    const response = searchConcepts(
-      index,
-      encoded
-        ? Object.assign(config, {
-            hybrid: true,
-            queryVector: encoded.vector,
-            vectorCache: this.cache,
-            embedUnits: this.units,
-            alpha: config.alpha === undefined ? this.alpha : config.alpha,
-            fusionNormalization: config.fusionNormalization || this.normalization,
-          })
-        : Object.assign(config, { hybrid: false }),
-    );
+    const lexical = () => searchConcepts(index, Object.assign({}, config, { hybrid: false }));
+    let response;
+    if (encoded) {
+      const hybridConfig = Object.assign({}, config, {
+        hybrid: true,
+        queryVector: encoded.vector,
+        vectorCache: this.cache,
+        embedUnits: this.units,
+        alpha: config.alpha === undefined ? this.alpha : config.alpha,
+        fusionNormalization: config.fusionNormalization || this.normalization,
+      });
+      try {
+        response = searchConcepts(index, hybridConfig);
+      } catch (error) {
+        // Any failure of the dense stage degrades to lexical; a problem with
+        // the caller's own options throws again from the lexical run.
+        failure = failureOf(error, "dense_failed");
+        response = lexical();
+      }
+    } else {
+      response = lexical();
+    }
     const searchMs = performance.now() - searchStarted;
     const results = response.results;
     delete response.results;
@@ -290,14 +336,30 @@ class EmbeddingRuntime {
 
   // Embeds every unit of `index` the cache lacks and prunes rows no unit
   // uses (prepareEmbeddings). Runs one at a time; the receipt is kept.
+  // Startup and background preparation and the incremental embedding of a
+  // write batch share one queue, so a slow preparation never prunes rows a
+  // later batch added. A preparation always works on the newest index the
+  // runtime has seen when it starts: its prune keeps exactly that unit set.
+  enqueue(task) {
+    const run = this.syncQueue.then(task);
+    this.syncQueue = run.catch(() => null);
+    return run;
+  }
+
+  noteIndex(index) {
+    if (index) this.latestIndex = index;
+  }
+
   sync(index) {
-    const run = this.syncQueue.then(async () => {
+    this.noteIndex(index);
+    return this.enqueue(async () => {
       if (!this.ready) return null;
+      const target = this.latestIndex || index;
       try {
-        const receipt = await prepareEmbeddings(index, this.embedders.documents, this.cache, {
-          units: (target) => unitMemo(target, this.units).units,
+        const receipt = await prepareEmbeddings(target, this.embedders.documents, this.cache, {
+          units: (current) => unitMemo(current, this.units).units,
         });
-        this.syncedIndex = index;
+        this.syncedIndex = target;
         this.syncError = null;
         this.syncFailedAt = 0;
         this.lastSync = this.sanitize(receipt);
@@ -310,8 +372,6 @@ class EmbeddingRuntime {
         return null;
       }
     });
-    this.syncQueue = run.catch(() => null);
-    return run;
   }
 
   // Background sync for an index this runtime has not prepared yet, at most
@@ -329,7 +389,12 @@ class EmbeddingRuntime {
   // After a write batch: embed only the units whose text is new relative to
   // the index before the batch and absent from the cache; one request per
   // batch when the inputs fit. Superseded rows are pruned by the next sync.
-  async embedChanged(previousIndex, index) {
+  embedChanged(previousIndex, index) {
+    this.noteIndex(index);
+    return this.enqueue(() => this.embedChangedNow(previousIndex, index));
+  }
+
+  async embedChangedNow(previousIndex, index) {
     if (!this.ready) {
       return {
         embedder: this.describe(this.currentFailure()),
