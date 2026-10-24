@@ -79,9 +79,11 @@ class LiveAuthoringService {
         ? bundles[0]
         : null;
     if (!bundle) {
-      throw new Error(id
-        ? `Unknown writable OKF bundle: ${id}`
-        : "A bundle id is required unless exactly one writable OKF root is configured.");
+      throw new Error(
+        id
+          ? `Unknown writable OKF bundle: ${id}`
+          : "A bundle id is required unless exactly one writable OKF root is configured.",
+      );
     }
     return bundle;
   }
@@ -99,7 +101,9 @@ class LiveAuthoringService {
   assertWritableTarget(bundle, conceptPath, existing) {
     const target = this.store.resolveConceptFile(bundle.id, conceptPath);
     if (isConfiguredGeneratorOutput(this.store.project, target.absolutePath)) {
-      throw new Error(`Concept is inside a configured generator output and must be changed through its generator: ${conceptPath}`);
+      throw new Error(
+        `Concept is inside a configured generator output and must be changed through its generator: ${conceptPath}`,
+      );
     }
     if (existing && conceptIsManaged(existing, this.store.project)) {
       throw new Error(`Generated concept must be changed through its generator: ${existing.uri}`);
@@ -135,13 +139,17 @@ class LiveAuthoringService {
     if (change.relations !== undefined && !Array.isArray(change.relations)) {
       throw new Error("changes[].relations must be an array.");
     }
-    const sources = (change.sources || [])
-      .map((source, index) => normalizeSource(source, `changes[].sources[${index}]`));
-    const relations = (change.relations || [])
-      .map((relation, index) => normalizeRelation(relation, `changes[].relations[${index}]`));
+    const sources = (change.sources || []).map((source, index) =>
+      normalizeSource(source, `changes[].sources[${index}]`),
+    );
+    const relations = (change.relations || []).map((relation, index) =>
+      normalizeRelation(relation, `changes[].relations[${index}]`),
+    );
     if (tags.length) frontmatter.tags = tags;
-    if (sources.length) frontmatter.sources = applySourcePatch([], { add: sources }, "changes[].sources");
-    if (relations.length) frontmatter.relations = applyRelationPatch([], { add: relations }, "changes[].relations");
+    if (sources.length)
+      frontmatter.sources = applySourcePatch([], { add: sources }, "changes[].sources");
+    if (relations.length)
+      frontmatter.relations = applyRelationPatch([], { add: relations }, "changes[].relations");
     frontmatter.generated = generated;
     const body = hasOwn(change, "body") ? String(change.body || "") : `# ${title}`;
     const markdown = renderConceptMarkdown({ path: conceptPath, frontmatter, body });
@@ -177,7 +185,9 @@ class LiveAuthoringService {
       throw new Error(`All changes must target writable bundle ${bundle.id}: ${uri}`);
     }
     if (existing.type === "Attested Computation") {
-      throw new Error("Live concept authoring cannot modify Attested Computation contracts or code.");
+      throw new Error(
+        "Live concept authoring cannot modify Attested Computation contracts or code.",
+      );
     }
     const target = this.assertWritableTarget(bundle, existing.path, existing);
     const originalText = fs.readFileSync(target.absolutePath, "utf8");
@@ -189,9 +199,11 @@ class LiveAuthoringService {
     }
     const frontmatter = Object.assign({}, existing.frontmatter);
     Object.assign(frontmatter, validateMetadata(change.metadata, "changes[].metadata"));
-    validateRemovalKeys(change.removeMetadataKeys, "changes[].removeMetadataKeys").forEach((key) => {
-      delete frontmatter[key];
-    });
+    validateRemovalKeys(change.removeMetadataKeys, "changes[].removeMetadataKeys").forEach(
+      (key) => {
+        delete frontmatter[key];
+      },
+    );
     if (hasOwn(change, "title")) {
       frontmatter.title = nonEmptyString(change.title, "changes[].title");
     }
@@ -202,14 +214,24 @@ class LiveAuthoringService {
       frontmatter.tags = applyTagPatch(frontmatter.tags, change.tags, "changes[].tags");
     }
     if (hasOwn(change, "sources")) {
-      frontmatter.sources = applySourcePatch(frontmatter.sources, change.sources, "changes[].sources");
+      frontmatter.sources = applySourcePatch(
+        frontmatter.sources,
+        change.sources,
+        "changes[].sources",
+      );
     }
     if (hasOwn(change, "relations")) {
-      frontmatter.relations = applyRelationPatch(frontmatter.relations, change.relations, "changes[].relations");
+      frontmatter.relations = applyRelationPatch(
+        frontmatter.relations,
+        change.relations,
+        "changes[].relations",
+      );
     }
     const body = hasOwn(change, "body") ? String(change.body || "") : existing.body;
-    if (isDeepStrictEqual(frontmatter, existing.frontmatter)
-      && normalizeBody(body) === normalizeBody(existing.body)) {
+    if (
+      isDeepStrictEqual(frontmatter, existing.frontmatter) &&
+      normalizeBody(body) === normalizeBody(existing.body)
+    ) {
       throw new Error(`Update has no effective changes: ${existing.uri}`);
     }
     frontmatter.generated = Object.assign(
@@ -253,13 +275,17 @@ class LiveAuthoringService {
         });
         return;
       }
-      (document.warnings || []).filter((entry) => entry.layer === "v0.2").forEach((entry) => {
-        candidateDiagnostics.push(Object.assign({}, entry, {
-          severity: "error",
-          bundle: candidate.bundle,
-          path: candidate.path,
-        }));
-      });
+      (document.warnings || [])
+        .filter((entry) => entry.layer === "v0.2")
+        .forEach((entry) => {
+          candidateDiagnostics.push(
+            Object.assign({}, entry, {
+              severity: "error",
+              bundle: candidate.bundle,
+              path: candidate.path,
+            }),
+          );
+        });
     });
     const diagnostics = validation.diagnostics.concat(candidateDiagnostics);
     return {
@@ -314,9 +340,10 @@ class LiveAuthoringService {
     const timestampValue = this.now();
     return {
       by: this.actor,
-      at: timestampValue instanceof Date
-        ? timestampValue.toISOString()
-        : new Date(timestampValue).toISOString(),
+      at:
+        timestampValue instanceof Date
+          ? timestampValue.toISOString()
+          : new Date(timestampValue).toISOString(),
     };
   }
 
@@ -324,8 +351,14 @@ class LiveAuthoringService {
     if (!isPlainObject(input)) {
       throw new AuthoringPolicyError("okf_apply_changes requires an object argument.");
     }
-    if (!Array.isArray(input.changes) || input.changes.length < 1 || input.changes.length > MAX_CHANGES) {
-      throw new AuthoringPolicyError(`changes must contain from 1 through ${MAX_CHANGES} operations.`);
+    if (
+      !Array.isArray(input.changes) ||
+      input.changes.length < 1 ||
+      input.changes.length > MAX_CHANGES
+    ) {
+      throw new AuthoringPolicyError(
+        `changes must contain from 1 through ${MAX_CHANGES} operations.`,
+      );
     }
     let bundle;
     try {
@@ -335,9 +368,8 @@ class LiveAuthoringService {
       throw new AuthoringPolicyError(error && error.message ? error.message : String(error));
     }
     const generated = this.generatedStamp();
-    const additionalBundles = context && Array.isArray(context.additionalBundles)
-      ? context.additionalBundles
-      : [];
+    const additionalBundles =
+      context && Array.isArray(context.additionalBundles) ? context.additionalBundles : [];
     const currentIndex = this.buildIndex(additionalBundles);
     const candidates = input.changes.map((change, index) => {
       if (!isPlainObject(change)) {
@@ -363,15 +395,19 @@ class LiveAuthoringService {
     candidates.forEach((candidate) => {
       const key = path.resolve(candidate.target.absolutePath);
       if (targetPaths.has(key)) {
-        throw new AuthoringPolicyError(`A batch cannot target the same concept more than once: ${candidate.path}`);
+        throw new AuthoringPolicyError(
+          `A batch cannot target the same concept more than once: ${candidate.path}`,
+        );
       }
       targetPaths.add(key);
     });
     const absoluteTargets = Array.from(targetPaths);
     for (let left = 0; left < absoluteTargets.length; left += 1) {
       for (let right = left + 1; right < absoluteTargets.length; right += 1) {
-        if (absoluteTargets[left].startsWith(`${absoluteTargets[right]}${path.sep}`)
-          || absoluteTargets[right].startsWith(`${absoluteTargets[left]}${path.sep}`)) {
+        if (
+          absoluteTargets[left].startsWith(`${absoluteTargets[right]}${path.sep}`) ||
+          absoluteTargets[right].startsWith(`${absoluteTargets[left]}${path.sep}`)
+        ) {
           throw new AuthoringPolicyError(
             "A batch cannot place one concept path underneath another concept file path.",
           );
@@ -379,24 +415,31 @@ class LiveAuthoringService {
       }
     }
     const currentConcepts = currentIndex.concepts.filter((doc) => doc.bundle === bundle.id);
-    const replacedPaths = new Set(candidates.filter((entry) => entry.op === "update").map((entry) => entry.path));
-    const finalConcepts = currentConcepts.filter((doc) => !replacedPaths.has(doc.path)).concat(candidates);
+    const replacedPaths = new Set(
+      candidates.filter((entry) => entry.op === "update").map((entry) => entry.path),
+    );
+    const finalConcepts = currentConcepts
+      .filter((doc) => !replacedPaths.has(doc.path))
+      .concat(candidates);
     for (const candidate of candidates) {
       const key = semanticConceptKey(candidate.frontmatter.type, candidate.title);
-      const before = currentConcepts.filter((doc) => semanticConceptKey(doc.type, doc.title) === key);
-      const after = finalConcepts.filter((doc) => (
-        semanticConceptKey(doc.type || doc.frontmatter.type, doc.title) === key
-      ));
+      const before = currentConcepts.filter(
+        (doc) => semanticConceptKey(doc.type, doc.title) === key,
+      );
+      const after = finalConcepts.filter(
+        (doc) => semanticConceptKey(doc.type || doc.frontmatter.type, doc.title) === key,
+      );
       if (after.length <= Math.max(1, before.length)) continue;
       const existing = after.filter((doc) => !candidates.includes(doc));
-      const details = candidate.op === "create" && existing.length === 1 && after.length === 2
-        ? conceptConflictDetails(existing, this.store.project)
-        : {
-          reason: before.length ? "same_type_title" : "same_batch_type_title",
-          candidates: after.slice(0, 5).map((doc) => conceptMatchSummary(doc)),
-          omitted: Math.max(0, after.length - 5),
-          recommendedOperation: "merge_batch_changes",
-        };
+      const details =
+        candidate.op === "create" && existing.length === 1 && after.length === 2
+          ? conceptConflictDetails(existing, this.store.project)
+          : {
+              reason: before.length ? "same_type_title" : "same_batch_type_title",
+              candidates: after.slice(0, 5).map((doc) => conceptMatchSummary(doc)),
+              omitted: Math.max(0, after.length - 5),
+              recommendedOperation: "merge_batch_changes",
+            };
       throw new AuthoringPolicyError(
         `The batch would leave more than one ${candidate.frontmatter.type} titled "${candidate.title}".`,
         "concept_already_exists",
@@ -404,10 +447,12 @@ class LiveAuthoringService {
       );
     }
     const message = this.commitMessage(input, candidates);
-    const overrides = new Map(candidates.map((candidate) => [
-      `${candidate.bundle}\u0000${candidate.path}`,
-      candidate.markdown,
-    ]));
+    const overrides = new Map(
+      candidates.map((candidate) => [
+        `${candidate.bundle}\u0000${candidate.path}`,
+        candidate.markdown,
+      ]),
+    );
     const validation = this.validationResult(
       this.buildIndex(additionalBundles, overrides),
       candidates,
@@ -514,9 +559,11 @@ class LiveAuthoringService {
     }
     if (!plan.gitPreflight.ready) {
       const blocker = plan.gitPreflight.diagnostics[0];
-      throw new AuthoringPolicyError(blocker
-        ? blocker.message
-        : "Configured Git preconditions do not currently allow automatic apply.");
+      throw new AuthoringPolicyError(
+        blocker
+          ? blocker.message
+          : "Configured Git preconditions do not currently allow automatic apply.",
+      );
     }
     const transaction = this.stageCandidates(plan.candidates);
     const staged = transaction.staged;
@@ -623,10 +670,7 @@ class LiveAuthoringService {
     if (git.targetState === "conflict") {
       let currentValidation = persistedValidation;
       try {
-        currentValidation = this.validationResult(
-          this.buildIndex(plan.additionalBundles),
-          [],
-        );
+        currentValidation = this.validationResult(this.buildIndex(plan.additionalBundles), []);
       } catch {
         // Preserve the last complete validation receipt when the conflicting state is unreadable.
       }
@@ -644,18 +688,20 @@ class LiveAuthoringService {
           changes: plan.changes,
           validation: currentValidation,
           git,
-          error: git.error || "Validated concept bytes were replaced before Git persistence completed.",
+          error:
+            git.error || "Validated concept bytes were replaced before Git persistence completed.",
         };
       }
       persistedValidation = currentValidation;
     }
-    const status = git.commitState === "unknown"
-      ? "applied_commit_unknown"
-      : git.committed === true && git.targetState === "conflict"
-        ? "applied_worktree_diverged"
-      : git.enabled && git.repository && !git.committed
-        ? "applied_uncommitted"
-        : "applied";
+    const status =
+      git.commitState === "unknown"
+        ? "applied_commit_unknown"
+        : git.committed === true && git.targetState === "conflict"
+          ? "applied_worktree_diverged"
+          : git.enabled && git.repository && !git.committed
+            ? "applied_uncommitted"
+            : "applied";
     return {
       applied: true,
       readyToApply: git.targetState !== "conflict",

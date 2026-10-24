@@ -36,74 +36,78 @@ function git(repository, args) {
 function makeGitRoot(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "okf-live-agent-workflow-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-  write(root, "index.md", [
-    "---",
-    "okf_version: \"0.2\"",
-    "---",
-    "",
-    "# Live agent fixture",
-    "",
-    "- [Alpha](alpha.md)",
-    "- [Source](references/source.md)",
-    "- [Legacy](references/legacy.md)",
-    "- [Managed](managed.md)",
-    "",
-  ].join("\n"));
-  write(root, "references/source.md", [
-    "---",
-    "type: Reference",
-    "title: Source",
-    "---",
-    "",
-    "# Source",
-    "",
-  ].join("\n"));
-  write(root, "references/legacy.md", [
-    "---",
-    "type: Reference",
-    "title: Legacy",
-    "---",
-    "",
-    "# Legacy",
-    "",
-  ].join("\n"));
-  write(root, "managed.md", [
-    "---",
-    "type: Reference",
-    "title: Managed",
-    "generated:",
-    "  by: process:fixture-generator",
-    "  at: 2026-08-01T00:00:00.000Z",
-    "---",
-    "",
-    "# Managed",
-    "",
-  ].join("\n"));
-  write(root, "alpha.md", [
-    "---",
-    "type: Reference",
-    "title: Alpha",
-    "description: Existing concept",
-    "tags: [existing, shared, remove-me]",
-    "x-retained: yes",
-    "sources:",
-    "  - id: primary",
-    "    resource: /references/source.md",
-    "  - id: legacy",
-    "    resource: /references/legacy.md",
-    "relations:",
-    "  - type: related_to",
-    "    target: /references/source.md",
-    "    label: old label",
-    "  - type: depends_on",
-    "    target: /references/legacy.md",
-    "---",
-    "",
-    "# Alpha",
-    "",
-    "Old body.",
-    "",
-  ].join("\n"));
+  write(
+    root,
+    "index.md",
+    [
+      "---",
+      'okf_version: "0.2"',
+      "---",
+      "",
+      "# Live agent fixture",
+      "",
+      "- [Alpha](alpha.md)",
+      "- [Source](references/source.md)",
+      "- [Legacy](references/legacy.md)",
+      "- [Managed](managed.md)",
+      "",
+    ].join("\n"),
+  );
+  write(
+    root,
+    "references/source.md",
+    ["---", "type: Reference", "title: Source", "---", "", "# Source", ""].join("\n"),
+  );
+  write(
+    root,
+    "references/legacy.md",
+    ["---", "type: Reference", "title: Legacy", "---", "", "# Legacy", ""].join("\n"),
+  );
+  write(
+    root,
+    "managed.md",
+    [
+      "---",
+      "type: Reference",
+      "title: Managed",
+      "generated:",
+      "  by: process:fixture-generator",
+      "  at: 2026-08-01T00:00:00.000Z",
+      "---",
+      "",
+      "# Managed",
+      "",
+    ].join("\n"),
+  );
+  write(
+    root,
+    "alpha.md",
+    [
+      "---",
+      "type: Reference",
+      "title: Alpha",
+      "description: Existing concept",
+      "tags: [existing, shared, remove-me]",
+      "x-retained: yes",
+      "sources:",
+      "  - id: primary",
+      "    resource: /references/source.md",
+      "  - id: legacy",
+      "    resource: /references/legacy.md",
+      "relations:",
+      "  - type: related_to",
+      "    target: /references/source.md",
+      "    label: old label",
+      "  - type: depends_on",
+      "    target: /references/legacy.md",
+      "---",
+      "",
+      "# Alpha",
+      "",
+      "Old body.",
+      "",
+    ].join("\n"),
+  );
 
   git(root, ["init", "--quiet"]);
   git(root, ["config", "user.name", "OKF Agent Test"]);
@@ -182,10 +186,9 @@ function assertEffects(receipt) {
   assert.equal(create.effects.bodyChanged, true);
   assert.deepEqual(values(create.effects.tags.added), ["agents", "handoff"]);
   assert.deepEqual(values(create.effects.sources.added), ["id:orientation"]);
-  assert.deepEqual(
-    values(create.effects.relations.added),
-    [{ type: "related_to", target: "/alpha.md" }],
-  );
+  assert.deepEqual(values(create.effects.relations.added), [
+    { type: "related_to", target: "/alpha.md" },
+  ]);
   assert.equal(create.effects.changedFields.includes("generated"), false);
   assert.equal(create.effects.beforeRevision, null);
   assert.match(create.effects.afterRevision, /^sha256:[0-9a-f]{64}$/);
@@ -200,22 +203,19 @@ function assertEffects(receipt) {
   assert.deepEqual(values(update.effects.sources.added), []);
   assert.deepEqual(values(update.effects.sources.removed), ["id:legacy"]);
   assert.deepEqual(values(update.effects.sources.updated), ["id:primary"]);
-  assert.deepEqual(
-    values(update.effects.relations.added),
-    [{ type: "depends_on", target: "/agent-guide/incident-handoff.md" }],
-  );
-  assert.deepEqual(
-    values(update.effects.relations.removed),
-    [{ type: "depends_on", target: "/references/legacy.md" }],
-  );
-  assert.deepEqual(
-    values(update.effects.relations.updated),
-    [{
+  assert.deepEqual(values(update.effects.relations.added), [
+    { type: "depends_on", target: "/agent-guide/incident-handoff.md" },
+  ]);
+  assert.deepEqual(values(update.effects.relations.removed), [
+    { type: "depends_on", target: "/references/legacy.md" },
+  ]);
+  assert.deepEqual(values(update.effects.relations.updated), [
+    {
       type: "related_to",
       target: "/references/source.md",
       label: "replacement label",
-    }],
-  );
+    },
+  ]);
   assert.equal(update.effects.changedFields.includes("generated"), false);
   assert.equal(JSON.stringify(receipt).includes("\\u0000"), false);
   assert.deepEqual(values(update.effects.metadata.set), ["description", "review_state"]);
@@ -227,9 +227,11 @@ function assertEffects(receipt) {
 function assertPolicyDiagnostic(receipt, code, message) {
   assert.equal(receipt.filesChanged, false);
   assert.equal(receipt.validation.valid, false);
-  assert.ok(receipt.validation.diagnostics.some((diagnostic) => (
-    diagnostic.code === code && message.test(diagnostic.message)
-  )));
+  assert.ok(
+    receipt.validation.diagnostics.some(
+      (diagnostic) => diagnostic.code === code && message.test(diagnostic.message),
+    ),
+  );
 }
 
 test("a fresh agent previews and applies one exact Git-backed concept batch", async (t) => {
@@ -262,20 +264,18 @@ test("a fresh agent previews and applies one exact Git-backed concept batch", as
 
   const unsafeControlPath = await callJson(client, "okf_validate_changes", {
     bundle: bundleId,
-    changes: [{
-      op: "create",
-      path: ".git/refs/heads/poison.md",
-      type: "Reference",
-      title: "Unsafe control path",
-    }],
+    changes: [
+      {
+        op: "create",
+        path: ".git/refs/heads/poison.md",
+        type: "Reference",
+        title: "Unsafe control path",
+      },
+    ],
   });
   assert.equal(unsafeControlPath.result.isError, undefined);
   assert.equal(unsafeControlPath.payload.valid, false);
-  assertPolicyDiagnostic(
-    unsafeControlPath.payload,
-    "unsafe_target_path",
-    /hidden|safe relative/i,
-  );
+  assertPolicyDiagnostic(unsafeControlPath.payload, "unsafe_target_path", /hidden|safe relative/i);
   assert.equal(fs.existsSync(path.join(root, ".git", "refs", "heads", "poison.md")), false);
 
   const payload = primaryPayload(bundleId);
@@ -295,10 +295,10 @@ test("a fresh agent previews and applies one exact Git-backed concept batch", as
   assert.deepEqual(preview.payload.generated, { by: ACTOR, at: GENERATED_AT });
   assert.equal(preview.payload.target.bundleRoot, realRoot);
   assert.equal(preview.payload.target.repositoryRoot, realRoot);
-  assert.deepEqual(preview.payload.target.absolutePaths.slice().sort(), [
-    alphaPath,
-    createdPath,
-  ].sort());
+  assert.deepEqual(
+    preview.payload.target.absolutePaths.slice().sort(),
+    [alphaPath, createdPath].sort(),
+  );
   assert.equal(preview.payload.durability.state, "not_persisted");
   assert.equal(preview.payload.durability.persistence, "none");
   assert.equal(preview.payload.durability.filesChanged, false);
@@ -316,10 +316,7 @@ test("a fresh agent previews and applies one exact Git-backed concept batch", as
   assertEffects(preview.payload);
   const previewByPath = new Map(preview.payload.changes.map((change) => [change.path, change]));
   assert.equal(previewByPath.get("alpha.md").absolutePath, alphaPath);
-  assert.equal(
-    previewByPath.get("agent-guide/incident-handoff.md").absolutePath,
-    createdPath,
-  );
+  assert.equal(previewByPath.get("agent-guide/incident-handoff.md").absolutePath, createdPath);
   preview.payload.preconditions.revisions.forEach((revision) => {
     const change = previewByPath.get(revision.path);
     assert.ok(change);
@@ -382,16 +379,22 @@ test("a fresh agent previews and applies one exact Git-backed concept batch", as
   assert.deepEqual(alpha.payload.frontmatter.generated, { by: ACTOR, at: GENERATED_AT });
 
   const neighbors = await callJson(client, "get_neighbors", { uri: created.payload.uri });
-  assert.ok(neighbors.payload.outbound.some((entry) => (
-    entry.edge.relationType === "related_to"
-    && entry.edge.target === `okf://${bundleId}/alpha`
-    && entry.edge.broken === false
-  )));
-  assert.ok(neighbors.payload.inbound.some((entry) => (
-    entry.edge.relationType === "depends_on"
-    && entry.edge.source === `okf://${bundleId}/alpha`
-    && entry.edge.broken === false
-  )));
+  assert.ok(
+    neighbors.payload.outbound.some(
+      (entry) =>
+        entry.edge.relationType === "related_to" &&
+        entry.edge.target === `okf://${bundleId}/alpha` &&
+        entry.edge.broken === false,
+    ),
+  );
+  assert.ok(
+    neighbors.payload.inbound.some(
+      (entry) =>
+        entry.edge.relationType === "depends_on" &&
+        entry.edge.source === `okf://${bundleId}/alpha` &&
+        entry.edge.broken === false,
+    ),
+  );
 
   const noOp = await callJson(client, "okf_validate_changes", {
     bundle: bundleId,
@@ -414,11 +417,13 @@ test("a fresh agent previews and applies one exact Git-backed concept batch", as
 
   const generated = await callJson(client, "okf_validate_changes", {
     bundle: bundleId,
-    changes: [{
-      op: "update",
-      uri: `okf://${bundleId}/managed`,
-      tags: { add: ["agent-test"] },
-    }],
+    changes: [
+      {
+        op: "update",
+        uri: `okf://${bundleId}/managed`,
+        tags: { add: ["agent-test"] },
+      },
+    ],
   });
   assert.equal(generated.result.isError, undefined);
   assert.equal(generated.payload.valid, false);
@@ -433,12 +438,14 @@ test("a fresh agent previews and applies one exact Git-backed concept batch", as
   const dirty = await callJson(client, "okf_validate_changes", {
     bundle: bundleId,
     detail: "full",
-    changes: [{
-      op: "create",
-      path: "dirty-check.md",
-      type: "Reference",
-      title: "Dirty Check",
-    }],
+    changes: [
+      {
+        op: "create",
+        path: "dirty-check.md",
+        type: "Reference",
+        title: "Dirty Check",
+      },
+    ],
   });
   assert.equal(dirty.result.isError, undefined);
   assert.equal(dirty.payload.valid, true);
@@ -448,10 +455,13 @@ test("a fresh agent previews and applies one exact Git-backed concept batch", as
   assert.equal(dirty.payload.validation.valid, true);
   assert.equal(dirty.payload.git.ready, false);
   assert.equal(dirty.payload.preconditions.git.ready, false);
-  assert.ok(dirty.payload.preconditions.git.diagnostics.some((diagnostic) => (
-    diagnostic.code === "git_worktree_dirty"
-    && /worktree must be completely clean/i.test(diagnostic.message)
-  )));
+  assert.ok(
+    dirty.payload.preconditions.git.diagnostics.some(
+      (diagnostic) =>
+        diagnostic.code === "git_worktree_dirty" &&
+        /worktree must be completely clean/i.test(diagnostic.message),
+    ),
+  );
   assert.equal(dirty.payload.durability.state, "not_persisted");
   assert.equal(fs.existsSync(path.join(root, "dirty-check.md")), false);
   assert.equal(fs.readFileSync(path.join(root, "dirty.txt"), "utf8"), "pre-existing user change\n");

@@ -25,9 +25,11 @@ class GitPublisher {
 
   runGit(directory, args, options) {
     const environment = Object.assign({}, process.env);
-    Object.keys(environment).filter((key) => key.startsWith("GIT_")).forEach((key) => {
-      delete environment[key];
-    });
+    Object.keys(environment)
+      .filter((key) => key.startsWith("GIT_"))
+      .forEach((key) => {
+        delete environment[key];
+      });
     if (options && options.environment) {
       Object.assign(environment, options.environment);
     }
@@ -49,18 +51,22 @@ class GitPublisher {
       spawnOptions.input = options.input;
     }
     try {
-      return this.spawnSync("git", [
-        "-C",
-        directory,
-        "-c",
-        "core.hooksPath=/dev/null",
-        "-c",
-        "core.fsmonitor=false",
-        "-c",
-        "commit.gpgSign=false",
-        "-c",
-        "diff.external=",
-      ].concat(args), spawnOptions);
+      return this.spawnSync(
+        "git",
+        [
+          "-C",
+          directory,
+          "-c",
+          "core.hooksPath=/dev/null",
+          "-c",
+          "core.fsmonitor=false",
+          "-c",
+          "commit.gpgSign=false",
+          "-c",
+          "diff.external=",
+        ].concat(args),
+        spawnOptions,
+      );
     } catch (error) {
       return { status: null, stdout: "", stderr: "", error };
     }
@@ -76,25 +82,40 @@ class GitPublisher {
   }
 
   repositoryFiles(preflight, candidates) {
-    const files = sortedUnique(candidates.map((candidate) => (
-      path.relative(preflight.repository, candidate.target.absolutePath).replace(/\\/g, "/")
-    )));
-    if (files.some((file) => !file || file === ".." || file.startsWith("../") || path.isAbsolute(file))) {
-      throw new AuthoringPolicyError("An affected concept path is outside the detected Git repository.");
+    const files = sortedUnique(
+      candidates.map((candidate) =>
+        path.relative(preflight.repository, candidate.target.absolutePath).replace(/\\/g, "/"),
+      ),
+    );
+    if (
+      files.some(
+        (file) => !file || file === ".." || file.startsWith("../") || path.isAbsolute(file),
+      )
+    ) {
+      throw new AuthoringPolicyError(
+        "An affected concept path is outside the detected Git repository.",
+      );
     }
     return files;
   }
 
   inspectGitState(repository, revision, files) {
-    const affected = this.runGit(repository, [
-      "diff", "--no-ext-diff", "--cached", "--quiet", revision, "--",
-    ].concat(files));
+    const affected = this.runGit(
+      repository,
+      ["diff", "--no-ext-diff", "--cached", "--quiet", revision, "--"].concat(files),
+    );
     const global = this.runGit(repository, [
-      "diff", "--no-ext-diff", "--cached", "--quiet", revision, "--",
+      "diff",
+      "--no-ext-diff",
+      "--cached",
+      "--quiet",
+      revision,
+      "--",
     ]);
-    const worktree = this.runGit(repository, [
-      "status", "--porcelain=v1", "-z", "--untracked-files=all", "--",
-    ].concat(files));
+    const worktree = this.runGit(
+      repository,
+      ["status", "--porcelain=v1", "-z", "--untracked-files=all", "--"].concat(files),
+    );
     const state = (result) => {
       if (result && !result.error && result.status === 0) return "clean";
       if (result && !result.error && result.status === 1) return "dirty";
@@ -105,17 +126,21 @@ class GitPublisher {
       indexState: state(global),
       affectedWorktreeState: !commandSucceeded(worktree)
         ? "unknown"
-        : String(worktree.stdout || "").split("\0").filter(Boolean).some((entry) => (
-          entry.startsWith("??") || entry.length > 1 && entry[1] !== " "
-        )) ? "dirty" : "clean",
+        : String(worktree.stdout || "")
+              .split("\0")
+              .filter(Boolean)
+              .some((entry) => entry.startsWith("??") || (entry.length > 1 && entry[1] !== " "))
+          ? "dirty"
+          : "clean",
     };
   }
 
   classifyCommit(preflight, expectedTree) {
-    const headAfter = this.readGitValue(
-      preflight.repository,
-      ["rev-parse", "--verify", preflight.headRef || "HEAD"],
-    );
+    const headAfter = this.readGitValue(preflight.repository, [
+      "rev-parse",
+      "--verify",
+      preflight.headRef || "HEAD",
+    ]);
     if (!headAfter) {
       return { commitState: "unknown", committed: null, headAfter: null };
     }
@@ -186,22 +211,19 @@ class GitPublisher {
   }
 
   synchronizeCommittedIndex(preflight, classification, files) {
-    const currentHeadRef = this.readGitValue(
-      preflight.repository,
-      ["symbolic-ref", "-q", "HEAD"],
-    );
+    const currentHeadRef = this.readGitValue(preflight.repository, ["symbolic-ref", "-q", "HEAD"]);
     if (!preflight.headRef || currentHeadRef !== preflight.headRef) {
-      const inspected = this.inspectGitState(
-        preflight.repository,
-        classification.headAfter,
-        files,
+      const inspected = this.inspectGitState(preflight.repository, classification.headAfter, files);
+      return Object.assign(
+        {
+          indexSynchronization: "skipped_checkout_changed",
+          checkoutState: "changed",
+          currentHeadRef,
+          indexSynchronizationError:
+            "The checked-out Git ref changed before affected index paths could be synchronized.",
+        },
+        inspected,
       );
-      return Object.assign({
-        indexSynchronization: "skipped_checkout_changed",
-        checkoutState: "changed",
-        currentHeadRef,
-        indexSynchronizationError: "The checked-out Git ref changed before affected index paths could be synchronized.",
-      }, inspected);
     }
     const indexPath = this.gitIndexPath(preflight.repository);
     const headPath = this.gitControlPath(preflight.repository, "HEAD");
@@ -209,15 +231,14 @@ class GitPublisher {
       ? this.gitControlPath(preflight.repository, preflight.headRef)
       : null;
     if (!indexPath || !headPath || !branchPath) {
-      const inspected = this.inspectGitState(
-        preflight.repository,
-        classification.headAfter,
-        files,
+      const inspected = this.inspectGitState(preflight.repository, classification.headAfter, files);
+      return Object.assign(
+        {
+          indexSynchronization: "skipped_index_unavailable",
+          indexSynchronizationError: "Could not resolve the Git index path.",
+        },
+        inspected,
       );
-      return Object.assign({
-        indexSynchronization: "skipped_index_unavailable",
-        indexSynchronizationError: "Could not resolve the Git index path.",
-      }, inspected);
     }
     const lockPath = `${indexPath}.lock`;
     const headLockPath = `${headPath}.lock`;
@@ -247,99 +268,133 @@ class GitPublisher {
       branchLockOwned = true;
       fs.closeSync(branchLockDescriptor);
       branchLockDescriptor = null;
-      const lockedHeadRef = this.readGitValue(
-        preflight.repository,
-        ["symbolic-ref", "-q", "HEAD"],
-      );
-      const lockedBranchHead = this.readGitValue(
-        preflight.repository,
-        ["rev-parse", "--verify", preflight.headRef],
-      );
-      if (lockedHeadRef !== preflight.headRef
-        || lockedBranchHead !== classification.headAfter) {
+      const lockedHeadRef = this.readGitValue(preflight.repository, ["symbolic-ref", "-q", "HEAD"]);
+      const lockedBranchHead = this.readGitValue(preflight.repository, [
+        "rev-parse",
+        "--verify",
+        preflight.headRef,
+      ]);
+      if (lockedHeadRef !== preflight.headRef || lockedBranchHead !== classification.headAfter) {
         return {
           indexSynchronization: "skipped_checkout_changed",
           checkoutState: "changed",
           currentHeadRef: lockedHeadRef,
           currentBranchHead: lockedBranchHead,
-          indexSynchronizationError: "The checked-out Git ref or its commit changed before affected index paths could be synchronized.",
+          indexSynchronizationError:
+            "The checked-out Git ref or its commit changed before affected index paths could be synchronized.",
           affectedIndexState: "unknown",
           indexState: "unknown",
           affectedWorktreeState: "unknown",
         };
       }
       const lockedIndex = { environment: { GIT_INDEX_FILE: lockPath } };
-      const candidateIndexChanged = this.runGit(preflight.repository, [
-        "diff", "--no-ext-diff", "--cached", "--quiet", preflight.headBefore, "--",
-      ].concat(files), lockedIndex);
+      const candidateIndexChanged = this.runGit(
+        preflight.repository,
+        ["diff", "--no-ext-diff", "--cached", "--quiet", preflight.headBefore, "--"].concat(files),
+        lockedIndex,
+      );
       if (!commandSucceeded(candidateIndexChanged)) {
         const inspected = this.inspectGitState(
           preflight.repository,
           classification.headAfter,
           files,
         );
-        return Object.assign({
-          indexSynchronization: candidateIndexChanged && !candidateIndexChanged.error
-            && candidateIndexChanged.status === 1
-            ? "skipped_affected_index_changed"
-            : "skipped_index_unavailable",
-          indexSynchronizationError: candidateIndexChanged && !candidateIndexChanged.error
-            && candidateIndexChanged.status === 1
-            ? "Affected Git index entries changed after preflight and were preserved."
-            : commandFailure(candidateIndexChanged, "Could not verify affected Git index entries."),
-        }, inspected);
+        return Object.assign(
+          {
+            indexSynchronization:
+              candidateIndexChanged &&
+              !candidateIndexChanged.error &&
+              candidateIndexChanged.status === 1
+                ? "skipped_affected_index_changed"
+                : "skipped_index_unavailable",
+            indexSynchronizationError:
+              candidateIndexChanged &&
+              !candidateIndexChanged.error &&
+              candidateIndexChanged.status === 1
+                ? "Affected Git index entries changed after preflight and were preserved."
+                : commandFailure(
+                    candidateIndexChanged,
+                    "Could not verify affected Git index entries.",
+                  ),
+          },
+          inspected,
+        );
       }
-      const reset = this.runGit(preflight.repository, [
-        "reset", "--quiet", classification.headAfter, "--",
-      ].concat(files), lockedIndex);
+      const reset = this.runGit(
+        preflight.repository,
+        ["reset", "--quiet", classification.headAfter, "--"].concat(files),
+        lockedIndex,
+      );
       if (!commandSucceeded(reset)) {
         const inspected = this.inspectGitState(
           preflight.repository,
           classification.headAfter,
           files,
         );
-        return Object.assign({
-          indexSynchronization: "failed",
-          indexSynchronizationError: commandFailure(reset, "Could not synchronize committed index paths."),
-        }, inspected);
+        return Object.assign(
+          {
+            indexSynchronization: "failed",
+            indexSynchronizationError: commandFailure(
+              reset,
+              "Could not synchronize committed index paths.",
+            ),
+          },
+          inspected,
+        );
       }
-      const verified = this.runGit(preflight.repository, [
-        "diff", "--no-ext-diff", "--cached", "--quiet", classification.headAfter, "--",
-      ].concat(files), lockedIndex);
+      const verified = this.runGit(
+        preflight.repository,
+        ["diff", "--no-ext-diff", "--cached", "--quiet", classification.headAfter, "--"].concat(
+          files,
+        ),
+        lockedIndex,
+      );
       if (!commandSucceeded(verified)) {
         const inspected = this.inspectGitState(
           preflight.repository,
           classification.headAfter,
           files,
         );
-        return Object.assign({
-          indexSynchronization: "failed_verification",
-          indexSynchronizationError: commandFailure(verified, "Synchronized index verification failed."),
-        }, inspected);
+        return Object.assign(
+          {
+            indexSynchronization: "failed_verification",
+            indexSynchronizationError: commandFailure(
+              verified,
+              "Synchronized index verification failed.",
+            ),
+          },
+          inspected,
+        );
       }
       fs.renameSync(lockPath, indexPath);
       published = true;
-      return Object.assign({
-        indexSynchronization: "synchronized",
-      }, this.inspectGitState(preflight.repository, classification.headAfter, files));
-    } catch (error) {
-      const inspected = this.inspectGitState(
-        preflight.repository,
-        classification.headAfter,
-        files,
+      return Object.assign(
+        {
+          indexSynchronization: "synchronized",
+        },
+        this.inspectGitState(preflight.repository, classification.headAfter, files),
       );
-      return Object.assign({
-        indexSynchronization: error && error.code === "EEXIST"
-          ? attemptedLock === "index"
-            ? "skipped_index_locked"
-            : attemptedLock === "checkout"
-              ? "skipped_checkout_locked"
-              : "skipped_branch_locked"
-          : "failed",
-        indexSynchronizationError: error && error.code === "EEXIST"
-          ? `The Git ${attemptedLock} state is locked by another writer; its state was preserved.`
-          : error && error.message ? error.message : String(error),
-      }, inspected);
+    } catch (error) {
+      const inspected = this.inspectGitState(preflight.repository, classification.headAfter, files);
+      return Object.assign(
+        {
+          indexSynchronization:
+            error && error.code === "EEXIST"
+              ? attemptedLock === "index"
+                ? "skipped_index_locked"
+                : attemptedLock === "checkout"
+                  ? "skipped_checkout_locked"
+                  : "skipped_branch_locked"
+              : "failed",
+          indexSynchronizationError:
+            error && error.code === "EEXIST"
+              ? `The Git ${attemptedLock} state is locked by another writer; its state was preserved.`
+              : error && error.message
+                ? error.message
+                : String(error),
+        },
+        inspected,
+      );
     } finally {
       if (lockDescriptor !== null) {
         try {
@@ -394,55 +449,67 @@ class GitPublisher {
     if (classification.committed === true) {
       const synchronized = this.synchronizeCommittedIndex(preflight, classification, files);
       const targets = this.inspectPublishedTargets(candidates);
-      return Object.assign({}, classification, {
-        enabled: true,
-        repository: true,
-        repositoryRoot: preflight.repository,
-        commitState: "observed_committed",
-        persistence: "git_commit",
-        warning: commandFailure(failure, "Git reported failure after the commit became visible."),
-      }, synchronized, targets);
+      return Object.assign(
+        {},
+        classification,
+        {
+          enabled: true,
+          repository: true,
+          repositoryRoot: preflight.repository,
+          commitState: "observed_committed",
+          persistence: "git_commit",
+          warning: commandFailure(failure, "Git reported failure after the commit became visible."),
+        },
+        synchronized,
+        targets,
+      );
     }
     if (classification.committed === false) {
       const inspected = this.inspectGitState(preflight.repository, preflight.headBefore, files);
       const targets = this.inspectPublishedTargets(candidates);
-      return Object.assign({
-        enabled: true,
-        repository: true,
-        repositoryRoot: preflight.repository,
-        committed: false,
-        commitState: "not_committed",
-        persistence: targets.validatedFilesPresent ? "working_tree" : "unknown",
-        error: commandFailure(failure, "Git commit failed"),
-      }, classification, inspected, targets);
+      return Object.assign(
+        {
+          enabled: true,
+          repository: true,
+          repositoryRoot: preflight.repository,
+          committed: false,
+          commitState: "not_committed",
+          persistence: targets.validatedFilesPresent ? "working_tree" : "unknown",
+          error: commandFailure(failure, "Git commit failed"),
+        },
+        classification,
+        inspected,
+        targets,
+      );
     }
     const inspected = classification.headAfter
       ? this.inspectGitState(preflight.repository, classification.headAfter, files)
       : { affectedIndexState: "unknown", indexState: "unknown", affectedWorktreeState: "unknown" };
     const targets = this.inspectPublishedTargets(candidates);
-    return Object.assign({
-      enabled: true,
-      repository: true,
-      repositoryRoot: preflight.repository,
-      committed: null,
-      commitState: "unknown",
-      persistence: "unknown",
-      error: commandFailure(failure, "Git commit outcome could not be determined"),
-    }, classification, inspected, targets);
+    return Object.assign(
+      {
+        enabled: true,
+        repository: true,
+        repositoryRoot: preflight.repository,
+        committed: null,
+        commitState: "unknown",
+        persistence: "unknown",
+        error: commandFailure(failure, "Git commit outcome could not be determined"),
+      },
+      classification,
+      inspected,
+      targets,
+    );
   }
 
   gitControlPath(repository, name) {
-    const controlPath = this.readGitValue(
-      repository,
-      ["rev-parse", "--git-path", name],
-      { readOnly: true },
-    );
+    const controlPath = this.readGitValue(repository, ["rev-parse", "--git-path", name], {
+      readOnly: true,
+    });
     if (!controlPath) {
       return null;
     }
-    return path.isAbsolute(controlPath)
-      ? controlPath
-      : path.resolve(repository, controlPath);
+    return path.isAbsolute(controlPath) ? controlPath : path.resolve(repository, controlPath);
   }
 
   gitIndexPath(repository) {
@@ -484,24 +551,23 @@ class GitPublisher {
         return { failure: seeded };
       }
       for (const candidate of candidates) {
-        const hashed = this.runGit(
-          preflight.repository,
-          ["hash-object", "-w", "--stdin"],
-          { input: candidate.markdown },
-        );
+        const hashed = this.runGit(preflight.repository, ["hash-object", "-w", "--stdin"], {
+          input: candidate.markdown,
+        });
         if (!commandSucceeded(hashed)) {
           return { failure: hashed };
         }
         const objectId = String(hashed.stdout || "").trim();
         let mode = "100644";
         if (candidate.op === "update") {
-          const relativePath = path.relative(
+          const relativePath = path
+            .relative(preflight.repository, candidate.target.absolutePath)
+            .replace(/\\/g, "/");
+          const seededEntry = this.runGit(
             preflight.repository,
-            candidate.target.absolutePath,
-          ).replace(/\\/g, "/");
-          const seededEntry = this.runGit(preflight.repository, [
-            "ls-files", "-s", "-z", "--", relativePath,
-          ], isolated);
+            ["ls-files", "-s", "-z", "--", relativePath],
+            isolated,
+          );
           if (!commandSucceeded(seededEntry)) {
             return { failure: seededEntry };
           }
@@ -516,14 +582,18 @@ class GitPublisher {
           }
           mode = match[1];
         }
-        const updated = this.runGit(preflight.repository, [
-          "update-index",
-          "--add",
-          "--cacheinfo",
-          mode,
-          objectId,
-          path.relative(preflight.repository, candidate.target.absolutePath).replace(/\\/g, "/"),
-        ], isolated);
+        const updated = this.runGit(
+          preflight.repository,
+          [
+            "update-index",
+            "--add",
+            "--cacheinfo",
+            mode,
+            objectId,
+            path.relative(preflight.repository, candidate.target.absolutePath).replace(/\\/g, "/"),
+          ],
+          isolated,
+        );
         if (!commandSucceeded(updated)) {
           return { failure: updated };
         }
@@ -534,11 +604,19 @@ class GitPublisher {
       }
       const expectedTree = String(written.stdout || "").trim();
       const changed = this.runGit(preflight.repository, [
-        "diff", "--no-ext-diff", "--name-only", "-z",
-        preflight.headBefore, expectedTree, "--",
+        "diff",
+        "--no-ext-diff",
+        "--name-only",
+        "-z",
+        preflight.headBefore,
+        expectedTree,
+        "--",
       ]);
       const changedFiles = commandSucceeded(changed)
-        ? String(changed.stdout || "").split("\0").filter(Boolean).sort()
+        ? String(changed.stdout || "")
+            .split("\0")
+            .filter(Boolean)
+            .sort()
         : null;
       if (!changedFiles || !isDeepStrictEqual(changedFiles, files.slice().sort())) {
         return {
@@ -584,85 +662,103 @@ class GitPublisher {
     try {
       const initialTargets = this.inspectPublishedTargets(candidates);
       if (!initialTargets.validatedFilesPresent) {
-        return this.finalizeGitFailure(preflight, files, {
-          status: 1,
-          stderr: "A published concept changed before the Git commit tree was built.",
-        }, null, candidates);
+        return this.finalizeGitFailure(
+          preflight,
+          files,
+          {
+            status: 1,
+            stderr: "A published concept changed before the Git commit tree was built.",
+          },
+          null,
+          candidates,
+        );
       }
       const built = this.buildValidatedGitTree(preflight, candidates, files);
       expectedTree = built.expectedTree || null;
       if (built.failure) {
-        return this.finalizeGitFailure(
-          preflight,
-          files,
-          built.failure,
-          expectedTree,
-          candidates,
-        );
+        return this.finalizeGitFailure(preflight, files, built.failure, expectedTree, candidates);
       }
       const verifiedTargets = this.inspectPublishedTargets(candidates);
-      const headRefStillBefore = this.readGitValue(
-        preflight.repository,
-        ["symbolic-ref", "-q", "HEAD"],
-      );
-      const refStillBefore = this.readGitValue(
-        preflight.repository,
-        ["rev-parse", "--verify", preflight.headRef],
-      );
-      if (!verifiedTargets.validatedFilesPresent
-        || headRefStillBefore !== preflight.headRef
-        || refStillBefore !== preflight.headBefore) {
-        return this.finalizeGitFailure(preflight, files, {
-          status: 1,
-          stderr: !verifiedTargets.validatedFilesPresent
-            ? "A published concept changed before the Git ref update."
-            : "The checked-out Git ref changed before the validated commit could be published.",
-        }, expectedTree, candidates);
-      }
-      const committed = this.runGit(preflight.repository, [
-        "commit-tree", expectedTree, "-p", preflight.headBefore, "-m", message,
+      const headRefStillBefore = this.readGitValue(preflight.repository, [
+        "symbolic-ref",
+        "-q",
+        "HEAD",
       ]);
-      if (!commandSucceeded(committed)) {
+      const refStillBefore = this.readGitValue(preflight.repository, [
+        "rev-parse",
+        "--verify",
+        preflight.headRef,
+      ]);
+      if (
+        !verifiedTargets.validatedFilesPresent ||
+        headRefStillBefore !== preflight.headRef ||
+        refStillBefore !== preflight.headBefore
+      ) {
         return this.finalizeGitFailure(
           preflight,
           files,
-          committed,
+          {
+            status: 1,
+            stderr: !verifiedTargets.validatedFilesPresent
+              ? "A published concept changed before the Git ref update."
+              : "The checked-out Git ref changed before the validated commit could be published.",
+          },
           expectedTree,
           candidates,
         );
+      }
+      const committed = this.runGit(preflight.repository, [
+        "commit-tree",
+        expectedTree,
+        "-p",
+        preflight.headBefore,
+        "-m",
+        message,
+      ]);
+      if (!commandSucceeded(committed)) {
+        return this.finalizeGitFailure(preflight, files, committed, expectedTree, candidates);
       }
       const commitSha = String(committed.stdout || "").trim();
       const finalTargets = this.inspectPublishedTargets(candidates);
       if (!finalTargets.validatedFilesPresent) {
-        return this.finalizeGitFailure(preflight, files, {
-          status: 1,
-          stderr: "A published concept changed before the validated commit was published.",
-        }, expectedTree, candidates);
-      }
-      const updated = this.runGit(preflight.repository, [
-        "update-ref", "-m", "okf-mcp live authoring",
-        preflight.headRef, commitSha, preflight.headBefore,
-      ]);
-      const classification = this.classifyCommit(preflight, expectedTree);
-      if (!commandSucceeded(updated) || classification.committed !== true) {
         return this.finalizeGitFailure(
           preflight,
           files,
-          updated,
+          {
+            status: 1,
+            stderr: "A published concept changed before the validated commit was published.",
+          },
           expectedTree,
           candidates,
         );
       }
+      const updated = this.runGit(preflight.repository, [
+        "update-ref",
+        "-m",
+        "okf-mcp live authoring",
+        preflight.headRef,
+        commitSha,
+        preflight.headBefore,
+      ]);
+      const classification = this.classifyCommit(preflight, expectedTree);
+      if (!commandSucceeded(updated) || classification.committed !== true) {
+        return this.finalizeGitFailure(preflight, files, updated, expectedTree, candidates);
+      }
       const synchronized = this.synchronizeCommittedIndex(preflight, classification, files);
       const targets = this.inspectPublishedTargets(candidates);
-      return Object.assign({
-        enabled: true,
-        repository: true,
-        repositoryRoot: preflight.repository,
-        committed: true,
-        commitState: "committed",
-        persistence: "git_commit",
-      }, classification, synchronized, targets);
+      return Object.assign(
+        {
+          enabled: true,
+          repository: true,
+          repositoryRoot: preflight.repository,
+          committed: true,
+          commitState: "committed",
+          persistence: "git_commit",
+        },
+        classification,
+        synchronized,
+        targets,
+      );
     } catch (error) {
       return this.finalizeGitFailure(
         preflight,

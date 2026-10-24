@@ -31,16 +31,22 @@ function concept(title, extra) {
 
 function makeRoot(extra) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "okf-live-correctness-"));
-  write(root, "index.md", "---\nokf_version: \"0.2\"\n---\n\n# Test\n\n- [Alpha](alpha.md)\n");
+  write(root, "index.md", '---\nokf_version: "0.2"\n---\n\n# Test\n\n- [Alpha](alpha.md)\n');
   write(root, "alpha.md", concept("Alpha", extra));
   return root;
 }
 
 function service(root, options) {
-  return new LiveAuthoringService(FileConceptStore.fromRoot(root), Object.assign({
-    actor: "openai/gpt-5.6",
-    now: () => new Date("2026-08-13T12:34:56.000Z"),
-  }, options || {}));
+  return new LiveAuthoringService(
+    FileConceptStore.fromRoot(root),
+    Object.assign(
+      {
+        actor: "openai/gpt-5.6",
+        now: () => new Date("2026-08-13T12:34:56.000Z"),
+      },
+      options || {},
+    ),
+  );
 }
 
 function git(repository, args) {
@@ -72,12 +78,14 @@ test("validateChanges returns bounded target/effect receipts without touching fi
     },
   });
   const receipt = await authoring.validateChanges({
-    changes: [{
-      op: "create",
-      type: "Reference",
-      title: "Receipt",
-      tags: Array.from({ length: 30 }, (_, index) => `tag-${index}`),
-    }],
+    changes: [
+      {
+        op: "create",
+        type: "Reference",
+        title: "Receipt",
+        tags: Array.from({ length: 30 }, (_, index) => `tag-${index}`),
+      },
+    ],
   });
   assert.equal(receipt.valid, true);
   assert.equal(receipt.applied, false);
@@ -98,11 +106,13 @@ test("validateChanges converts policy failures to stable invalid receipts while 
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const authoring = service(root);
   const input = {
-    changes: [{
-      op: "update",
-      uri: `okf://${path.basename(root)}/alpha`,
-      title: "Unsafe",
-    }],
+    changes: [
+      {
+        op: "update",
+        uri: `okf://${path.basename(root)}/alpha`,
+        title: "Unsafe",
+      },
+    ],
   };
   const receipt = await authoring.validateChanges(input);
   assert.equal(receipt.valid, false);
@@ -178,7 +188,9 @@ test("failed Git commit restores only the affected index entry and reports worki
     },
   });
   const result = await authoring.applyChanges({
-    changes: [{ op: "create", path: "git/uncommitted.md", type: "Reference", title: "Uncommitted" }],
+    changes: [
+      { op: "create", path: "git/uncommitted.md", type: "Reference", title: "Uncommitted" },
+    ],
   });
   assert.equal(result.status, "applied_uncommitted");
   assert.equal(result.git.commitState, "not_committed");
@@ -187,7 +199,10 @@ test("failed Git commit restores only the affected index entry and reports worki
   assert.equal(result.git.persistence, "working_tree");
   assert.equal(result.durability.persistence, "working_tree");
   assert.equal(git(root, ["diff", "--cached", "--name-only", "--", "git/uncommitted.md"]), "");
-  assert.match(git(root, ["status", "--porcelain=v1", "--untracked-files=all"]), /\?\? git\/uncommitted\.md/);
+  assert.match(
+    git(root, ["status", "--porcelain=v1", "--untracked-files=all"]),
+    /\?\? git\/uncommitted\.md/,
+  );
 });
 
 test("Git inspection process failures remain operational errors", async (t) => {
@@ -352,12 +367,14 @@ test("a concurrent affected-path index entry is preserved after the exact commit
     },
   });
   const result = await authoring.applyChanges({
-    changes: [{
-      op: "create",
-      path: "git/affected-index.md",
-      type: "Reference",
-      title: "Affected Index",
-    }],
+    changes: [
+      {
+        op: "create",
+        path: "git/affected-index.md",
+        type: "Reference",
+        title: "Affected Index",
+      },
+    ],
   });
   assert.equal(result.applied, true);
   assert.equal(result.git.committed, true);
@@ -380,20 +397,21 @@ test("the standard index lock closes the affected-path guard/reset race", async 
     gitCommit: true,
     spawnSync(command, args, options) {
       const lockedIndex = options.env.GIT_INDEX_FILE;
-      if (!injected
-        && args.includes("diff")
-        && args.includes("--cached")
-        && args.includes("git/locked-index.md")
-        && lockedIndex
-        && lockedIndex.endsWith("index.lock")) {
+      if (
+        !injected &&
+        args.includes("diff") &&
+        args.includes("--cached") &&
+        args.includes("git/locked-index.md") &&
+        lockedIndex &&
+        lockedIndex.endsWith("index.lock")
+      ) {
         const inspected = realSpawnSync(command, args, options);
         assert.equal(inspected.status, 0);
         fs.writeFileSync(target, "external in guard/reset gap\n", "utf8");
-        competingAdd = realSpawnSync(
-          "git",
-          ["-C", root, "add", "--", "git/locked-index.md"],
-          { encoding: "utf8", shell: false },
-        );
+        competingAdd = realSpawnSync("git", ["-C", root, "add", "--", "git/locked-index.md"], {
+          encoding: "utf8",
+          shell: false,
+        });
         injected = true;
         return inspected;
       }
@@ -401,12 +419,14 @@ test("the standard index lock closes the affected-path guard/reset race", async 
     },
   });
   const result = await authoring.applyChanges({
-    changes: [{
-      op: "create",
-      path: "git/locked-index.md",
-      type: "Reference",
-      title: "Locked Index",
-    }],
+    changes: [
+      {
+        op: "create",
+        path: "git/locked-index.md",
+        type: "Reference",
+        title: "Locked Index",
+      },
+    ],
   });
   assert.equal(result.applied, true);
   assert.equal(result.git.committed, true);
@@ -428,12 +448,14 @@ test("a lock owned by another Git writer is never removed", async (t) => {
   const sentinel = Buffer.from("external git writer lock\n", "utf8");
   fs.writeFileSync(lockPath, sentinel, { flag: "wx" });
   const result = await service(root, { gitCommit: true }).applyChanges({
-    changes: [{
-      op: "create",
-      path: "git/locked-by-other.md",
-      type: "Reference",
-      title: "Locked By Other",
-    }],
+    changes: [
+      {
+        op: "create",
+        path: "git/locked-by-other.md",
+        type: "Reference",
+        title: "Locked By Other",
+      },
+    ],
   });
   assert.equal(result.applied, true);
   assert.equal(result.git.committed, true);
@@ -466,7 +488,10 @@ test("clean filters including reserved-looking driver names block before configu
   assert.equal(preview.status, "blocked");
   assert.equal(preview.git.diagnostics[0].code, "git_filter_attribute_unsupported");
   assert.equal(fs.existsSync(marker), false);
-  await assert.rejects(authoring.applyChanges(input), /Git filter attributes|repository-configured filters/);
+  await assert.rejects(
+    authoring.applyChanges(input),
+    /Git filter attributes|repository-configured filters/,
+  );
   assert.equal(fs.existsSync(path.join(root, "filtered.md")), false);
   assert.equal(fs.existsSync(marker), false);
 });
@@ -507,7 +532,9 @@ test("Git replace refs cannot substitute the preflight or committed parent tree"
 
   const authoring = service(root, { gitCommit: true });
   const input = {
-    changes: [{ op: "create", path: "git/replace-safe.md", type: "Reference", title: "Replace Safe" }],
+    changes: [
+      { op: "create", path: "git/replace-safe.md", type: "Reference", title: "Replace Safe" },
+    ],
   };
   const preview = await authoring.validateChanges(input);
   assert.equal(preview.valid, true);
@@ -540,11 +567,13 @@ test("assume-unchanged and skip-worktree flags cannot hide user bytes from prefl
     assert.equal(git(root, ["status", "--porcelain=v1", "--untracked-files=all"]), "");
     const authoring = service(root, { gitCommit: true });
     const input = {
-      changes: [{
-        op: "update",
-        uri: `okf://${path.basename(root)}/alpha`,
-        tags: { add: ["agent"] },
-      }],
+      changes: [
+        {
+          op: "update",
+          uri: `okf://${path.basename(root)}/alpha`,
+          tags: { add: ["agent"] },
+        },
+      ],
     };
     const preview = await authoring.validateChanges(input);
     assert.equal(preview.valid, true);
@@ -573,11 +602,13 @@ test("core.filemode false cannot make a metadata update absorb a hidden chmod", 
   fs.chmodSync(path.join(root, "alpha.md"), 0o755);
   assert.equal(git(root, ["status", "--porcelain=v1", "--untracked-files=all"]), "");
   const result = await service(root, { gitCommit: true }).applyChanges({
-    changes: [{
-      op: "update",
-      uri: `okf://${path.basename(root)}/alpha`,
-      tags: { add: ["agent"] },
-    }],
+    changes: [
+      {
+        op: "update",
+        uri: `okf://${path.basename(root)}/alpha`,
+        tags: { add: ["agent"] },
+      },
+    ],
   });
   assert.equal(result.applied, true);
   assert.equal(result.git.committed, true);
@@ -634,10 +665,12 @@ test("checkout identity is rechecked while standard HEAD and branch locks are he
       const result = realSpawnSync(command, args, options);
       if (args.includes("update-ref") && result.status === 0) {
         refPublished = true;
-      } else if (refPublished
-        && !switched
-        && args.includes("symbolic-ref")
-        && args.includes("HEAD")) {
+      } else if (
+        refPublished &&
+        !switched &&
+        args.includes("symbolic-ref") &&
+        args.includes("HEAD")
+      ) {
         const changed = realSpawnSync(
           "git",
           ["-C", root, "symbolic-ref", "HEAD", "refs/heads/other"],
@@ -650,12 +683,14 @@ test("checkout identity is rechecked while standard HEAD and branch locks are he
     },
   });
   const result = await authoring.applyChanges({
-    changes: [{
-      op: "create",
-      path: "git/rechecked-ref.md",
-      type: "Reference",
-      title: "Rechecked Ref",
-    }],
+    changes: [
+      {
+        op: "create",
+        path: "git/rechecked-ref.md",
+        type: "Reference",
+        title: "Rechecked Ref",
+      },
+    ],
   });
   assert.equal(result.applied, true);
   assert.equal(result.git.committed, true);
@@ -679,7 +714,9 @@ test("detached HEAD blocks automatic commit planning", async (t) => {
   const preview = await authoring.validateChanges(input);
   assert.equal(preview.valid, true);
   assert.equal(preview.readyToApply, false);
-  assert.ok(preview.git.diagnostics.some((entry) => entry.code === "git_detached_head_unsupported"));
+  assert.ok(
+    preview.git.diagnostics.some((entry) => entry.code === "git_detached_head_unsupported"),
+  );
   await assert.rejects(authoring.applyChanges(input), /symbolic branch|detached HEAD/);
   assert.equal(fs.existsSync(path.join(root, "git", "detached.md")), false);
 });
@@ -690,12 +727,14 @@ test("unsafe control paths and invalid commit messages are rejected during plann
   initializeGit(root);
   const authoring = service(root, { gitCommit: true });
   const unsafe = await authoring.validateChanges({
-    changes: [{
-      op: "create",
-      path: ".GIT/refs/heads/poison.md",
-      type: "Reference",
-      title: "Poison",
-    }],
+    changes: [
+      {
+        op: "create",
+        path: ".GIT/refs/heads/poison.md",
+        type: "Reference",
+        title: "Poison",
+      },
+    ],
   });
   assert.equal(unsafe.valid, false);
   assert.equal(unsafe.validation.diagnostics[0].code, "unsafe_target_path");

@@ -54,5 +54,18 @@
         "noControlCharactersInRegex": "warn"
       }
     }
-  }
+  },
+  "overrides": [
+    {
+      "includes": [
+        "src/search.js",
+        "src/search-index.js",
+        "src/search/**",
+        "scripts/search-benchmark.js"
+      ],
+      "formatter": {
+        "enabled": false
+      }
+    }
+  ]
 }

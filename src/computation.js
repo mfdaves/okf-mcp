@@ -22,16 +22,19 @@ function stableJson(value) {
     return `[${value.map(stableJson).join(",")}]`;
   }
   if (value && typeof value === "object") {
-    return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${stableJson(value[key])}`).join(",")}}`;
+    return `{${Object.keys(value)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${stableJson(value[key])}`)
+      .join(",")}}`;
   }
   return JSON.stringify(value);
 }
 
 function contractEdges(index, doc) {
-  return index.edges.filter((edge) => (
-    edge.source === doc.uri
-    && ["computation", "executor", "attester"].includes(edge.kind)
-  ));
+  return index.edges.filter(
+    (edge) =>
+      edge.source === doc.uri && ["computation", "executor", "attester"].includes(edge.kind),
+  );
 }
 
 function targetMetadata(index, edge) {
@@ -117,11 +120,14 @@ function inspectAttestedComputation(index, uri, options) {
       ...(config.includeComputation && bytes <= maxContentBytes ? { content } : {}),
     };
   } else {
-    computation = Object.assign({
-      mode: contract.computation && contract.computation.mode || "missing",
-      resource: contract.computation && contract.computation.path || null,
-      contentIncluded: false,
-    }, targetMetadata(index, computationEdge));
+    computation = Object.assign(
+      {
+        mode: (contract.computation && contract.computation.mode) || "missing",
+        resource: (contract.computation && contract.computation.path) || null,
+        contentIncluded: false,
+      },
+      targetMetadata(index, computationEdge),
+    );
     if (config.includeComputation && computation.resolvedAs === "asset") {
       const asset = index.byAssetUri.get(computation.uri);
       const maxContentBytes = Number(config.maxContentBytes || 65536);
@@ -131,18 +137,25 @@ function inspectAttestedComputation(index, uri, options) {
       }
     }
   }
-  const executor = Object.assign({
-    resource: contract.executor && contract.executor.resource || null,
-    receiptFields: contract.executor && contract.executor.receipt || [],
-  }, targetMetadata(index, executorEdge));
-  const attester = Object.assign({
-    resource: contract.attester && contract.attester.resource || null,
-  }, targetMetadata(index, attesterEdge));
-  const assetDiagnostics = (index.warnings || []).filter((entry) => (
-    entry.bundle === doc.bundle
-    && entry.path === doc.path
-    && String(entry.code || "").startsWith("asset_")
-  ));
+  const executor = Object.assign(
+    {
+      resource: (contract.executor && contract.executor.resource) || null,
+      receiptFields: (contract.executor && contract.executor.receipt) || [],
+    },
+    targetMetadata(index, executorEdge),
+  );
+  const attester = Object.assign(
+    {
+      resource: (contract.attester && contract.attester.resource) || null,
+    },
+    targetMetadata(index, attesterEdge),
+  );
+  const assetDiagnostics = (index.warnings || []).filter(
+    (entry) =>
+      entry.bundle === doc.bundle &&
+      entry.path === doc.path &&
+      String(entry.code || "").startsWith("asset_"),
+  );
   return {
     uri: doc.uri,
     requestedUri: uri,
@@ -179,10 +192,16 @@ function prepareAttestedComputation(index, uri, parameters, options) {
   const declared = inspection.parameters || [];
   const declaredNames = declared.map((entry) => entry.name);
   const presentNames = Object.keys(parameters).sort();
-  const missing = declared.filter((entry) => entry.required && !Object.prototype.hasOwnProperty.call(parameters, entry.name)).map((entry) => entry.name);
+  const missing = declared
+    .filter(
+      (entry) => entry.required && !Object.prototype.hasOwnProperty.call(parameters, entry.name),
+    )
+    .map((entry) => entry.name);
   const unexpected = presentNames.filter((name) => !declaredNames.includes(name));
   if (missing.length || unexpected.length) {
-    throw new Error(`Parameter contract mismatch (missing: ${missing.join(", ") || "none"}; unexpected: ${unexpected.join(", ") || "none"}).`);
+    throw new Error(
+      `Parameter contract mismatch (missing: ${missing.join(", ") || "none"}; unexpected: ${unexpected.join(", ") || "none"}).`,
+    );
   }
   return {
     prepared: true,
@@ -209,7 +228,9 @@ function checkComputationReceipt(index, uri, receipt) {
   }
   const expectedFields = inspection.executor.receiptFields || [];
   const presentFields = Object.keys(receipt).sort();
-  const missingFields = expectedFields.filter((field) => !Object.prototype.hasOwnProperty.call(receipt, field));
+  const missingFields = expectedFields.filter(
+    (field) => !Object.prototype.hasOwnProperty.call(receipt, field),
+  );
   const unexpectedFields = presentFields.filter((field) => !expectedFields.includes(field));
   return {
     uri: inspection.uri,
@@ -228,12 +249,17 @@ function readBundleAsset(index, input) {
   const args = input || {};
   const asset = args.uri
     ? index.byAssetUri && index.byAssetUri.get(args.uri)
-    : index.byAssetKey && index.byAssetKey.get(`${args.bundle}\u0000${String(args.path || "").replace(/\\/g, "/")}`);
+    : index.byAssetKey &&
+      index.byAssetKey.get(`${args.bundle}\u0000${String(args.path || "").replace(/\\/g, "/")}`);
   if (!asset) {
     throw new Error("Unknown or unreferenced bundle asset.");
   }
   const maxContentBytes = Number(args.maxContentBytes || 65536);
-  if (!Number.isSafeInteger(maxContentBytes) || maxContentBytes < 1 || maxContentBytes > 1024 * 1024) {
+  if (
+    !Number.isSafeInteger(maxContentBytes) ||
+    maxContentBytes < 1 ||
+    maxContentBytes > 1024 * 1024
+  ) {
     throw new Error("maxContentBytes must be between 1 and 1048576.");
   }
   if (asset.size > maxContentBytes) {
@@ -275,7 +301,10 @@ function readBundleAsset(index, input) {
 function getProvenance(index, uri, options) {
   const config = options || {};
   const root = requireConcept(index, uri);
-  const maxDepth = Math.max(0, Math.min(Number(config.maxDepth === undefined ? 3 : config.maxDepth), 10));
+  const maxDepth = Math.max(
+    0,
+    Math.min(Number(config.maxDepth === undefined ? 3 : config.maxDepth), 10),
+  );
   const maxNodes = Math.max(1, Math.min(Number(config.maxNodes || 100), 1000));
   const includeExternal = config.includeExternal === true;
   const nodes = [];
@@ -307,42 +336,51 @@ function getProvenance(index, uri, options) {
     if (current.depth >= maxDepth) {
       continue;
     }
-    index.edges.filter((edge) => edge.source === doc.uri && edge.kind === "source").forEach((edge) => {
-      const targetDoc = index.byUri.get(edge.target);
-      const targetAsset = index.byAssetUri && index.byAssetUri.get(edge.target);
-      if (targetDoc) {
-        edges.push(edge);
-        if (current.ancestry.includes(targetDoc.uri)) {
-          cycles.push(current.ancestry.concat(targetDoc.uri));
-        } else {
-          queue.push({ uri: targetDoc.uri, depth: current.depth + 1, ancestry: current.ancestry.concat(targetDoc.uri) });
-        }
-      } else if (targetAsset) {
-        edges.push(edge);
-        if (!seen.has(targetAsset.uri) && nodes.length < maxNodes) {
-          seen.add(targetAsset.uri);
-          nodes.push({
-            id: targetAsset.uri,
-            kind: "asset",
-            bundle: targetAsset.bundle,
-            path: targetAsset.path,
-            mimeType: targetAsset.mimeType,
-            size: targetAsset.size,
-            sha256: targetAsset.sha256,
-          });
-        }
-      } else if (edge.external || edge.resolvedAs === "opaque") {
-        if (includeExternal) {
+    index.edges
+      .filter((edge) => edge.source === doc.uri && edge.kind === "source")
+      .forEach((edge) => {
+        const targetDoc = index.byUri.get(edge.target);
+        const targetAsset = index.byAssetUri && index.byAssetUri.get(edge.target);
+        if (targetDoc) {
           edges.push(edge);
-          if (!seen.has(edge.target) && nodes.length < maxNodes) {
-            seen.add(edge.target);
-            nodes.push({ id: edge.target, kind: edge.resolvedAs === "opaque" ? "opaque" : "external" });
+          if (current.ancestry.includes(targetDoc.uri)) {
+            cycles.push(current.ancestry.concat(targetDoc.uri));
+          } else {
+            queue.push({
+              uri: targetDoc.uri,
+              depth: current.depth + 1,
+              ancestry: current.ancestry.concat(targetDoc.uri),
+            });
           }
+        } else if (targetAsset) {
+          edges.push(edge);
+          if (!seen.has(targetAsset.uri) && nodes.length < maxNodes) {
+            seen.add(targetAsset.uri);
+            nodes.push({
+              id: targetAsset.uri,
+              kind: "asset",
+              bundle: targetAsset.bundle,
+              path: targetAsset.path,
+              mimeType: targetAsset.mimeType,
+              size: targetAsset.size,
+              sha256: targetAsset.sha256,
+            });
+          }
+        } else if (edge.external || edge.resolvedAs === "opaque") {
+          if (includeExternal) {
+            edges.push(edge);
+            if (!seen.has(edge.target) && nodes.length < maxNodes) {
+              seen.add(edge.target);
+              nodes.push({
+                id: edge.target,
+                kind: edge.resolvedAs === "opaque" ? "opaque" : "external",
+              });
+            }
+          }
+        } else {
+          unresolved.push({ source: edge.source, resource: edge.reference, field: edge.field });
         }
-      } else {
-        unresolved.push({ source: edge.source, resource: edge.reference, field: edge.field });
-      }
-    });
+      });
   }
   return {
     root: root.uri,

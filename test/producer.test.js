@@ -17,21 +17,25 @@ function makeProject(extraConfig) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "okf-producer-host-"));
   const bundle = path.join(root, "okf", "database");
   fs.mkdirSync(bundle, { recursive: true });
-  fs.writeFileSync(path.join(root, "okf.project.yaml"), [
-    "project: Producer fixture",
-    "bundles:",
-    "  - id: database",
-    "    root: okf/database",
-    "producers:",
-    "  - name: primary-db",
-    "    type: postgresql",
-    "    package: '@fixture/okf-postgres'",
-    "    bundle: database",
-    "    config:",
-    "      connectionEnv: DATABASE_URL",
-    extraConfig || "",
-    "",
-  ].join("\n"), "utf8");
+  fs.writeFileSync(
+    path.join(root, "okf.project.yaml"),
+    [
+      "project: Producer fixture",
+      "bundles:",
+      "  - id: database",
+      "    root: okf/database",
+      "producers:",
+      "  - name: primary-db",
+      "    type: postgresql",
+      "    package: '@fixture/okf-postgres'",
+      "    bundle: database",
+      "    config:",
+      "      connectionEnv: DATABASE_URL",
+      extraConfig || "",
+      "",
+    ].join("\n"),
+    "utf8",
+  );
   return { root, bundle, projectPath: path.join(root, "okf.project.yaml") };
 }
 
@@ -41,7 +45,7 @@ function output(title) {
       path: "index.md",
       content: [
         "---",
-        "okf_version: \"0.2\"",
+        'okf_version: "0.2"',
         "---",
         "",
         "# Database catalog",
@@ -112,18 +116,28 @@ function serviceFor(fixture, generate, options) {
 }
 
 test("project config normalizes safe producers and rejects ambiguous or unsafe declarations", (t) => {
-  const fixture = makeProject([
-    "  - name: duplicate",
-    "    type: postgresql",
-    "    package: ../local-producer",
-    "    bundle: database",
-    "    output: somewhere",
-  ].join("\n"));
+  const fixture = makeProject(
+    [
+      "  - name: duplicate",
+      "    type: postgresql",
+      "    package: ../local-producer",
+      "    bundle: database",
+      "    output: somewhere",
+    ].join("\n"),
+  );
   t.after(() => fs.rmSync(fixture.root, { recursive: true, force: true }));
   const project = loadProjectConfig(fixture.projectPath);
   assert.equal(project.producers[0].name, "primary-db");
-  for (const code of ["invalid_producer_package", "duplicate_producer_bundle", "unknown_producer_field"]) {
-    assert.equal(project.errors.some((entry) => entry.code === code), true, code);
+  for (const code of [
+    "invalid_producer_package",
+    "duplicate_producer_bundle",
+    "unknown_producer_field",
+  ]) {
+    assert.equal(
+      project.errors.some((entry) => entry.code === code),
+      true,
+      code,
+    );
   }
   for (const type of ["contains", "contained_by", "foreign_key_to"]) {
     assert.equal(project.relationTypes.includes(type), true);
@@ -135,14 +149,23 @@ test("producer packages resolve only from the project node_modules tree", (t) =>
   t.after(() => fs.rmSync(fixture.root, { recursive: true, force: true }));
   const packageRoot = path.join(fixture.root, "node_modules", "@fixture", "okf-postgres");
   fs.mkdirSync(packageRoot, { recursive: true });
-  fs.writeFileSync(path.join(packageRoot, "package.json"), JSON.stringify({
-    name: "@fixture/okf-postgres",
-    version: "0.1.0",
-    main: "index.js",
-  }));
-  fs.writeFileSync(path.join(packageRoot, "index.js"), "module.exports = { okfProducer: { id: 'postgresql' } };\n");
+  fs.writeFileSync(
+    path.join(packageRoot, "package.json"),
+    JSON.stringify({
+      name: "@fixture/okf-postgres",
+      version: "0.1.0",
+      main: "index.js",
+    }),
+  );
+  fs.writeFileSync(
+    path.join(packageRoot, "index.js"),
+    "module.exports = { okfProducer: { id: 'postgresql' } };\n",
+  );
   const project = loadProjectConfig(fixture.projectPath);
-  assert.equal(loadInstalledProducer(project, "@fixture/okf-postgres").okfProducer.id, "postgresql");
+  assert.equal(
+    loadInstalledProducer(project, "@fixture/okf-postgres").okfProducer.id,
+    "postgresql",
+  );
   assert.throws(
     () => loadInstalledProducer(project, "../okf-postgres"),
     /not installed|installed npm package/,
@@ -169,7 +192,10 @@ test("producer preview, apply, ownership checks, and stale deletion are safe and
   const applied = await service.run("primary-db");
   assert.equal(applied.applied, true);
   assert.equal(fs.existsSync(path.join(fixture.bundle, ".okf-producer.json")), true);
-  assert.equal(JSON.parse(fs.readFileSync(path.join(fixture.bundle, ".okf-producer.json"))).files.length, 3);
+  assert.equal(
+    JSON.parse(fs.readFileSync(path.join(fixture.bundle, ".okf-producer.json"))).files.length,
+    3,
+  );
 
   const unchangedPath = path.join(fixture.bundle, "database.md");
   const unchangedBefore = fs.statSync(unchangedPath);
@@ -180,14 +206,22 @@ test("producer preview, apply, ownership checks, and stale deletion are safe and
   assert.equal(unchangedAfter.mtimeMs, unchangedBefore.mtimeMs);
 
   const beforeRollback = fs.readFileSync(path.join(fixture.bundle, "database.md"), "utf8");
-  await assert.rejects(() => service.publisher.publish(
-    { type: "postgresql", bundle: "database", version: "0.1.0" },
-    normalizeProducedFiles(output("Must roll back").concat({
-      path: "stale.md",
-      content: output("Stale metadata")[1].content,
-    })),
-    async () => { throw new Error("persisted validation failed"); },
-  ), /persisted validation failed/);
+  await assert.rejects(
+    () =>
+      service.publisher.publish(
+        { type: "postgresql", bundle: "database", version: "0.1.0" },
+        normalizeProducedFiles(
+          output("Must roll back").concat({
+            path: "stale.md",
+            content: output("Stale metadata")[1].content,
+          }),
+        ),
+        async () => {
+          throw new Error("persisted validation failed");
+        },
+      ),
+    /persisted validation failed/,
+  );
   assert.equal(fs.readFileSync(path.join(fixture.bundle, "database.md"), "utf8"), beforeRollback);
 
   files = output();
@@ -199,29 +233,45 @@ test("producer preview, apply, ownership checks, and stale deletion are safe and
   fs.appendFileSync(path.join(fixture.bundle, "index.md"), "manual edit\n");
   const modified = await service.preview("primary-db");
   assert.equal(modified.readyToApply, false);
-  assert.deepEqual(modified.diagnostics.map((entry) => entry.code), ["producer_owned_file_modified"]);
+  assert.deepEqual(
+    modified.diagnostics.map((entry) => entry.code),
+    ["producer_owned_file_modified"],
+  );
 });
 
 test("strict OKF 0.2 and secret gates reject output without destination changes", async (t) => {
   const fixture = makeProject();
   t.after(() => fs.rmSync(fixture.root, { recursive: true, force: true }));
   const invalid = serviceFor(fixture, async () => ({
-    files: output().map((file) => file.path === "database.md"
-      ? { path: file.path, content: file.content.replace("description: PostgreSQL database metadata.\n", "") }
-      : file),
+    files: output().map((file) =>
+      file.path === "database.md"
+        ? {
+            path: file.path,
+            content: file.content.replace("description: PostgreSQL database metadata.\n", ""),
+          }
+        : file,
+    ),
   }));
   const invalidReceipt = await invalid.run("primary-db");
   assert.equal(invalidReceipt.applied, false);
-  assert.equal(invalidReceipt.diagnostics.some((entry) => entry.code === "producer_missing_description"), true);
+  assert.equal(
+    invalidReceipt.diagnostics.some((entry) => entry.code === "producer_missing_description"),
+    true,
+  );
   assert.deepEqual(fs.readdirSync(fixture.bundle), []);
 
   const leaking = serviceFor(fixture, async ({ getSecret }) => ({
-    files: output().map((file) => file.path === "database.md"
-      ? { path: file.path, content: `${file.content}\n${getSecret("DATABASE_URL")}\n` }
-      : file),
+    files: output().map((file) =>
+      file.path === "database.md"
+        ? { path: file.path, content: `${file.content}\n${getSecret("DATABASE_URL")}\n` }
+        : file,
+    ),
   }));
   const leakReceipt = await leaking.preview("primary-db");
-  assert.deepEqual(leakReceipt.diagnostics.map((entry) => entry.code), ["producer_secret_leak"]);
+  assert.deepEqual(
+    leakReceipt.diagnostics.map((entry) => entry.code),
+    ["producer_secret_leak"],
+  );
   assert.doesNotMatch(JSON.stringify(leakReceipt), /secret\.invalid/);
   assert.deepEqual(fs.readdirSync(fixture.bundle), []);
 });
@@ -239,19 +289,26 @@ test("MCP lists producers statically, gates apply, sanitizes receipts, and reind
     producerLoader,
     producerEnv: { DATABASE_URL: "not-returned" },
   });
-  const disabledTools = new Map((await disabled.client.listTools()).tools.map((tool) => [tool.name, tool]));
+  const disabledTools = new Map(
+    (await disabled.client.listTools()).tools.map((tool) => [tool.name, tool]),
+  );
   assert.equal(disabledTools.has("okf_list_producers"), true);
   assert.equal(disabledTools.has("okf_preview_producer"), true);
   assert.equal(disabledTools.has("okf_run_producer"), false);
   const listed = await callJson(disabled.client, "okf_list_producers");
   assert.equal(loads, 0);
-  assert.deepEqual(listed.payload, [{
-    name: "primary-db",
-    type: "postgresql",
-    package: "@fixture/okf-postgres",
-    bundle: "database",
-  }]);
-  const preview = await callJson(disabled.client, "okf_preview_producer", { producer: "primary-db", detail: "full" });
+  assert.deepEqual(listed.payload, [
+    {
+      name: "primary-db",
+      type: "postgresql",
+      package: "@fixture/okf-postgres",
+      bundle: "database",
+    },
+  ]);
+  const preview = await callJson(disabled.client, "okf_preview_producer", {
+    producer: "primary-db",
+    detail: "full",
+  });
   assert.equal(loads, 1);
   assert.equal(preview.payload.readyToApply, true);
   assert.deepEqual(preview.payload.summary, { files: 2 });
@@ -261,10 +318,14 @@ test("MCP lists producers statically, gates apply, sanitizes receipts, and reind
 
   const broken = await connectMcp(t, [], {
     projectPath: fixture.projectPath,
-    producerLoader: async () => { throw new Error(`${fixture.root}/DATABASE_URL=not-returned`); },
+    producerLoader: async () => {
+      throw new Error(`${fixture.root}/DATABASE_URL=not-returned`);
+    },
     producerEnv: { DATABASE_URL: "not-returned" },
   });
-  const failedPreview = await callJson(broken.client, "okf_preview_producer", { producer: "primary-db" });
+  const failedPreview = await callJson(broken.client, "okf_preview_producer", {
+    producer: "primary-db",
+  });
   assert.equal(failedPreview.result.isError, true);
   assert.doesNotMatch(JSON.stringify(failedPreview.payload), /not-returned|okf-producer-host-/);
   await broken.close();
@@ -276,7 +337,9 @@ test("MCP lists producers statically, gates apply, sanitizes receipts, and reind
     allowWrite: true,
     actor: "test/producer-host",
   });
-  const enabledTools = new Map((await enabled.client.listTools()).tools.map((tool) => [tool.name, tool]));
+  const enabledTools = new Map(
+    (await enabled.client.listTools()).tools.map((tool) => [tool.name, tool]),
+  );
   assert.equal(enabledTools.get("okf_run_producer").annotations.destructiveHint, true);
   const run = await callJson(enabled.client, "okf_run_producer", { producer: "primary-db" });
   assert.equal(run.result.isError, undefined);
@@ -290,7 +353,10 @@ test("producer-managed bundle roots are protected from ordinary authoring", (t) 
   const fixture = makeProject();
   t.after(() => fs.rmSync(fixture.root, { recursive: true, force: true }));
   const project = loadProjectConfig(fixture.projectPath);
-  assert.equal(isConfiguredGeneratorOutput(project, path.join(fixture.bundle, "anything.md")), true);
+  assert.equal(
+    isConfiguredGeneratorOutput(project, path.join(fixture.bundle, "anything.md")),
+    true,
+  );
 });
 
 test("an unchanged source keeps published bytes instead of restamping every file", async (t) => {
@@ -333,16 +399,20 @@ test("a manifest claim cannot rewrite or remove a concept without generation pro
   assert.equal((await serviceFor(fixture, generate).run("primary-db")).applied, true);
 
   const handAuthored = path.join(fixture.bundle, "hand-authored.md");
-  fs.writeFileSync(handAuthored, [
-    "---",
-    "type: Note",
-    "title: Hand authored",
-    "description: Never producer managed.",
-    "---",
-    "",
-    "# Hand authored",
-    "",
-  ].join("\n"), "utf8");
+  fs.writeFileSync(
+    handAuthored,
+    [
+      "---",
+      "type: Note",
+      "title: Hand authored",
+      "description: Never producer managed.",
+      "---",
+      "",
+      "# Hand authored",
+      "",
+    ].join("\n"),
+    "utf8",
+  );
   const manifestPath = path.join(fixture.bundle, ".okf-producer.json");
   const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
   manifest.files.push({ path: "hand-authored.md", sha256: sha256(fs.readFileSync(handAuthored)) });
@@ -350,18 +420,27 @@ test("a manifest claim cannot rewrite or remove a concept without generation pro
 
   const result = await serviceFor(fixture, generate).run("primary-db");
   assert.equal(result.applied, false);
-  assert.equal(result.diagnostics.some((entry) => entry.code === "producer_manifest_claims_unmanaged_file"), true);
+  assert.equal(
+    result.diagnostics.some((entry) => entry.code === "producer_manifest_claims_unmanaged_file"),
+    true,
+  );
   assert.equal(fs.existsSync(handAuthored), true);
 });
 
 test("publication prunes directories emptied by stale deletions", async (t) => {
   const fixture = makeProject();
   t.after(() => fs.rmSync(fixture.root, { recursive: true, force: true }));
-  const nested = () => output().concat([{
-    path: "views/public/report.md",
-    content: output()[1].content.replace("Application database", "Report view"),
-  }]);
-  assert.equal((await serviceFor(fixture, async () => ({ files: nested() })).run("primary-db")).applied, true);
+  const nested = () =>
+    output().concat([
+      {
+        path: "views/public/report.md",
+        content: output()[1].content.replace("Application database", "Report view"),
+      },
+    ]);
+  assert.equal(
+    (await serviceFor(fixture, async () => ({ files: nested() })).run("primary-db")).applied,
+    true,
+  );
   assert.equal(fs.existsSync(path.join(fixture.bundle, "views", "public")), true);
 
   const pruned = await serviceFor(fixture, async () => ({ files: output() })).run("primary-db");
@@ -376,20 +455,26 @@ test("workspace and linked producer installs resolve through their node_modules 
   // A workspace install links node_modules/<name> at the real package directory.
   const real = path.join(fixture.root, "packages", "okf-postgres");
   fs.mkdirSync(real, { recursive: true });
-  fs.writeFileSync(path.join(real, "package.json"), JSON.stringify({
-    name: "@fixture/okf-postgres",
-    version: "0.1.0",
-    main: "index.js",
-  }));
-  fs.writeFileSync(path.join(real, "index.js"), "module.exports = { okfProducer: { id: 'postgresql' } };\n");
+  fs.writeFileSync(
+    path.join(real, "package.json"),
+    JSON.stringify({
+      name: "@fixture/okf-postgres",
+      version: "0.1.0",
+      main: "index.js",
+    }),
+  );
+  fs.writeFileSync(
+    path.join(real, "index.js"),
+    "module.exports = { okfProducer: { id: 'postgresql' } };\n",
+  );
   const linkParent = path.join(fixture.root, "node_modules", "@fixture");
   fs.mkdirSync(linkParent, { recursive: true });
   fs.symlinkSync(real, path.join(linkParent, "okf-postgres"), "dir");
 
   const project = loadProjectConfig(fixture.projectPath);
-  assert.equal(loadInstalledProducer(project, "@fixture/okf-postgres").okfProducer.id, "postgresql");
-  assert.throws(
-    () => loadInstalledProducer(project, "@fixture/not-installed"),
-    /not installed/,
+  assert.equal(
+    loadInstalledProducer(project, "@fixture/okf-postgres").okfProducer.id,
+    "postgresql",
   );
+  assert.throws(() => loadInstalledProducer(project, "@fixture/not-installed"), /not installed/);
 });

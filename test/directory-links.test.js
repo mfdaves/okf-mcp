@@ -25,24 +25,25 @@ function concept(title, body) {
 }
 
 function nestedIndex() {
-  return [
-    "# Nested",
-    "",
-    "- [Topic](topic.md)",
-    "",
-  ].join("\n");
+  return ["# Nested", "", "- [Topic](topic.md)", ""].join("\n");
 }
 
 test("direct indexed documents take precedence over directory fallback", () => {
   const byUri = new Map([
-    ["okf://remote/nested", {
-      uri: "okf://remote/direct-target",
-      pathUri: "okf://remote/nested",
-    }],
-    ["okf://remote/nested/index.md", {
-      uri: "okf://remote/nested/index.md",
-      pathUri: "okf://remote/nested/index.md",
-    }],
+    [
+      "okf://remote/nested",
+      {
+        uri: "okf://remote/direct-target",
+        pathUri: "okf://remote/nested",
+      },
+    ],
+    [
+      "okf://remote/nested/index.md",
+      {
+        uri: "okf://remote/nested/index.md",
+        pathUri: "okf://remote/nested/index.md",
+      },
+    ],
   ]);
 
   const resolved = resolveLinkPath(
@@ -62,17 +63,25 @@ test("custom concept ids cannot steal directory links from nested indexes", (t) 
   fs.mkdirSync(path.join(root, "nested"), { recursive: true });
   fs.writeFileSync(path.join(root, "nested", "index.md"), nestedIndex(), "utf8");
   fs.writeFileSync(path.join(root, "nested", "topic.md"), concept("Topic"), "utf8");
-  fs.writeFileSync(path.join(root, "reader.md"), concept("Reader", "Read [Nested](nested/)."), "utf8");
-  fs.writeFileSync(path.join(root, "shadow.md"), [
-    "---",
-    "id: okf://demo/nested",
-    "type: Concept",
-    "title: Shadow",
-    "---",
-    "",
-    "# Shadow",
-    "",
-  ].join("\n"), "utf8");
+  fs.writeFileSync(
+    path.join(root, "reader.md"),
+    concept("Reader", "Read [Nested](nested/)."),
+    "utf8",
+  );
+  fs.writeFileSync(
+    path.join(root, "shadow.md"),
+    [
+      "---",
+      "id: okf://demo/nested",
+      "type: Concept",
+      "title: Shadow",
+      "---",
+      "",
+      "# Shadow",
+      "",
+    ].join("\n"),
+    "utf8",
+  );
 
   const index = buildIndex([`demo=${root}`]);
   const edge = index.edges.find((entry) => entry.href === "nested/");
@@ -92,24 +101,33 @@ test("local directory links resolve to the nested reserved index document", (t) 
     concept("Topic", "See the [nested index](.) and [root index](../)."),
     "utf8",
   );
-  fs.writeFileSync(path.join(root, "reader.md"), concept("Reader", "Read [Nested](nested)."), "utf8");
+  fs.writeFileSync(
+    path.join(root, "reader.md"),
+    concept("Reader", "Read [Nested](nested)."),
+    "utf8",
+  );
 
   const index = buildIndex([`local=${root}`]);
-  const directoryEdges = index.edges.filter((edge) => (
-    edge.href === "nested/"
-    || edge.href === "nested"
-    || edge.href === "."
-    || edge.href === "../"
-  ));
+  const directoryEdges = index.edges.filter(
+    (edge) =>
+      edge.href === "nested/" || edge.href === "nested" || edge.href === "." || edge.href === "../",
+  );
 
   assert.equal(directoryEdges.length, 4);
-  assert.equal(directoryEdges.every((edge) => !edge.broken), true);
   assert.equal(
-    directoryEdges.some((edge) => edge.href === "nested/" && edge.target === "okf://local/nested/index.md"),
+    directoryEdges.every((edge) => !edge.broken),
     true,
   );
   assert.equal(
-    directoryEdges.some((edge) => edge.href === "nested" && edge.target === "okf://local/nested/index.md"),
+    directoryEdges.some(
+      (edge) => edge.href === "nested/" && edge.target === "okf://local/nested/index.md",
+    ),
+    true,
+  );
+  assert.equal(
+    directoryEdges.some(
+      (edge) => edge.href === "nested" && edge.target === "okf://local/nested/index.md",
+    ),
     true,
   );
   assert.equal(
@@ -123,30 +141,37 @@ test("local directory links resolve to the nested reserved index document", (t) 
 });
 
 test("remote directory links resolve through the in-memory document map", () => {
-  const index = buildIndex([{
-    id: "remote",
-    remote: true,
-    documents: [
-      { path: "index.md", text: "# Remote\n\n- [Nested](nested/)\n" },
-      { path: "nested/index.md", text: nestedIndex() },
-      { path: "nested/topic.md", text: concept("Topic", "Return to the [root index](../).") },
-      { path: "reader.md", text: concept("Reader", "Read [Nested](nested).") },
-    ],
-  }]);
-  const directoryEdges = index.edges.filter((edge) => (
-    edge.href === "nested/"
-    || edge.href === "nested"
-    || edge.href === "../"
-  ));
+  const index = buildIndex([
+    {
+      id: "remote",
+      remote: true,
+      documents: [
+        { path: "index.md", text: "# Remote\n\n- [Nested](nested/)\n" },
+        { path: "nested/index.md", text: nestedIndex() },
+        { path: "nested/topic.md", text: concept("Topic", "Return to the [root index](../).") },
+        { path: "reader.md", text: concept("Reader", "Read [Nested](nested).") },
+      ],
+    },
+  ]);
+  const directoryEdges = index.edges.filter(
+    (edge) => edge.href === "nested/" || edge.href === "nested" || edge.href === "../",
+  );
 
   assert.equal(directoryEdges.length, 3);
-  assert.equal(directoryEdges.every((edge) => !edge.broken), true);
   assert.equal(
-    directoryEdges.some((edge) => edge.href === "nested/" && edge.target === "okf://remote/nested/index.md"),
+    directoryEdges.every((edge) => !edge.broken),
     true,
   );
   assert.equal(
-    directoryEdges.some((edge) => edge.href === "nested" && edge.target === "okf://remote/nested/index.md"),
+    directoryEdges.some(
+      (edge) => edge.href === "nested/" && edge.target === "okf://remote/nested/index.md",
+    ),
+    true,
+  );
+  assert.equal(
+    directoryEdges.some(
+      (edge) => edge.href === "nested" && edge.target === "okf://remote/nested/index.md",
+    ),
     true,
   );
   assert.equal(
@@ -160,20 +185,23 @@ test("remote directory links resolve through the in-memory document map", () => 
 });
 
 test("directory fallback preserves remote escape and broken-link diagnostics", () => {
-  const index = buildIndex([{
-    id: "remote",
-    remote: true,
-    documents: [{
-      path: "reader.md",
-      text: concept("Reader", "See [Outside](../outside/) and [Missing](missing/)."),
-    }],
-  }]);
+  const index = buildIndex([
+    {
+      id: "remote",
+      remote: true,
+      documents: [
+        {
+          path: "reader.md",
+          text: concept("Reader", "See [Outside](../outside/) and [Missing](missing/)."),
+        },
+      ],
+    },
+  ]);
 
   assert.equal(
-    index.warnings.some((warning) => (
-      warning.code === "link_outside_root"
-      && warning.href === "../outside/"
-    )),
+    index.warnings.some(
+      (warning) => warning.code === "link_outside_root" && warning.href === "../outside/",
+    ),
     true,
   );
   assert.equal(
@@ -181,11 +209,12 @@ test("directory fallback preserves remote escape and broken-link diagnostics", (
     false,
   );
   assert.equal(
-    index.warnings.some((warning) => (
-      warning.code === "broken_link"
-      && warning.href === "missing/"
-      && warning.target === "missing"
-    )),
+    index.warnings.some(
+      (warning) =>
+        warning.code === "broken_link" &&
+        warning.href === "missing/" &&
+        warning.target === "missing",
+    ),
     true,
   );
   assert.equal(
@@ -201,13 +230,11 @@ test("authoring candidate validation uses nested index fallback", (t) => {
   fs.mkdirSync(path.join(bundle, "nested"), { recursive: true });
   fs.writeFileSync(path.join(bundle, "nested", "index.md"), nestedIndex(), "utf8");
   fs.writeFileSync(path.join(bundle, "nested", "topic.md"), concept("Topic"), "utf8");
-  fs.writeFileSync(path.join(root, "okf.project.yaml"), [
-    "project: Directory authoring",
-    "bundles:",
-    "  - id: app",
-    "    root: bundle",
-    "",
-  ].join("\n"), "utf8");
+  fs.writeFileSync(
+    path.join(root, "okf.project.yaml"),
+    ["project: Directory authoring", "bundles:", "  - id: app", "    root: bundle", ""].join("\n"),
+    "utf8",
+  );
   const store = FileConceptStore.fromProject(path.join(root, "okf.project.yaml"), {
     proposalRoot: path.join(root, ".okf-proposals"),
   });

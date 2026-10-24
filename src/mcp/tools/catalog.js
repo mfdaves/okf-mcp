@@ -43,16 +43,15 @@ function publicBundles(index, options) {
       };
     }
     const absoluteRoot = path.resolve(bundle.root);
-    const projectRoot = index.project && index.project.root
-      ? path.resolve(index.project.root)
-      : null;
+    const projectRoot =
+      index.project && index.project.root ? path.resolve(index.project.root) : null;
     const root = projectRoot
       ? path.relative(projectRoot, absoluteRoot).replace(/\\/g, "/") || "."
       : "<configured>";
     return {
       id: bundle.id,
       root,
-      ...((options && options.includeAbsolutePaths) ? { absoluteRoot, projectRoot } : {}),
+      ...(options && options.includeAbsolutePaths ? { absoluteRoot, projectRoot } : {}),
       documentCount,
       conceptCount,
       assetCount,
@@ -66,7 +65,7 @@ function publicBundles(index, options) {
 
 function conceptLocator(args) {
   return args && (args.id || args.uri)
-    ? (args.id || args.uri)
+    ? args.id || args.uri
     : args && args.bundle && args.path
       ? `okf://${args.bundle}/${args.path}`
       : null;
@@ -94,17 +93,17 @@ function getConcept(index, args, repositoryMappings) {
     body: doc.body,
     links: doc.links,
     signals: conceptSignals(doc, true),
-    referencedAssets: (index.assets || []).filter((asset) => (
-      (asset.referencedBy || []).some((reference) => reference.uri === doc.uri)
-    )).map((asset) => ({
-      uri: asset.uri,
-      bundle: asset.bundle,
-      path: asset.path,
-      mimeType: asset.mimeType,
-      size: asset.size,
-      sha256: asset.sha256,
-      roles: asset.roles,
-    })),
+    referencedAssets: (index.assets || [])
+      .filter((asset) => (asset.referencedBy || []).some((reference) => reference.uri === doc.uri))
+      .map((asset) => ({
+        uri: asset.uri,
+        bundle: asset.bundle,
+        path: asset.path,
+        mimeType: asset.mimeType,
+        size: asset.size,
+        sha256: asset.sha256,
+        roles: asset.roles,
+      })),
     gitSources: describeConceptGitSources(index, doc, repositoryMappings),
   });
 }
@@ -141,9 +140,11 @@ function listTags(index) {
 
 function listRelationTypes(index) {
   const counts = {};
-  index.edges.filter((edge) => edge.kind === "relation").forEach((edge) => {
-    counts[edge.relationType] = (counts[edge.relationType] || 0) + 1;
-  });
+  index.edges
+    .filter((edge) => edge.kind === "relation")
+    .forEach((edge) => {
+      counts[edge.relationType] = (counts[edge.relationType] || 0) + 1;
+    });
   return counts;
 }
 
@@ -165,27 +166,30 @@ const tools = {
       "List the local and remote OKF bundles currently loaded by the server.",
       READ_ONLY,
     ),
-    handler: (state) => jsonContent(publicBundles(state.index, {
-      includeAbsolutePaths: Boolean(state.allowWrite),
-    })),
+    handler: (state) =>
+      jsonContent(
+        publicBundles(state.index, {
+          includeAbsolutePaths: Boolean(state.allowWrite),
+        }),
+      ),
   },
   get_concept: {
     ...defineTool(
       "Read one valid OKF concept, including its frontmatter, Markdown body, and links.",
       READ_ONLY,
       {
-        id: nonEmptyStringParameter("Portable extensionless Concept ID or bundle-relative Markdown path."),
+        id: nonEmptyStringParameter(
+          "Portable extensionless Concept ID or bundle-relative Markdown path.",
+        ),
         uri: nonEmptyStringParameter("Canonical or path based okf URI for the concept."),
         bundle: nonEmptyStringParameter("Bundle id used with path when uri is not supplied."),
-        path: nonEmptyStringParameter("Bundle relative Markdown path used with bundle when uri is not supplied."),
+        path: nonEmptyStringParameter(
+          "Bundle relative Markdown path used with bundle when uri is not supplied.",
+        ),
       },
       [],
       {
-        anyOf: [
-          { required: ["id"] },
-          { required: ["uri"] },
-          { required: ["bundle", "path"] },
-        ],
+        anyOf: [{ required: ["id"] }, { required: ["uri"] }, { required: ["bundle", "path"] }],
       },
     ),
     handler: (state, args) => {
@@ -194,24 +198,15 @@ const tools = {
     },
   },
   list_types: {
-    ...defineTool(
-      "Count the concept types present in the current OKF index.",
-      READ_ONLY,
-    ),
+    ...defineTool("Count the concept types present in the current OKF index.", READ_ONLY),
     handler: (state) => jsonContent(listTypes(state.index)),
   },
   list_tags: {
-    ...defineTool(
-      "Count the tags present on concepts in the current OKF index.",
-      READ_ONLY,
-    ),
+    ...defineTool("Count the tags present on concepts in the current OKF index.", READ_ONLY),
     handler: (state) => jsonContent(listTags(state.index)),
   },
   list_relation_types: {
-    ...defineTool(
-      "Count the typed relations present in the current OKF graph.",
-      READ_ONLY,
-    ),
+    ...defineTool("Count the typed relations present in the current OKF graph.", READ_ONLY),
     handler: (state) => jsonContent(listRelationTypes(state.index)),
   },
   list_edge_kinds: {

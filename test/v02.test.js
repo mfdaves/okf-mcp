@@ -57,29 +57,35 @@ test("normalizes native provenance, generation, verification, and lifecycle with
 });
 
 test("native sources and generated metadata win over legacy fallbacks even when empty or malformed", () => {
-  const native = normalizeV02Signals({
-    type: "Metric",
-    sources: [],
-    generated: { by: "process:refresh", at: "2026-08-01T00:00:00Z" },
-    timestamp: "2025-01-01T00:00:00Z",
-  }, {
-    body: "# Metric\n\n# Citations\n- https://legacy.example/source",
-    asOf: "2026-08-11",
-  });
+  const native = normalizeV02Signals(
+    {
+      type: "Metric",
+      sources: [],
+      generated: { by: "process:refresh", at: "2026-08-01T00:00:00Z" },
+      timestamp: "2025-01-01T00:00:00Z",
+    },
+    {
+      body: "# Metric\n\n# Citations\n- https://legacy.example/source",
+      asOf: "2026-08-11",
+    },
+  );
   assert.equal(native.sourcesOrigin, "native");
   assert.deepEqual(native.sources, []);
   assert.equal(native.generatedOrigin, "native");
   assert.equal(native.generated.at, "2026-08-01T00:00:00Z");
 
-  const malformed = normalizeV02Signals({
-    type: "Metric",
-    sources: "bad",
-    generated: "bad",
-    timestamp: "2025-01-01T00:00:00Z",
-  }, {
-    body: "# Citations\n- https://legacy.example/source",
-    asOf: "2026-08-11",
-  });
+  const malformed = normalizeV02Signals(
+    {
+      type: "Metric",
+      sources: "bad",
+      generated: "bad",
+      timestamp: "2025-01-01T00:00:00Z",
+    },
+    {
+      body: "# Citations\n- https://legacy.example/source",
+      asOf: "2026-08-11",
+    },
+  );
   assert.equal(malformed.sourcesOrigin, "native");
   assert.deepEqual(malformed.sources, []);
   assert.equal(malformed.generatedOrigin, "native");
@@ -89,34 +95,40 @@ test("native sources and generated metadata win over legacy fallbacks even when 
 });
 
 test("falls back to legacy Citations and timestamp and marks both as legacy", () => {
-  const result = normalizeV02Signals({
-    type: "Metric",
-    timestamp: "2026-05-28T22:53:05+00:00",
-  }, {
-    body: [
-      "# Metric",
-      "",
-      "```markdown",
-      "# Citations",
-      "- https://ignored.example",
-      "```",
-      "",
-      "# Citations",
-      "- [Policy](https://example.test/policy)",
-      "- `references/local.md`",
-      "",
-      "# Notes",
-      "- https://not-a-citation.example",
-    ].join("\n"),
-    asOf: "2026-08-11",
-  });
+  const result = normalizeV02Signals(
+    {
+      type: "Metric",
+      timestamp: "2026-05-28T22:53:05+00:00",
+    },
+    {
+      body: [
+        "# Metric",
+        "",
+        "```markdown",
+        "# Citations",
+        "- https://ignored.example",
+        "```",
+        "",
+        "# Citations",
+        "- [Policy](https://example.test/policy)",
+        "- `references/local.md`",
+        "",
+        "# Notes",
+        "- https://not-a-citation.example",
+      ].join("\n"),
+      asOf: "2026-08-11",
+    },
+  );
 
   assert.equal(result.sourcesOrigin, "legacy_citations");
-  assert.deepEqual(result.sources.map((entry) => entry.resource), [
-    "https://example.test/policy",
-    "references/local.md",
-  ]);
-  assert.equal(result.sources.every((entry) => entry.legacy), true);
+  assert.deepEqual(
+    result.sources.map((entry) => entry.resource),
+    ["https://example.test/policy", "references/local.md"],
+  );
+  assert.equal(
+    result.sources.every((entry) => entry.legacy),
+    true,
+  );
   assert.equal(result.sources[0].title, "Policy");
   assert.equal(result.generatedOrigin, "legacy_timestamp");
   assert.deepEqual(result.generated, {
@@ -132,39 +144,51 @@ test("derives exactly three trust tiers and fails malformed verification closed"
   assert.equal(absent.trustTier, "unverified");
   assert.deepEqual(absent.verifiedEvents, []);
 
-  const machine = normalizeV02Signals({
-    type: "Metric",
-    verified: [
-      { by: "process:nightly", at: "2026-08-10T02:00:00Z" },
-      { by: "reference_agent/gemini-2.5-pro", at: "2026-08-10T03:00:00Z" },
-    ],
-  }, { asOf: "2026-08-11" });
+  const machine = normalizeV02Signals(
+    {
+      type: "Metric",
+      verified: [
+        { by: "process:nightly", at: "2026-08-10T02:00:00Z" },
+        { by: "reference_agent/gemini-2.5-pro", at: "2026-08-10T03:00:00Z" },
+      ],
+    },
+    { asOf: "2026-08-11" },
+  );
   assert.equal(machine.trustTier, "machine-confirmed");
 
-  const human = normalizeV02Signals({
-    type: "Metric",
-    verified: [
-      { by: "process:nightly", at: "2026-08-10T02:00:00Z" },
-      { by: "human:alice", at: "2026-08-10T03:00:00Z" },
-    ],
-  }, { asOf: "2026-08-11" });
+  const human = normalizeV02Signals(
+    {
+      type: "Metric",
+      verified: [
+        { by: "process:nightly", at: "2026-08-10T02:00:00Z" },
+        { by: "human:alice", at: "2026-08-10T03:00:00Z" },
+      ],
+    },
+    { asOf: "2026-08-11" },
+  );
   assert.equal(human.trustTier, "human-reviewed");
 
-  const malformed = normalizeV02Signals({
-    type: "Metric",
-    verified: [
-      { by: "human:alice", at: "2026-08-10T03:00:00Z" },
-      { by: "human:bob", at: "not-a-datetime" },
-    ],
-  }, { asOf: "2026-08-11" });
+  const malformed = normalizeV02Signals(
+    {
+      type: "Metric",
+      verified: [
+        { by: "human:alice", at: "2026-08-10T03:00:00Z" },
+        { by: "human:bob", at: "not-a-datetime" },
+      ],
+    },
+    { asOf: "2026-08-11" },
+  );
   assert.equal(malformed.trustTier, "unverified");
   assert.deepEqual(malformed.verifiedEvents, []);
   assert.equal(codes(malformed).has("invalid_verified_at"), true);
 
-  const invalidActor = normalizeV02Signals({
-    type: "Metric",
-    verified: { by: "human:", at: "2026-08-10T03:00:00Z" },
-  }, { asOf: "2026-08-11" });
+  const invalidActor = normalizeV02Signals(
+    {
+      type: "Metric",
+      verified: { by: "human:", at: "2026-08-10T03:00:00Z" },
+    },
+    { asOf: "2026-08-11" },
+  );
   assert.equal(invalidActor.trustTier, "unverified");
   assert.equal(codes(invalidActor).has("invalid_verified_actor"), true);
 });
@@ -175,18 +199,27 @@ test("defaults lifecycle and computes freshness on the exact UTC date boundary",
   assert.equal(defaults.staleAfter, null);
   assert.equal(defaults.freshness, "unspecified");
 
-  const fresh = normalizeV02Signals({ type: "Metric", stale_after: "2026-08-11" }, { asOf: "2026-08-10" });
+  const fresh = normalizeV02Signals(
+    { type: "Metric", stale_after: "2026-08-11" },
+    { asOf: "2026-08-10" },
+  );
   assert.equal(fresh.freshness, "fresh");
-  const boundary = normalizeV02Signals({ type: "Metric", stale_after: "2026-08-11" }, { asOf: "2026-08-11" });
+  const boundary = normalizeV02Signals(
+    { type: "Metric", stale_after: "2026-08-11" },
+    { asOf: "2026-08-11" },
+  );
   assert.equal(boundary.freshness, "stale");
   const utcDate = normalizeV02Signals({ type: "Metric" }, { asOf: "2026-08-11T00:30:00+02:00" });
   assert.equal(utcDate.asOf, "2026-08-10");
 
-  const malformed = normalizeV02Signals({
-    type: "Metric",
-    status: "archived",
-    stale_after: "2026-02-30",
-  }, { asOf: "2026-08-11" });
+  const malformed = normalizeV02Signals(
+    {
+      type: "Metric",
+      status: "archived",
+      stale_after: "2026-02-30",
+    },
+    { asOf: "2026-08-11" },
+  );
   assert.equal(malformed.status, null);
   assert.equal(malformed.freshness, "invalid");
   assert.deepEqual([...codes(malformed)].sort(), ["invalid_stale_after", "invalid_status"]);
@@ -194,21 +227,24 @@ test("defaults lifecycle and computes freshness on the exact UTC date boundary",
 });
 
 test("normalizes source credibility and usage windows with soft diagnostics", () => {
-  const result = normalizeV02Signals({
-    type: "Metric",
-    sources: [
-      {
-        id: "good",
-        resource: "https://example.test/good",
-        usage_count: 3,
-        last_modified: "2026-08-01",
-        usage_window: { from: "2026-08-01", to: "2026-08-10" },
-      },
-      { id: "missing-resource", usage_count: -1, last_modified: "2026-02-30" },
-      "not-a-mapping",
-    ],
-    usage_window: { from: "2026-08-10", to: "2026-08-01" },
-  }, { asOf: "2026-08-11" });
+  const result = normalizeV02Signals(
+    {
+      type: "Metric",
+      sources: [
+        {
+          id: "good",
+          resource: "https://example.test/good",
+          usage_count: 3,
+          last_modified: "2026-08-01",
+          usage_window: { from: "2026-08-01", to: "2026-08-10" },
+        },
+        { id: "missing-resource", usage_count: -1, last_modified: "2026-02-30" },
+        "not-a-mapping",
+      ],
+      usage_window: { from: "2026-08-10", to: "2026-08-01" },
+    },
+    { asOf: "2026-08-11" },
+  );
 
   assert.equal(result.sources.length, 3);
   assert.equal(result.sources[0].valid, true);
@@ -229,9 +265,7 @@ test("extracts a structurally ready inline Attested Computation", () => {
   const frontmatter = {
     type: "Attested Computation",
     runtime: "bigquery",
-    parameters: [
-      { name: "year", type: "integer", required: true, note: "preserved" },
-    ],
+    parameters: [{ name: "year", type: "integer", required: true, note: "preserved" }],
     executor: {
       resource: "references/skills/run-on-bq.md",
       receipt: ["job_id", "executed_sql", "result"],
@@ -290,18 +324,21 @@ test("extracts file computations and diagnoses conflicting inline content", () =
 });
 
 test("computation readiness fails structurally without affecting non-computation concepts", () => {
-  const invalid = normalizeV02Signals({
-    type: "Attested Computation",
-    parameters: [
-      { name: "year", type: "integer", required: true },
-      { name: "year", type: "integer", required: true },
-    ],
-    executor: { resource: "", receipt: ["result", "result"] },
-    attester: {},
-  }, {
-    body: "# Computation\n\n```sql\n```",
-    asOf: "2026-08-11",
-  });
+  const invalid = normalizeV02Signals(
+    {
+      type: "Attested Computation",
+      parameters: [
+        { name: "year", type: "integer", required: true },
+        { name: "year", type: "integer", required: true },
+      ],
+      executor: { resource: "", receipt: ["result", "result"] },
+      attester: {},
+    },
+    {
+      body: "# Computation\n\n```sql\n```",
+      asOf: "2026-08-11",
+    },
+  );
   assert.equal(invalid.computation.ready, false);
   assert.equal(invalid.computation.parameters, null);
   assert.deepEqual([...codes(invalid)].sort(), [
@@ -313,34 +350,40 @@ test("computation readiness fails structurally without affecting non-computation
     "missing_executor_resource",
   ]);
 
-  const ordinary = normalizeV02Signals({ type: "Metric", runtime: "ignored" }, { asOf: "2026-08-11" });
+  const ordinary = normalizeV02Signals(
+    { type: "Metric", runtime: "ignored" },
+    { asOf: "2026-08-11" },
+  );
   assert.equal(ordinary.computation, null);
   assert.deepEqual(ordinary.diagnostics, []);
 });
 
 test("inline extraction ignores similarly named headings outside the H1 computation section", () => {
-  const result = normalizeV02Signals({
-    type: "Attested Computation",
-    runtime: "python",
-    executor: { resource: "references/run.md", receipt: ["result"] },
-    attester: { resource: "references/attest.py" },
-  }, {
-    body: [
-      "## Computation",
-      "```sql",
-      "SELECT 'ignored'",
-      "```",
-      "# Notes",
-      "```markdown",
-      "# Computation",
-      "```",
-      "# Computation",
-      "~~~python",
-      "print('used')",
-      "~~~",
-    ].join("\n"),
-    asOf: "2026-08-11",
-  });
+  const result = normalizeV02Signals(
+    {
+      type: "Attested Computation",
+      runtime: "python",
+      executor: { resource: "references/run.md", receipt: ["result"] },
+      attester: { resource: "references/attest.py" },
+    },
+    {
+      body: [
+        "## Computation",
+        "```sql",
+        "SELECT 'ignored'",
+        "```",
+        "# Notes",
+        "```markdown",
+        "# Computation",
+        "```",
+        "# Computation",
+        "~~~python",
+        "print('used')",
+        "~~~",
+      ].join("\n"),
+      asOf: "2026-08-11",
+    },
+  );
   assert.equal(result.computation.ready, true);
   assert.deepEqual(result.computation.inline, {
     sectionCount: 1,
@@ -349,24 +392,30 @@ test("inline extraction ignores similarly named headings outside the H1 computat
 });
 
 test("CommonMark structure excludes quoted and outer-fence pseudo sections", () => {
-  const provenance = normalizeV02Signals({ type: "Metric" }, {
-    body: [
-      "````markdown",
-      "```",
-      "# Citations",
-      "- https://inside-fence.example",
-      "````",
-      "",
-      "> # Citations",
-      ">",
-      "> - https://inside-quote.example",
-      "",
-      "# Citations #",
-      "- https://kept.example",
-    ].join("\n"),
-    asOf: "2026-08-11",
-  });
-  assert.deepEqual(provenance.sources.map((entry) => entry.resource), ["https://kept.example"]);
+  const provenance = normalizeV02Signals(
+    { type: "Metric" },
+    {
+      body: [
+        "````markdown",
+        "```",
+        "# Citations",
+        "- https://inside-fence.example",
+        "````",
+        "",
+        "> # Citations",
+        ">",
+        "> - https://inside-quote.example",
+        "",
+        "# Citations #",
+        "- https://kept.example",
+      ].join("\n"),
+      asOf: "2026-08-11",
+    },
+  );
+  assert.deepEqual(
+    provenance.sources.map((entry) => entry.resource),
+    ["https://kept.example"],
+  );
 
   const contract = {
     type: "Attested Computation",
@@ -397,30 +446,45 @@ test("CommonMark structure excludes quoted and outer-fence pseudo sections", () 
 });
 
 test("strict ISO helpers reject impossible dates and timezone-less datetimes", () => {
-  const leap = normalizeV02Signals({ type: "Metric", stale_after: "2024-02-29" }, { asOf: "2024-02-28" });
+  const leap = normalizeV02Signals(
+    { type: "Metric", stale_after: "2024-02-29" },
+    { asOf: "2024-02-28" },
+  );
   assert.equal(leap.freshness, "fresh");
 
-  const impossibleDate = normalizeV02Signals({ type: "Metric", stale_after: "2025-02-29" }, { asOf: "2025-02-28" });
+  const impossibleDate = normalizeV02Signals(
+    { type: "Metric", stale_after: "2025-02-29" },
+    { asOf: "2025-02-28" },
+  );
   assert.equal(impossibleDate.freshness, "invalid");
   assert.equal(codes(impossibleDate).has("invalid_stale_after"), true);
 
-  const zoned = normalizeV02Signals({
-    type: "Metric",
-    generated: { by: "process:refresh", at: "2026-08-11T10:00:00+02:00" },
-  }, { asOf: "2026-08-11" });
+  const zoned = normalizeV02Signals(
+    {
+      type: "Metric",
+      generated: { by: "process:refresh", at: "2026-08-11T10:00:00+02:00" },
+    },
+    { asOf: "2026-08-11" },
+  );
   assert.equal(zoned.generated.valid, true);
 
-  const minutePrecision = normalizeV02Signals({
-    type: "Metric",
-    generated: { by: "process:refresh", at: "2026-08-11T10:00Z" },
-  }, { asOf: "2026-08-11" });
+  const minutePrecision = normalizeV02Signals(
+    {
+      type: "Metric",
+      generated: { by: "process:refresh", at: "2026-08-11T10:00Z" },
+    },
+    { asOf: "2026-08-11" },
+  );
   assert.equal(minutePrecision.generated.valid, true);
 
   for (const at of ["2026-08-11T10:00:00", "2026-02-30T10:00:00Z"]) {
-    const invalid = normalizeV02Signals({
-      type: "Metric",
-      generated: { by: "process:refresh", at },
-    }, { asOf: "2026-08-11" });
+    const invalid = normalizeV02Signals(
+      {
+        type: "Metric",
+        generated: { by: "process:refresh", at },
+      },
+      { asOf: "2026-08-11" },
+    );
     assert.equal(invalid.generated.valid, false);
     assert.equal(codes(invalid).has("invalid_generated_at"), true);
   }

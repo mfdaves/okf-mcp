@@ -65,11 +65,15 @@ function createHttpHandler(service, options) {
         return;
       }
       if (req.method === "GET" && url.pathname === "/v1/bundles") {
-        sendJson(res, 200, service.store.getBundles().map((bundle) => ({
-          id: bundle.id,
-          include: bundle.include || [],
-          exclude: bundle.exclude || [],
-        })));
+        sendJson(
+          res,
+          200,
+          service.store.getBundles().map((bundle) => ({
+            id: bundle.id,
+            include: bundle.include || [],
+            exclude: bundle.exclude || [],
+          })),
+        );
         return;
       }
       if (req.method === "POST" && url.pathname === "/v1/concepts/validate") {
@@ -92,10 +96,14 @@ function createHttpHandler(service, options) {
       }
       if (req.method === "GET" && url.pathname === "/v1/proposals") {
         requireWriteAuth(req, writeToken);
-        sendJson(res, 200, await service.listProposals({
-          bundle: url.searchParams.get("bundle") || "",
-          status: url.searchParams.get("status") || "",
-        }));
+        sendJson(
+          res,
+          200,
+          await service.listProposals({
+            bundle: url.searchParams.get("bundle") || "",
+            status: url.searchParams.get("status") || "",
+          }),
+        );
         return;
       }
       const proposalMatch = url.pathname.match(/^\/v1\/proposals\/([^/]+)(?:\/(accept|reject))?$/);
@@ -112,7 +120,11 @@ function createHttpHandler(service, options) {
       if (proposalMatch && req.method === "POST" && proposalMatch[2] === "reject") {
         requireWriteAuth(req, writeToken);
         const body = await readBody(req);
-        sendJson(res, 200, await service.rejectProposal({ proposalId: proposalMatch[1], reason: body.reason || "" }));
+        sendJson(
+          res,
+          200,
+          await service.rejectProposal({ proposalId: proposalMatch[1], reason: body.reason || "" }),
+        );
         return;
       }
       sendJson(res, 404, { error: "Not found." });
@@ -124,12 +136,14 @@ function createHttpHandler(service, options) {
 
 async function runHttpServer(options) {
   const config = options || {};
-  const store = config.store || (config.rootPath
-    ? FileConceptStore.fromRoot(config.rootPath, {
-      proposalRoot: config.proposalRoot,
-      strictLinks: config.strictLinks,
-    })
-    : FileConceptStore.fromProject(config.projectPath, { proposalRoot: config.proposalRoot }));
+  const store =
+    config.store ||
+    (config.rootPath
+      ? FileConceptStore.fromRoot(config.rootPath, {
+          proposalRoot: config.proposalRoot,
+          strictLinks: config.strictLinks,
+        })
+      : FileConceptStore.fromProject(config.projectPath, { proposalRoot: config.proposalRoot }));
   const service = config.service || new ConceptAuthoringService(store);
   const server = http.createServer(createHttpHandler(service, { writeToken: config.writeToken }));
   const host = config.host || "127.0.0.1";

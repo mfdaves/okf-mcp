@@ -3,10 +3,7 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
 
-const {
-  deriveConceptPathSuggestion,
-  normalizeConceptPath,
-} = require("../src/authoring");
+const { deriveConceptPathSuggestion, normalizeConceptPath } = require("../src/authoring");
 
 test("concept paths reject raw empty, dot, and parent segments", () => {
   for (const unsafe of [
@@ -81,11 +78,12 @@ test("path suggestions use a dominant same-type directory only with strong evide
 
   for (const unsafePrefix of ["/absolute", "C:/absolute", "nested/../escape", "nested//empty"]) {
     assert.throws(
-      () => deriveConceptPathSuggestion({ documents: [] }, bundle, {
-        prefix: unsafePrefix,
-        type: "Reference",
-        title: "Unsafe",
-      }),
+      () =>
+        deriveConceptPathSuggestion({ documents: [] }, bundle, {
+          prefix: unsafePrefix,
+          type: "Reference",
+          title: "Unsafe",
+        }),
       /safe relative|inside the bundle/,
     );
   }

@@ -50,8 +50,14 @@ function repositoryFixture(t) {
   fs.symlinkSync("example.js", path.join(checkout, "src", "linked.js"));
   runGit(checkout, ["add", "--all"]);
   runGit(checkout, [
-    "-c", "user.name=OKF Test", "-c", "user.email=okf@example.invalid",
-    "commit", "--quiet", "-m", "fixture",
+    "-c",
+    "user.name=OKF Test",
+    "-c",
+    "user.email=okf@example.invalid",
+    "commit",
+    "--quiet",
+    "-m",
+    "fixture",
   ]);
   const revision = runGit(checkout, ["rev-parse", "HEAD"]);
   const blobOid = runGit(checkout, ["rev-parse", "HEAD:src/example.js"]);
@@ -86,10 +92,9 @@ test("reads immutable UTF-8 blobs from checkout and bare repositories", (t) => {
     source(repository, fixture.revision, "src/example.js"),
     new Map([[repository, fixture.checkout]]),
   );
-  const bareResult = readGitSource(
-    source(repository, fixture.revision, "src/example.js"),
-    { [repository]: { path: fixture.bare } },
-  );
+  const bareResult = readGitSource(source(repository, fixture.revision, "src/example.js"), {
+    [repository]: { path: fixture.bare },
+  });
 
   for (const result of [checkoutResult, bareResult]) {
     assert.equal(result.available, true);
@@ -190,7 +195,14 @@ test("uses literal process arguments and disables lazy fetches", (t) => {
 test("rejects unsafe paths, invalid ranges, and non-absolute mappings before content reads", () => {
   const repository = "okf://repositories/example";
   const revision = "a".repeat(40);
-  for (const unsafe of ["../secret", "/etc/passwd", "src//file", "src/./file", "src\\file", " src/file"]) {
+  for (const unsafe of [
+    "../secret",
+    "/etc/passwd",
+    "src//file",
+    "src/./file",
+    "src\\file",
+    " src/file",
+  ]) {
     assert.throws(() => safeGitPath(unsafe), assertCode("git_source_invalid_path"));
   }
   assert.throws(
@@ -198,13 +210,19 @@ test("rejects unsafe paths, invalid ranges, and non-absolute mappings before con
     assertCode("git_source_invalid_lines"),
   );
   assert.throws(
-    () => readGitSource(source(repository, revision, "src/file"), { [repository]: "relative/repo" }),
+    () =>
+      readGitSource(source(repository, revision, "src/file"), { [repository]: "relative/repo" }),
     assertCode("git_source_invalid_repository_mapping"),
   );
   assert.throws(
-    () => readGitSource(source(repository, revision, "src/file"), { [repository]: "/tmp" }, {
-      maxBytes: DEFAULT_MAX_GIT_SOURCE_BYTES + 1,
-    }),
+    () =>
+      readGitSource(
+        source(repository, revision, "src/file"),
+        { [repository]: "/tmp" },
+        {
+          maxBytes: DEFAULT_MAX_GIT_SOURCE_BYTES + 1,
+        },
+      ),
     (error) => error instanceof TypeError,
   );
 });
@@ -219,7 +237,10 @@ test("rejects Git symlinks, gitlinks, oversized blobs, and invalid UTF-8", (t) =
     assertCode("git_source_symlink"),
   );
   assert.throws(
-    () => readGitSource(source(repository, fixture.revision, "src/large.txt"), mapping, { maxBytes: 4 }),
+    () =>
+      readGitSource(source(repository, fixture.revision, "src/large.txt"), mapping, {
+        maxBytes: 4,
+      }),
     (error) => {
       assertCode("git_source_too_large")(error);
       assert.deepEqual(error.details, {
@@ -237,11 +258,20 @@ test("rejects Git symlinks, gitlinks, oversized blobs, and invalid UTF-8", (t) =
   );
 
   runGit(fixture.checkout, [
-    "update-index", "--add", "--cacheinfo", `160000,${fixture.revision},vendor/library`,
+    "update-index",
+    "--add",
+    "--cacheinfo",
+    `160000,${fixture.revision},vendor/library`,
   ]);
   runGit(fixture.checkout, [
-    "-c", "user.name=OKF Test", "-c", "user.email=okf@example.invalid",
-    "commit", "--quiet", "-m", "gitlink",
+    "-c",
+    "user.name=OKF Test",
+    "-c",
+    "user.email=okf@example.invalid",
+    "commit",
+    "--quiet",
+    "-m",
+    "gitlink",
   ]);
   const gitlinkRevision = runGit(fixture.checkout, ["rev-parse", "HEAD"]);
   assert.throws(
@@ -253,10 +283,13 @@ test("rejects Git symlinks, gitlinks, oversized blobs, and invalid UTF-8", (t) =
 test("batch reader selects only sources carrying Git metadata", (t) => {
   const fixture = repositoryFixture(t);
   const repository = "okf://repositories/example";
-  const results = readGitSources([
-    { resource: "https://example.invalid/policy" },
-    source(repository, fixture.revision, "src/example.js", [1, 1]),
-  ], { [repository]: fixture.bare });
+  const results = readGitSources(
+    [
+      { resource: "https://example.invalid/policy" },
+      source(repository, fixture.revision, "src/example.js", [1, 1]),
+    ],
+    { [repository]: fixture.bare },
+  );
 
   assert.equal(results.length, 1);
   assert.equal(results[0].sourceIndex, 1);

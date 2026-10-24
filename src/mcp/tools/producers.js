@@ -28,16 +28,19 @@ const tools = {
       PRODUCER_PREVIEW,
       {
         producer: nonEmptyStringParameter("Configured producer instance name."),
-        detail: detailParameter("Receipt detail level; full includes bounded bundle-relative changed paths."),
+        detail: detailParameter(
+          "Receipt detail level; full includes bounded bundle-relative changed paths.",
+        ),
       },
       ["producer"],
     ),
     enabled: GATES.producer,
     handler: async (state, args) => {
       const result = await expectedToolOperation(
-        () => state.producerService.preview(args.producer, {
-          additionalBundles: state.remoteBundles,
-        }),
+        () =>
+          state.producerService.preview(args.producer, {
+            additionalBundles: state.remoteBundles,
+          }),
         { translateTypeError: true },
       );
       return jsonContent(producerReceipt(result, args.detail || "compact"), { structured: true });
@@ -49,16 +52,19 @@ const tools = {
       PRODUCER_RUN,
       {
         producer: nonEmptyStringParameter("Configured producer instance name."),
-        detail: detailParameter("Receipt detail level; full includes bounded bundle-relative changed paths."),
+        detail: detailParameter(
+          "Receipt detail level; full includes bounded bundle-relative changed paths.",
+        ),
       },
       ["producer"],
     ),
     enabled: GATES.producerWrite,
     handler: async (state, args) => {
       const result = await expectedToolOperation(
-        () => state.producerService.run(args.producer, {
-          additionalBundles: state.remoteBundles,
-        }),
+        () =>
+          state.producerService.run(args.producer, {
+            additionalBundles: state.remoteBundles,
+          }),
         { translateTypeError: true },
       );
       if (result.applied) state.rebuildIndex();

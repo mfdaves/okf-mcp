@@ -106,8 +106,10 @@ function findOkfRoot(startDir) {
     if (fs.existsSync(indexPath) && fs.statSync(indexPath).isFile()) {
       try {
         const split = splitFrontmatter(fs.readFileSync(indexPath, "utf8"));
-        if (split.frontmatter
-          && Object.prototype.hasOwnProperty.call(split.frontmatter, "okf_version")) {
+        if (
+          split.frontmatter &&
+          Object.prototype.hasOwnProperty.call(split.frontmatter, "okf_version")
+        ) {
           return current;
         }
       } catch {
@@ -135,35 +137,45 @@ function normalizeBundles(config, configPath, errors) {
   const rootDir = path.dirname(path.resolve(configPath));
   const bundles = Array.isArray(config.bundles) ? config.bundles : [];
   if (!bundles.length) {
-    errors.push({ code: "missing_bundles", message: "Project config must define at least one bundle." });
+    errors.push({
+      code: "missing_bundles",
+      message: "Project config must define at least one bundle.",
+    });
   }
   const seen = new Set();
-  return bundles.map((bundle, index) => {
-    if (typeof bundle === "string") {
-      const id = configId(path.basename(bundle), `bundle-${index + 1}`);
+  return bundles
+    .map((bundle, index) => {
+      if (typeof bundle === "string") {
+        const id = configId(path.basename(bundle), `bundle-${index + 1}`);
+        if (seen.has(id)) {
+          errors.push({ code: "duplicate_bundle_id", bundle: id, message: "Duplicate bundle id." });
+        }
+        seen.add(id);
+        return {
+          id,
+          root: resolveProjectPath(rootDir, bundle, `bundles[${index}].root`, errors),
+          include: [],
+          exclude: [],
+        };
+      }
+      const id = configId(bundle && bundle.id, `bundle-${index + 1}`);
       if (seen.has(id)) {
         errors.push({ code: "duplicate_bundle_id", bundle: id, message: "Duplicate bundle id." });
       }
       seen.add(id);
       return {
         id,
-        root: resolveProjectPath(rootDir, bundle, `bundles[${index}].root`, errors),
-        include: [],
-        exclude: [],
+        root: resolveProjectPath(
+          rootDir,
+          (bundle && (bundle.root || bundle.path)) || ".",
+          `bundles[${index}].root`,
+          errors,
+        ),
+        include: Array.isArray(bundle.include) ? bundle.include : [],
+        exclude: Array.isArray(bundle.exclude) ? bundle.exclude : [],
       };
-    }
-    const id = configId(bundle && bundle.id, `bundle-${index + 1}`);
-    if (seen.has(id)) {
-      errors.push({ code: "duplicate_bundle_id", bundle: id, message: "Duplicate bundle id." });
-    }
-    seen.add(id);
-    return {
-      id,
-      root: resolveProjectPath(rootDir, (bundle && (bundle.root || bundle.path)) || ".", `bundles[${index}].root`, errors),
-      include: Array.isArray(bundle.include) ? bundle.include : [],
-      exclude: Array.isArray(bundle.exclude) ? bundle.exclude : [],
-    };
-  }).filter((bundle) => bundle.root);
+    })
+    .filter((bundle) => bundle.root);
 }
 
 function validateRelationTypes(config, errors) {
@@ -173,7 +185,12 @@ function validateRelationTypes(config, errors) {
   }
   (config.relationTypes || []).forEach((type) => {
     if (!/^[A-Za-z0-9_.-]+$/.test(String(type))) {
-      errors.push({ code: "invalid_relation_type_name", relationType: String(type), message: "Relation type names may contain only letters, numbers, underscores, dots, and hyphens." });
+      errors.push({
+        code: "invalid_relation_type_name",
+        relationType: String(type),
+        message:
+          "Relation type names may contain only letters, numbers, underscores, dots, and hyphens.",
+      });
     }
   });
 }
@@ -186,34 +203,62 @@ function validatePlugins(config, projectRoot, bundleIds, errors) {
   (config.plugins || []).forEach((plugin, index) => {
     const type = plugin && (plugin.type || plugin.name);
     if (!plugin || typeof plugin !== "object" || Array.isArray(plugin)) {
-      errors.push({ code: "invalid_plugin", plugin: index, message: "Plugin entries must be objects." });
+      errors.push({
+        code: "invalid_plugin",
+        plugin: index,
+        message: "Plugin entries must be objects.",
+      });
       return;
     }
     if (!["filesystem", "json-spec"].includes(String(type))) {
-      errors.push({ code: "unknown_plugin_type", plugin: plugin.name || index, pluginType: type || "", message: "Unknown generator plugin type." });
+      errors.push({
+        code: "unknown_plugin_type",
+        plugin: plugin.name || index,
+        pluginType: type || "",
+        message: "Unknown generator plugin type.",
+      });
     }
     if (!plugin.root) {
-      errors.push({ code: "missing_plugin_root", plugin: plugin.name || index, message: "Plugin root is required." });
+      errors.push({
+        code: "missing_plugin_root",
+        plugin: plugin.name || index,
+        message: "Plugin root is required.",
+      });
     } else {
       resolveProjectPath(projectRoot, plugin.root, `plugins[${index}].root`, errors);
     }
     if (!plugin.output) {
-      errors.push({ code: "missing_plugin_output", plugin: plugin.name || index, message: "Plugin output is required." });
+      errors.push({
+        code: "missing_plugin_output",
+        plugin: plugin.name || index,
+        message: "Plugin output is required.",
+      });
     } else {
       resolveProjectPath(projectRoot, plugin.output, `plugins[${index}].output`, errors);
     }
     if (plugin.bundle && !bundleIds.has(String(plugin.bundle))) {
-      errors.push({ code: "unknown_plugin_bundle", plugin: plugin.name || index, bundle: String(plugin.bundle), message: "Plugin bundle does not exist in project bundles." });
+      errors.push({
+        code: "unknown_plugin_bundle",
+        plugin: plugin.name || index,
+        bundle: String(plugin.bundle),
+        message: "Plugin bundle does not exist in project bundles.",
+      });
     }
     if (plugin.destinationBundle && !bundleIds.has(String(plugin.destinationBundle))) {
-      errors.push({ code: "unknown_plugin_destination_bundle", plugin: plugin.name || index, bundle: String(plugin.destinationBundle), message: "Plugin destinationBundle does not exist in project bundles." });
+      errors.push({
+        code: "unknown_plugin_destination_bundle",
+        plugin: plugin.name || index,
+        bundle: String(plugin.destinationBundle),
+        message: "Plugin destinationBundle does not exist in project bundles.",
+      });
     }
   });
 }
 
 function barePackageName(value) {
-  return typeof value === "string"
-    && /^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/.test(value);
+  return (
+    typeof value === "string" && /^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/.test(value)
+  );
 }
 
 function normalizeProducers(config, localBundleIds, errors) {
@@ -223,51 +268,104 @@ function normalizeProducers(config, localBundleIds, errors) {
   }
   const names = new Set();
   const bundles = new Set();
-  return (config.producers || []).map((producer, index) => {
-    const field = `producers[${index}]`;
-    if (!producer || typeof producer !== "object" || Array.isArray(producer)) {
-      errors.push({ code: "invalid_producer", producer: index, message: "Producer entries must be objects." });
-      return null;
-    }
-    const allowed = new Set(["name", "type", "package", "bundle", "config"]);
-    Object.keys(producer).filter((key) => !allowed.has(key)).forEach((key) => {
-      errors.push({ code: "unknown_producer_field", producer: producer.name || index, field: `${field}.${key}`, message: `Unknown producer field: ${key}` });
-    });
-    const name = typeof producer.name === "string" ? producer.name.trim() : "";
-    const type = typeof producer.type === "string" ? producer.type.trim() : "";
-    const packageName = typeof producer.package === "string" ? producer.package.trim() : "";
-    const bundle = typeof producer.bundle === "string" ? producer.bundle.trim() : "";
-    if (!name || !/^[A-Za-z0-9_.-]+$/.test(name)) {
-      errors.push({ code: "invalid_producer_name", producer: index, field: `${field}.name`, message: "Producer name must contain only letters, numbers, underscores, dots, and hyphens." });
-    } else if (names.has(name)) {
-      errors.push({ code: "duplicate_producer_name", producer: name, message: "Producer names must be unique." });
-    }
-    if (name) names.add(name);
-    if (!type || !/^[A-Za-z0-9_.-]+$/.test(type)) {
-      errors.push({ code: "invalid_producer_type", producer: name || index, field: `${field}.type`, message: "Producer type must contain only letters, numbers, underscores, dots, and hyphens." });
-    }
-    if (!barePackageName(packageName)) {
-      errors.push({ code: "invalid_producer_package", producer: name || index, field: `${field}.package`, message: "Producer package must be a bare npm package name without a subpath." });
-    }
-    if (!localBundleIds.has(bundle)) {
-      errors.push({ code: "unknown_producer_bundle", producer: name || index, bundle, message: "Producer bundle must name a local project bundle." });
-    } else if (bundles.has(bundle)) {
-      errors.push({ code: "duplicate_producer_bundle", producer: name || index, bundle, message: "Only one producer may manage a local bundle." });
-    }
-    if (bundle) bundles.add(bundle);
-    if (producer.config !== undefined && (!producer.config || typeof producer.config !== "object" || Array.isArray(producer.config))) {
-      errors.push({ code: "invalid_producer_config", producer: name || index, field: `${field}.config`, message: "Producer config must be an object." });
-    }
-    return {
-      name,
-      type,
-      package: packageName,
-      bundle,
-      config: producer.config && typeof producer.config === "object" && !Array.isArray(producer.config)
-        ? producer.config
-        : {},
-    };
-  }).filter(Boolean);
+  return (config.producers || [])
+    .map((producer, index) => {
+      const field = `producers[${index}]`;
+      if (!producer || typeof producer !== "object" || Array.isArray(producer)) {
+        errors.push({
+          code: "invalid_producer",
+          producer: index,
+          message: "Producer entries must be objects.",
+        });
+        return null;
+      }
+      const allowed = new Set(["name", "type", "package", "bundle", "config"]);
+      Object.keys(producer)
+        .filter((key) => !allowed.has(key))
+        .forEach((key) => {
+          errors.push({
+            code: "unknown_producer_field",
+            producer: producer.name || index,
+            field: `${field}.${key}`,
+            message: `Unknown producer field: ${key}`,
+          });
+        });
+      const name = typeof producer.name === "string" ? producer.name.trim() : "";
+      const type = typeof producer.type === "string" ? producer.type.trim() : "";
+      const packageName = typeof producer.package === "string" ? producer.package.trim() : "";
+      const bundle = typeof producer.bundle === "string" ? producer.bundle.trim() : "";
+      if (!name || !/^[A-Za-z0-9_.-]+$/.test(name)) {
+        errors.push({
+          code: "invalid_producer_name",
+          producer: index,
+          field: `${field}.name`,
+          message:
+            "Producer name must contain only letters, numbers, underscores, dots, and hyphens.",
+        });
+      } else if (names.has(name)) {
+        errors.push({
+          code: "duplicate_producer_name",
+          producer: name,
+          message: "Producer names must be unique.",
+        });
+      }
+      if (name) names.add(name);
+      if (!type || !/^[A-Za-z0-9_.-]+$/.test(type)) {
+        errors.push({
+          code: "invalid_producer_type",
+          producer: name || index,
+          field: `${field}.type`,
+          message:
+            "Producer type must contain only letters, numbers, underscores, dots, and hyphens.",
+        });
+      }
+      if (!barePackageName(packageName)) {
+        errors.push({
+          code: "invalid_producer_package",
+          producer: name || index,
+          field: `${field}.package`,
+          message: "Producer package must be a bare npm package name without a subpath.",
+        });
+      }
+      if (!localBundleIds.has(bundle)) {
+        errors.push({
+          code: "unknown_producer_bundle",
+          producer: name || index,
+          bundle,
+          message: "Producer bundle must name a local project bundle.",
+        });
+      } else if (bundles.has(bundle)) {
+        errors.push({
+          code: "duplicate_producer_bundle",
+          producer: name || index,
+          bundle,
+          message: "Only one producer may manage a local bundle.",
+        });
+      }
+      if (bundle) bundles.add(bundle);
+      if (
+        producer.config !== undefined &&
+        (!producer.config || typeof producer.config !== "object" || Array.isArray(producer.config))
+      ) {
+        errors.push({
+          code: "invalid_producer_config",
+          producer: name || index,
+          field: `${field}.config`,
+          message: "Producer config must be an object.",
+        });
+      }
+      return {
+        name,
+        type,
+        package: packageName,
+        bundle,
+        config:
+          producer.config && typeof producer.config === "object" && !Array.isArray(producer.config)
+            ? producer.config
+            : {},
+      };
+    })
+    .filter(Boolean);
 }
 
 function normalizeRemoteBundles(config, errors) {
@@ -280,15 +378,28 @@ function normalizeRemoteBundles(config, errors) {
   return remotes.map((remote, index) => {
     const id = configId(remote && remote.id, `remote-${index + 1}`);
     if (seen.has(id)) {
-      errors.push({ code: "duplicate_remote_bundle_id", bundle: id, message: "Duplicate remote bundle id." });
+      errors.push({
+        code: "duplicate_remote_bundle_id",
+        bundle: id,
+        message: "Duplicate remote bundle id.",
+      });
     }
     seen.add(id);
     const provider = String((remote && remote.provider) || "github");
     if (provider !== "github") {
-      errors.push({ code: "unsupported_remote_provider", bundle: id, provider, message: "Only github remote bundles are supported." });
+      errors.push({
+        code: "unsupported_remote_provider",
+        bundle: id,
+        provider,
+        message: "Only github remote bundles are supported.",
+      });
     }
     if (!remote || !remote.url) {
-      errors.push({ code: "missing_remote_url", bundle: id, message: "Remote bundle url is required." });
+      errors.push({
+        code: "missing_remote_url",
+        bundle: id,
+        message: "Remote bundle url is required.",
+      });
     }
     return {
       id,
@@ -301,9 +412,7 @@ function normalizeRemoteBundles(config, errors) {
 }
 
 function loadProjectConfig(configPath) {
-  const requestedPath = configPath
-    ? path.resolve(configPath)
-    : findProjectConfig(process.cwd());
+  const requestedPath = configPath ? path.resolve(configPath) : findProjectConfig(process.cwd());
   if (!requestedPath) {
     throw new Error("No okf.project.yaml or okf.project.json found. Pass --project or --bundle.");
   }
@@ -313,19 +422,32 @@ function loadProjectConfig(configPath) {
   if (!rawConfig || typeof rawConfig !== "object" || Array.isArray(rawConfig)) {
     errors.push({ code: "invalid_project_config", message: "Project config must be an object." });
   }
-  const config = (!rawConfig || typeof rawConfig !== "object" || Array.isArray(rawConfig)) ? {} : rawConfig;
+  const config =
+    !rawConfig || typeof rawConfig !== "object" || Array.isArray(rawConfig) ? {} : rawConfig;
   validateRelationTypes(config, errors);
   if (config.strictLinks !== undefined && typeof config.strictLinks !== "boolean") {
-    errors.push({ code: "invalid_strict_links", field: "strictLinks", message: "strictLinks must be a boolean." });
+    errors.push({
+      code: "invalid_strict_links",
+      field: "strictLinks",
+      message: "strictLinks must be a boolean.",
+    });
   }
-  const relationTypes = new Set(DEFAULT_RELATION_TYPES.concat(Array.isArray(config.relationTypes) ? config.relationTypes.map(String) : []));
+  const relationTypes = new Set(
+    DEFAULT_RELATION_TYPES.concat(
+      Array.isArray(config.relationTypes) ? config.relationTypes.map(String) : [],
+    ),
+  );
   const bundles = normalizeBundles(config, resolvedPath, errors);
   const remoteBundles = normalizeRemoteBundles(config, errors);
   const localBundleIds = new Set(bundles.map((bundle) => bundle.id));
   const allBundleIds = new Set(bundles.map((bundle) => bundle.id));
   remoteBundles.forEach((bundle) => {
     if (allBundleIds.has(bundle.id)) {
-      errors.push({ code: "duplicate_bundle_id", bundle: bundle.id, message: "Remote bundle id duplicates a local bundle id." });
+      errors.push({
+        code: "duplicate_bundle_id",
+        bundle: bundle.id,
+        message: "Remote bundle id duplicates a local bundle id.",
+      });
     }
     allBundleIds.add(bundle.id);
   });

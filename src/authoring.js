@@ -12,21 +12,23 @@ const {
   resolveLinkPath,
   semanticReferences,
 } = require("./indexer");
-const {
-  isExternalReference,
-  isLocalAssetReference,
-  resolveBundleAssetPath,
-} = require("./assets");
+const { isExternalReference, isLocalAssetReference, resolveBundleAssetPath } = require("./assets");
 const { buildV02MigrationPlan, checkV02Migration } = require("./migration");
 const { validateIndex } = require("./validation");
 
-const COMPUTATION_FIELDS = new Set(["runtime", "parameters", "computation", "executor", "attester"]);
+const COMPUTATION_FIELDS = new Set([
+  "runtime",
+  "parameters",
+  "computation",
+  "executor",
+  "attester",
+]);
 
 function slug(value, fallback) {
-  const text = String(value || fallback || "concept").trim().toLowerCase();
-  return text
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "") || String(fallback || "concept");
+  const text = String(value || fallback || "concept")
+    .trim()
+    .toLowerCase();
+  return text.replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || String(fallback || "concept");
 }
 
 function isConfiguredGeneratorOutput(project, absolutePath) {
@@ -34,14 +36,22 @@ function isConfiguredGeneratorOutput(project, absolutePath) {
   const pluginOutput = (project.plugins || []).some((plugin) => {
     if (!plugin || !plugin.output) return false;
     const relative = path.relative(path.resolve(project.root, String(plugin.output)), absolutePath);
-    return relative === "" || (!relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative));
+    return (
+      relative === "" ||
+      (!relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative))
+    );
   });
   if (pluginOutput) return true;
-  const managedBundles = new Set((project.producers || []).map((producer) => producer && producer.bundle));
+  const managedBundles = new Set(
+    (project.producers || []).map((producer) => producer && producer.bundle),
+  );
   return (project.bundles || []).some((bundle) => {
     if (!bundle || !managedBundles.has(bundle.id)) return false;
     const relative = path.relative(path.resolve(bundle.root), absolutePath);
-    return relative === "" || (!relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative));
+    return (
+      relative === "" ||
+      (!relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative))
+    );
   });
 }
 
@@ -55,7 +65,9 @@ function normalizeConceptPath(value) {
   }
   const rawParts = raw.split("/");
   if (rawParts.some((part) => !part || part === "." || part === ".." || part.startsWith("."))) {
-    throw new Error("Concept path must be a safe relative path without empty, hidden, dot, or parent segments.");
+    throw new Error(
+      "Concept path must be a safe relative path without empty, hidden, dot, or parent segments.",
+    );
   }
   if (rawParts.slice(0, -1).some((part) => part.toLowerCase().endsWith(".md"))) {
     throw new Error("Concept path cannot place a Markdown file inside another Markdown path.");
@@ -78,9 +90,7 @@ function normalizeConceptPath(value) {
 }
 
 function deriveConceptPathSuggestion(index, bundle, input) {
-  const rawPrefix = input && input.prefix
-    ? normalizeSlashes(String(input.prefix).trim())
-    : "";
+  const rawPrefix = input && input.prefix ? normalizeSlashes(String(input.prefix).trim()) : "";
   if (rawPrefix.startsWith("/") || /^[A-Za-z]:\//.test(rawPrefix)) {
     throw new Error("Path prefix must be a safe relative path inside the bundle.");
   }
@@ -89,9 +99,7 @@ function deriveConceptPathSuggestion(index, bundle, input) {
     normalizeConceptPath(`${prefix}/placeholder.md`);
   }
   const type = String((input && input.type) || "").trim();
-  const typePart = type === "Attested Computation"
-    ? "computations"
-    : slug(type, "concept");
+  const typePart = type === "Attested Computation" ? "computations" : slug(type, "concept");
   const titlePart = slug(input && input.title, typePart);
   let parent = prefix ? `${prefix}/${typePart}` : typePart;
   let strategy = prefix ? "explicit_prefix" : "type_slug";
@@ -109,9 +117,9 @@ function deriveConceptPathSuggestion(index, bundle, input) {
       const normalizedDirectory = directory === "." ? "" : directory;
       counts.set(normalizedDirectory, (counts.get(normalizedDirectory) || 0) + 1);
     });
-    const dominant = Array.from(counts.entries()).sort((left, right) => (
-      right[1] - left[1] || left[0].localeCompare(right[0])
-    ))[0];
+    const dominant = Array.from(counts.entries()).sort(
+      (left, right) => right[1] - left[1] || left[0].localeCompare(right[0]),
+    )[0];
     const dominantCount = dominant ? dominant[1] : 0;
     const ratio = matching.length ? dominantCount / matching.length : 0;
     evidence = {
@@ -137,17 +145,21 @@ function renderFrontmatter(frontmatter) {
   const values = Object.fromEntries(
     Object.entries(frontmatter || {}).filter((entry) => entry[1] !== undefined),
   );
-  return yaml.dump(values, {
-    schema: yaml.CORE_SCHEMA,
-    noRefs: true,
-    lineWidth: -1,
-    sortKeys: false,
-  }).trimEnd();
+  return yaml
+    .dump(values, {
+      schema: yaml.CORE_SCHEMA,
+      noRefs: true,
+      lineWidth: -1,
+      sortKeys: false,
+    })
+    .trimEnd();
 }
 
 function renderConceptMarkdown(input) {
   const frontmatter = Object.assign({}, input && input.frontmatter ? input.frontmatter : {});
-  const body = String((input && input.body) || "").replace(/\r\n/g, "\n").trim();
+  const body = String((input && input.body) || "")
+    .replace(/\r\n/g, "\n")
+    .trim();
   return [
     "---",
     renderFrontmatter(frontmatter),
@@ -191,9 +203,11 @@ class ConceptAuthoringService {
         ? bundles[0]
         : null;
     if (!bundle) {
-      throw new Error(id
-        ? `Unknown writable OKF bundle: ${id}`
-        : "A bundle id is required unless exactly one writable OKF root is configured.");
+      throw new Error(
+        id
+          ? `Unknown writable OKF bundle: ${id}`
+          : "A bundle id is required unless exactly one writable OKF root is configured.",
+      );
     }
     return bundle;
   }
@@ -211,9 +225,11 @@ class ConceptAuthoringService {
     const matches = titleMatches.slice(0, 5).map((doc) => conceptMatchSummary(doc));
     const available = !fs.existsSync(target.absolutePath);
     const only = matches.length === 1 && matches[0];
-    const generatorOwned = only && (only.generatedFile
-      || only.generatedBy && only.generatedBy.startsWith("process:")
-      || isConfiguredGeneratorOutput(this.store.project, titleMatches[0].absolutePath));
+    const generatorOwned =
+      only &&
+      (only.generatedFile ||
+        (only.generatedBy && only.generatedBy.startsWith("process:")) ||
+        isConfiguredGeneratorOutput(this.store.project, titleMatches[0].absolutePath));
     return {
       bundle: bundle.id,
       path: suggestion.path,
@@ -225,9 +241,14 @@ class ConceptAuthoringService {
       titleMatchesOmitted: Math.max(0, titleMatches.length - matches.length),
       ...(matches.length === 1 ? { existingConcept: matches[0] } : {}),
       recommendedOperation: titleMatches.length
-        ? titleMatches.length > 1 ? "review_matches"
-          : generatorOwned ? "change_generator" : "update"
-        : available ? "create" : "inspect_existing",
+        ? titleMatches.length > 1
+          ? "review_matches"
+          : generatorOwned
+            ? "change_generator"
+            : "update"
+        : available
+          ? "create"
+          : "inspect_existing",
       strategy: suggestion.strategy,
       evidence: suggestion.evidence,
     };
@@ -238,7 +259,11 @@ class ConceptAuthoringService {
     const bundleId = bundle.id;
     const conceptPath = normalizeConceptPath(input && input.path);
     const frontmatter = Object.assign({}, input && input.frontmatter ? input.frontmatter : {});
-    const markdown = renderConceptMarkdown({ path: conceptPath, frontmatter, body: input && input.body });
+    const markdown = renderConceptMarkdown({
+      path: conceptPath,
+      frontmatter,
+      body: input && input.body,
+    });
     const index = this.store.getIndex();
     const replace = options && options.replace;
     const errors = [];
@@ -247,26 +272,30 @@ class ConceptAuthoringService {
 
     function isReplacedConcept(existing) {
       return Boolean(
-        replace
-        && existing
-        && existing.bundle === replace.bundle
-        && existing.path === replace.path,
+        replace && existing && existing.bundle === replace.bundle && existing.path === replace.path,
       );
     }
 
     try {
       doc = parseMarkdownText(bundle, conceptPath, markdown, `${bundle.root}/${conceptPath}`);
     } catch (error) {
-      errors.push({ code: "parse_error", bundle: bundleId, path: conceptPath, message: error.message });
+      errors.push({
+        code: "parse_error",
+        bundle: bundleId,
+        path: conceptPath,
+        message: error.message,
+      });
       return { valid: false, bundle: bundleId, path: conceptPath, markdown, errors, warnings };
     }
 
     doc.warnings.forEach((warning) => {
       const entry = Object.assign({ bundle: bundleId }, warning);
-      if (entry.code === "missing_type"
-        || entry.code === "missing_frontmatter"
-        || entry.code === "invalid_id"
-        || entry.layer === "v0.2") {
+      if (
+        entry.code === "missing_type" ||
+        entry.code === "missing_frontmatter" ||
+        entry.code === "invalid_id" ||
+        entry.layer === "v0.2"
+      ) {
         errors.push(entry);
       } else {
         warnings.push(entry);
@@ -275,16 +304,35 @@ class ConceptAuthoringService {
 
     const existingAtPath = index.byUri.get(doc.pathUri);
     if (existingAtPath && !isReplacedConcept(existingAtPath)) {
-      errors.push({ code: "duplicate_uri", bundle: bundleId, path: conceptPath, uri: doc.pathUri, message: "Concept path already exists." });
+      errors.push({
+        code: "duplicate_uri",
+        bundle: bundleId,
+        path: conceptPath,
+        uri: doc.pathUri,
+        message: "Concept path already exists.",
+      });
     }
     const existingAtUri = index.byUri.get(doc.uri);
     if (existingAtUri && !isReplacedConcept(existingAtUri)) {
-      errors.push({ code: "duplicate_uri", bundle: bundleId, path: conceptPath, uri: doc.uri, message: "Canonical Concept ID already exists." });
+      errors.push({
+        code: "duplicate_uri",
+        bundle: bundleId,
+        path: conceptPath,
+        uri: doc.uri,
+        message: "Canonical Concept ID already exists.",
+      });
     }
     if (doc.customId) {
       const existingAtCustomId = index.byUri.get(doc.customId);
       if (existingAtCustomId && !isReplacedConcept(existingAtCustomId)) {
-        errors.push({ code: "duplicate_uri", alias: true, bundle: bundleId, path: conceptPath, uri: doc.customId, message: "Custom id alias already exists." });
+        errors.push({
+          code: "duplicate_uri",
+          alias: true,
+          bundle: bundleId,
+          path: conceptPath,
+          uri: doc.customId,
+          message: "Custom id alias already exists.",
+        });
       }
     }
     if (doc.type === "Attested Computation" && !(options && options.allowComputation)) {
@@ -302,14 +350,27 @@ class ConceptAuthoringService {
         return;
       }
       if (resolved.outsideRoot) {
-        warnings.push({ code: "link_outside_root", bundle: bundleId, path: doc.path, href: link.href, message: "Markdown link resolves outside bundle root." });
+        warnings.push({
+          code: "link_outside_root",
+          bundle: bundleId,
+          path: doc.path,
+          href: link.href,
+          message: "Markdown link resolves outside bundle root.",
+        });
         return;
       }
       const targetPathUri = `okf://${bundleId}/${resolved.path}`;
       const target = index.byPathUri && index.byPathUri.get(targetPathUri);
       const targetExists = Boolean(target && target.pathUri === targetPathUri);
       if (!targetExists && resolved.uri !== doc.uri && resolved.uri !== doc.pathUri) {
-        const entry = { code: "broken_link", bundle: bundleId, path: doc.path, href: link.href, target: resolved.path, message: "Markdown link target does not exist in bundle." };
+        const entry = {
+          code: "broken_link",
+          bundle: bundleId,
+          path: doc.path,
+          href: link.href,
+          target: resolved.path,
+          message: "Markdown link target does not exist in bundle.",
+        };
         if (this.store.strictLinks) {
           errors.push(entry);
         } else {
@@ -319,7 +380,9 @@ class ConceptAuthoringService {
     });
 
     semanticReferences(doc).forEach((reference) => {
-      const selfTarget = [doc.uri, doc.pathUri, doc.customId].filter(Boolean).includes(reference.value);
+      const selfTarget = [doc.uri, doc.pathUri, doc.customId]
+        .filter(Boolean)
+        .includes(reference.value);
       if (reference.value.startsWith("okf://")) {
         const target = index.byUri.get(reference.value);
         if (!selfTarget && (!target || target.reserved || !target.valid)) {
@@ -338,8 +401,9 @@ class ConceptAuthoringService {
       if (isExternalReference(reference.value)) {
         return;
       }
-      const computationDependency = doc.type === "Attested Computation"
-        && ["computation", "executor", "attester"].includes(reference.kind);
+      const computationDependency =
+        doc.type === "Attested Computation" &&
+        ["computation", "executor", "attester"].includes(reference.kind);
       if (computationDependency && options && options.allowComputation) {
         return;
       }
@@ -379,38 +443,60 @@ class ConceptAuthoringService {
     });
 
     const relationTypes = new Set(this.store.getRelationTypes().map(String));
-    doc.relations.map((relation) => relationFrom(relation, doc)).forEach((relation) => {
-      const type = String(relation.type || "related_to");
-      const targetUri = String(relation.target || "").trim();
-      if (!targetUri) {
-        errors.push({ code: "missing_relation_target", bundle: bundleId, path: doc.path, relationType: type, message: "Relation has no target." });
-        return;
-      }
-      const safeCustomType = /^[A-Za-z0-9_.-]+$/.test(type);
-      if (!relationTypes.has(type) && !(this.store.allowCustomRelationTypes && safeCustomType)) {
-        errors.push({ code: "invalid_relation_type", bundle: bundleId, path: doc.path, relationType: type, message: `Unsupported relation type: ${type}` });
-      }
-      let target = index.byUri.get(targetUri);
-      let internalTarget = targetUri.startsWith("okf://");
-      if (!target && !/^[A-Za-z][A-Za-z0-9+.-]*:/u.test(targetUri)) {
-        internalTarget = true;
-        const resolved = resolveLinkPath(bundle, doc.path, targetUri, index.byPathUri);
-        if (resolved && !resolved.outsideRoot) {
-          const pathUri = `okf://${bundleId}/${resolved.path}`;
-          target = index.byPathUri.get(pathUri);
-          if (!target && !path.posix.extname(resolved.path)) {
-            target = index.byPathUri.get(`${pathUri}.md`);
+    doc.relations
+      .map((relation) => relationFrom(relation, doc))
+      .forEach((relation) => {
+        const type = String(relation.type || "related_to");
+        const targetUri = String(relation.target || "").trim();
+        if (!targetUri) {
+          errors.push({
+            code: "missing_relation_target",
+            bundle: bundleId,
+            path: doc.path,
+            relationType: type,
+            message: "Relation has no target.",
+          });
+          return;
+        }
+        const safeCustomType = /^[A-Za-z0-9_.-]+$/.test(type);
+        if (!relationTypes.has(type) && !(this.store.allowCustomRelationTypes && safeCustomType)) {
+          errors.push({
+            code: "invalid_relation_type",
+            bundle: bundleId,
+            path: doc.path,
+            relationType: type,
+            message: `Unsupported relation type: ${type}`,
+          });
+        }
+        let target = index.byUri.get(targetUri);
+        let internalTarget = targetUri.startsWith("okf://");
+        if (!target && !/^[A-Za-z][A-Za-z0-9+.-]*:/u.test(targetUri)) {
+          internalTarget = true;
+          const resolved = resolveLinkPath(bundle, doc.path, targetUri, index.byPathUri);
+          if (resolved && !resolved.outsideRoot) {
+            const pathUri = `okf://${bundleId}/${resolved.path}`;
+            target = index.byPathUri.get(pathUri);
+            if (!target && !path.posix.extname(resolved.path)) {
+              target = index.byPathUri.get(`${pathUri}.md`);
+            }
           }
         }
-      }
-      const selfTarget = targetUri === doc.uri || targetUri === doc.pathUri || targetUri === doc.customId
-        || (target && target.uri === doc.uri);
-      if (internalTarget
-        && !selfTarget
-        && (!target || target.reserved || !target.valid)) {
-        errors.push({ code: "broken_relation", bundle: bundleId, path: doc.path, target: targetUri, relationType: type, message: "Relation target does not resolve to a valid concept." });
-      }
-    });
+        const selfTarget =
+          targetUri === doc.uri ||
+          targetUri === doc.pathUri ||
+          targetUri === doc.customId ||
+          (target && target.uri === doc.uri);
+        if (internalTarget && !selfTarget && (!target || target.reserved || !target.valid)) {
+          errors.push({
+            code: "broken_relation",
+            bundle: bundleId,
+            path: doc.path,
+            target: targetUri,
+            relationType: type,
+            message: "Relation target does not resolve to a valid concept.",
+          });
+        }
+      });
 
     return {
       valid: errors.length === 0,
@@ -471,25 +557,28 @@ class ConceptAuthoringService {
   validateUpdateCandidate(input, existing) {
     const existingComputation = existing.type === "Attested Computation";
     const candidateFrontmatter = input.frontmatter || {};
-    const computationContractChanged = existingComputation && (
-      candidateFrontmatter.type !== existing.frontmatter.type
-      || String(input.body || "") !== String(existing.body || "")
-      || Array.from(COMPUTATION_FIELDS).some((field) => (
-        !isDeepStrictEqual(candidateFrontmatter[field], existing.frontmatter[field])
-      ))
-    );
-    const validation = this.validateConcept({
-      bundle: existing.bundle,
-      path: existing.path,
-      frontmatter: candidateFrontmatter,
-      body: input.body,
-    }, {
-      allowComputation: existingComputation && !computationContractChanged,
-      replace: {
+    const computationContractChanged =
+      existingComputation &&
+      (candidateFrontmatter.type !== existing.frontmatter.type ||
+        String(input.body || "") !== String(existing.body || "") ||
+        Array.from(COMPUTATION_FIELDS).some(
+          (field) => !isDeepStrictEqual(candidateFrontmatter[field], existing.frontmatter[field]),
+        ));
+    const validation = this.validateConcept(
+      {
         bundle: existing.bundle,
         path: existing.path,
+        frontmatter: candidateFrontmatter,
+        body: input.body,
       },
-    });
+      {
+        allowComputation: existingComputation && !computationContractChanged,
+        replace: {
+          bundle: existing.bundle,
+          path: existing.path,
+        },
+      },
+    );
     if (computationContractChanged) {
       validation.errors.push({
         code: "immutable_computation_contract",
@@ -534,26 +623,35 @@ class ConceptAuthoringService {
     if (!patch || typeof patch !== "object" || Array.isArray(patch)) {
       throw new Error("frontmatter must be an object when provided.");
     }
-    const removeKeys = input && input.removeFrontmatterKeys === undefined
-      ? []
-      : input.removeFrontmatterKeys;
-    if (!Array.isArray(removeKeys) || removeKeys.some((key) => typeof key !== "string" || !key.trim())) {
+    const removeKeys =
+      input && input.removeFrontmatterKeys === undefined ? [] : input.removeFrontmatterKeys;
+    if (
+      !Array.isArray(removeKeys) ||
+      removeKeys.some((key) => typeof key !== "string" || !key.trim())
+    ) {
       throw new Error("removeFrontmatterKeys must be an array of non-empty strings.");
     }
     if (removeKeys.includes("id")) {
       throw new Error("Concept updates cannot remove the existing concept id.");
     }
     const hasBody = Boolean(input && Object.prototype.hasOwnProperty.call(input, "body"));
-    const touchesComputationContract = Object.keys(patch).some((key) => COMPUTATION_FIELDS.has(key))
-      || removeKeys.some((key) => COMPUTATION_FIELDS.has(key))
-      || (Object.prototype.hasOwnProperty.call(patch, "type") && patch.type !== existing.type)
-      || (existing.type === "Attested Computation" && hasBody);
-    if (patch.type === "Attested Computation" && existing.type !== "Attested Computation"
-      || touchesComputationContract) {
-      throw new Error("Generic updates cannot create or modify Attested Computation contracts or code.");
+    const touchesComputationContract =
+      Object.keys(patch).some((key) => COMPUTATION_FIELDS.has(key)) ||
+      removeKeys.some((key) => COMPUTATION_FIELDS.has(key)) ||
+      (Object.prototype.hasOwnProperty.call(patch, "type") && patch.type !== existing.type) ||
+      (existing.type === "Attested Computation" && hasBody);
+    if (
+      (patch.type === "Attested Computation" && existing.type !== "Attested Computation") ||
+      touchesComputationContract
+    ) {
+      throw new Error(
+        "Generic updates cannot create or modify Attested Computation contracts or code.",
+      );
     }
     if (!Object.keys(patch).length && !removeKeys.length && !hasBody) {
-      throw new Error("okf_propose_update requires a frontmatter change, a removed key, or a body replacement.");
+      throw new Error(
+        "okf_propose_update requires a frontmatter change, a removed key, or a body replacement.",
+      );
     }
     const frontmatter = Object.assign({}, existing.frontmatter, patch);
     removeKeys.forEach((key) => {
@@ -607,7 +705,9 @@ class ConceptAuthoringService {
       }
       const content = fs.readFileSync(target.absolutePath);
       if (content.length > 1024 * 1024) {
-        throw new Error(`Referenced ${field} dependency exceeded the 1 MiB review limit while being read.`);
+        throw new Error(
+          `Referenced ${field} dependency exceeded the 1 MiB review limit while being read.`,
+        );
       }
       const bundleId = dependencyBundle || candidate.bundle;
       const key = `${field}\u0000${bundleId}\u0000${target.relativePath}`;
@@ -620,8 +720,17 @@ class ConceptAuthoringService {
       });
     };
     assetFiles.forEach((asset, index) => {
-      if (!asset || typeof asset !== "object" || Array.isArray(asset) || typeof asset.content !== "string") {
-        validation.errors.push({ code: "invalid_computation_asset", index, message: "Computation asset entries require path and text content." });
+      if (
+        !asset ||
+        typeof asset !== "object" ||
+        Array.isArray(asset) ||
+        typeof asset.content !== "string"
+      ) {
+        validation.errors.push({
+          code: "invalid_computation_asset",
+          index,
+          message: "Computation asset entries require path and text content.",
+        });
         return;
       }
       try {
@@ -634,7 +743,12 @@ class ConceptAuthoringService {
         }
         normalizedAssetFiles.push({ path: target.relativePath, content: asset.content });
       } catch (error) {
-        validation.errors.push({ code: "invalid_computation_asset_path", index, path: asset.path, message: error.message });
+        validation.errors.push({
+          code: "invalid_computation_asset_path",
+          index,
+          path: asset.path,
+          message: error.message,
+        });
       }
     });
     const computation = validation.signals && validation.signals.computation;
@@ -644,7 +758,11 @@ class ConceptAuthoringService {
         ? path.posix.normalize(rawPath.slice(1))
         : path.posix.normalize(path.posix.join(path.posix.dirname(validation.path), rawPath));
       if (resolvedPath.startsWith("../") || resolvedPath === "..") {
-        validation.errors.push({ code: "computation_asset_outside_root", path: rawPath, message: "Computation file resolves outside the bundle." });
+        validation.errors.push({
+          code: "computation_asset_outside_root",
+          path: rawPath,
+          message: "Computation file resolves outside the bundle.",
+        });
       } else if (resolvedPath === validation.path || resolvedPath.toLowerCase().endsWith(".md")) {
         validation.errors.push({
           code: "invalid_computation_asset_target",
@@ -653,23 +771,42 @@ class ConceptAuthoringService {
         });
       } else {
         const proposed = normalizedAssetFiles.filter((asset) => asset.path === resolvedPath);
-        if (normalizedAssetFiles.length && (proposed.length !== 1 || normalizedAssetFiles.length !== 1)) {
-          validation.errors.push({ code: "computation_asset_mismatch", path: rawPath, message: "The coordinated proposal may contain only the declared computation file." });
+        if (
+          normalizedAssetFiles.length &&
+          (proposed.length !== 1 || normalizedAssetFiles.length !== 1)
+        ) {
+          validation.errors.push({
+            code: "computation_asset_mismatch",
+            path: rawPath,
+            message: "The coordinated proposal may contain only the declared computation file.",
+          });
         }
         if (!proposed.length) {
           try {
             const existing = this.store.resolveBundleFile(candidate.bundle, resolvedPath);
-            if (!fs.existsSync(existing.absolutePath) || !fs.statSync(existing.absolutePath).isFile()) {
-              throw new Error("Declared computation file does not exist and was not included in the proposal.");
+            if (
+              !fs.existsSync(existing.absolutePath) ||
+              !fs.statSync(existing.absolutePath).isFile()
+            ) {
+              throw new Error(
+                "Declared computation file does not exist and was not included in the proposal.",
+              );
             }
             recordDependency("computation", existing, candidate.bundle);
           } catch (error) {
-            validation.errors.push({ code: "missing_computation_asset", path: rawPath, message: error.message });
+            validation.errors.push({
+              code: "missing_computation_asset",
+              path: rawPath,
+              message: error.message,
+            });
           }
         }
       }
     } else if (normalizedAssetFiles.length) {
-      validation.errors.push({ code: "unexpected_computation_asset", message: "Inline computations cannot include an external computation asset." });
+      validation.errors.push({
+        code: "unexpected_computation_asset",
+        message: "Inline computations cannot include an external computation asset.",
+      });
     }
     const dependencyIndex = this.store.getIndex();
     ["executor", "attester"].forEach((field) => {
@@ -680,7 +817,12 @@ class ConceptAuthoringService {
       if (value.startsWith("okf://")) {
         const selfUris = [validation.uri, validation.pathUri, validation.customId].filter(Boolean);
         const targetDocument = dependencyIndex.byUri.get(value);
-        if (selfUris.includes(value) || !targetDocument || targetDocument.reserved || !targetDocument.valid) {
+        if (
+          selfUris.includes(value) ||
+          !targetDocument ||
+          targetDocument.reserved ||
+          !targetDocument.valid
+        ) {
           validation.errors.push({
             code: `invalid_${field}_concept`,
             field: `${field}.resource`,
@@ -693,7 +835,12 @@ class ConceptAuthoringService {
           const target = this.store.resolveBundleFile(targetDocument.bundle, targetDocument.path);
           recordDependency(field, target, targetDocument.bundle);
         } catch (error) {
-          validation.errors.push({ code: `missing_${field}_asset`, field: `${field}.resource`, path: value, message: error.message });
+          validation.errors.push({
+            code: `missing_${field}_asset`,
+            field: `${field}.resource`,
+            path: value,
+            message: error.message,
+          });
         }
         return;
       }
@@ -709,29 +856,41 @@ class ConceptAuthoringService {
           throw new Error(`${field} resource does not exist.`);
         }
         if (resolvedPath.toLowerCase().endsWith(".md")) {
-          const targetDocument = dependencyIndex.byPathUri.get(`okf://${candidate.bundle}/${resolvedPath}`);
+          const targetDocument = dependencyIndex.byPathUri.get(
+            `okf://${candidate.bundle}/${resolvedPath}`,
+          );
           if (!targetDocument || targetDocument.reserved || !targetDocument.valid) {
-            throw new Error(`${field} Markdown resource must resolve to a valid non-reserved concept.`);
+            throw new Error(
+              `${field} Markdown resource must resolve to a valid non-reserved concept.`,
+            );
           }
         }
         recordDependency(field, target, candidate.bundle);
       } catch (error) {
-        validation.errors.push({ code: `missing_${field}_asset`, field: `${field}.resource`, path: value, message: error.message });
+        validation.errors.push({
+          code: `missing_${field}_asset`,
+          field: `${field}.resource`,
+          path: value,
+          message: error.message,
+        });
       }
     });
     validation.assetFiles = normalizedAssetFiles;
-    validation.dependencyRevisions = Array.from(dependencyRevisions.values()).sort((left, right) => (
-      `${left.field}\u0000${left.bundle}\u0000${left.path}`.localeCompare(`${right.field}\u0000${right.bundle}\u0000${right.path}`)
-    ));
+    validation.dependencyRevisions = Array.from(dependencyRevisions.values()).sort((left, right) =>
+      `${left.field}\u0000${left.bundle}\u0000${left.path}`.localeCompare(
+        `${right.field}\u0000${right.bundle}\u0000${right.path}`,
+      ),
+    );
     validation.valid = validation.errors.length === 0;
     return validation;
   }
 
   async proposeAttestedComputation(input) {
     const validation = this.validateAttestedComputation(input || {}, {
-      assetFiles: input && input.computationPath
-        ? [{ path: input.computationPath, content: String(input.computationContent || "") }]
-        : [],
+      assetFiles:
+        input && input.computationPath
+          ? [{ path: input.computationPath, content: String(input.computationContent || "") }]
+          : [],
     });
     if (!validation.valid) {
       return { created: false, validation };
@@ -759,40 +918,53 @@ class ConceptAuthoringService {
       doc = parseMarkdownText(bundle, "index.md", proposal.markdown, `${bundle.root}/index.md`);
       errors.push.apply(errors, doc.conformanceDiagnostics || []);
     } catch (error) {
-      errors.push({ code: "parse_error", bundle: bundle.id, path: "index.md", message: error.message });
+      errors.push({
+        code: "parse_error",
+        bundle: bundle.id,
+        path: "index.md",
+        message: error.message,
+      });
     }
     const currentIndex = this.store.getIndex();
-    const currentRoot = currentIndex.documents.find((entry) => (
-      entry.bundle === proposal.bundle && entry.path === "index.md"
-    ));
-    const expectedMarkdown = currentRoot ? [
-      "---",
-      renderFrontmatter({ okf_version: "0.2" }),
-      "---",
-      "",
-      String(currentRoot.body || "").replace(/^\s+/, ""),
-    ].join("\n") : null;
-    if (!doc
-      || doc.frontmatter.okf_version !== "0.2"
-      || !proposal.frontmatter
-      || proposal.frontmatter.okf_version !== "0.2"
-      || Object.keys(proposal.frontmatter).some((key) => key !== "okf_version")
-      || proposal.body !== (currentRoot && currentRoot.body)
-      || proposal.markdown !== expectedMarkdown) {
+    const currentRoot = currentIndex.documents.find(
+      (entry) => entry.bundle === proposal.bundle && entry.path === "index.md",
+    );
+    const expectedMarkdown = currentRoot
+      ? [
+          "---",
+          renderFrontmatter({ okf_version: "0.2" }),
+          "---",
+          "",
+          String(currentRoot.body || "").replace(/^\s+/, ""),
+        ].join("\n")
+      : null;
+    if (
+      !doc ||
+      doc.frontmatter.okf_version !== "0.2" ||
+      !proposal.frontmatter ||
+      proposal.frontmatter.okf_version !== "0.2" ||
+      Object.keys(proposal.frontmatter).some((key) => key !== "okf_version") ||
+      proposal.body !== (currentRoot && currentRoot.body) ||
+      proposal.markdown !== expectedMarkdown
+    ) {
       errors.push({
         code: "invalid_migration_version_declaration",
         bundle: bundle.id,
         path: "index.md",
-        message: "Migration index acceptance may only add the exact okf_version: 0.2 declaration to the unchanged current root body.",
+        message:
+          "Migration index acceptance may only add the exact okf_version: 0.2 declaration to the unchanged current root body.",
       });
     }
     const report = checkV02Migration(currentIndex, { bundle: proposal.bundle });
     errors.push.apply(errors, report.blockers || []);
     const projectValidation = validateIndex(currentIndex, proposal.bundle);
     if (!projectValidation.validForProject) {
-      errors.push.apply(errors, projectValidation.diagnostics.filter((entry) => (
-        entry.invalidatesProject || entry.severity === "error"
-      )));
+      errors.push.apply(
+        errors,
+        projectValidation.diagnostics.filter(
+          (entry) => entry.invalidatesProject || entry.severity === "error",
+        ),
+      );
     }
     return { valid: errors.length === 0, errors, report, projectValidation, concept: doc || null };
   }
@@ -824,21 +996,28 @@ class ConceptAuthoringService {
         childProposalIds: [],
       });
       for (const step of plan.conceptProposals) {
-        const result = await this.proposeUpdate(Object.assign({}, step.arguments, {
-          migrationId: manifest.id,
-          message: `${step.arguments.message} Migration ${manifest.id}. ${normalizedInput.message || ""}`.trim(),
-        }));
+        const result = await this.proposeUpdate(
+          Object.assign({}, step.arguments, {
+            migrationId: manifest.id,
+            message:
+              `${step.arguments.message} Migration ${manifest.id}. ${normalizedInput.message || ""}`.trim(),
+          }),
+        );
         if (!result.created) {
           throw new Error(`Failed to create migration child proposal for ${step.target.uri}.`);
         }
         children.push(result.proposal);
-        manifest = await this.store.saveMigrationManifest(Object.assign({}, manifest, {
-          childProposalIds: children.map((proposal) => proposal.id),
-          plan,
-        }));
+        manifest = await this.store.saveMigrationManifest(
+          Object.assign({}, manifest, {
+            childProposalIds: children.map((proposal) => proposal.id),
+            plan,
+          }),
+        );
       }
       if (plan.versionDeclaration) {
-        const root = index.documents.find((doc) => doc.bundle === bundleId && doc.path === "index.md");
+        const root = index.documents.find(
+          (doc) => doc.bundle === bundleId && doc.path === "index.md",
+        );
         if (!root) {
           throw new Error("Bundle root index.md is required for the v0.2 declaration proposal.");
         }
@@ -867,10 +1046,12 @@ class ConceptAuthoringService {
         });
         children.push(proposal);
       }
-      manifest = await this.store.saveMigrationManifest(Object.assign({}, manifest, {
-        childProposalIds: children.map((proposal) => proposal.id),
-        plan,
-      }));
+      manifest = await this.store.saveMigrationManifest(
+        Object.assign({}, manifest, {
+          childProposalIds: children.map((proposal) => proposal.id),
+          plan,
+        }),
+      );
       return { created: true, manifest, proposals: children };
     } catch (error) {
       children.forEach((proposal) => this.store.removeProposal(proposal.id));

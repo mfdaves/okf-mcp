@@ -76,11 +76,7 @@ function assetKey(bundle, relativePath) {
 
 function isExternalReference(value) {
   const text = String(value || "").trim();
-  return (
-    text.startsWith("//")
-    || text.startsWith("#")
-    || /^[A-Za-z][A-Za-z0-9+.-]*:/.test(text)
-  );
+  return text.startsWith("//") || text.startsWith("#") || /^[A-Za-z][A-Za-z0-9+.-]*:/.test(text);
 }
 
 function looksLikeExplicitSourcePath(value) {
@@ -89,12 +85,12 @@ function looksLikeExplicitSourcePath(value) {
     return false;
   }
   return (
-    text.startsWith("/")
-    || text.startsWith("./")
-    || text.startsWith("../")
-    || text.startsWith("references/")
-    || (text.includes("/") && Boolean(path.posix.extname(text)))
-    || Object.prototype.hasOwnProperty.call(MIME_TYPES, path.posix.extname(text).toLowerCase())
+    text.startsWith("/") ||
+    text.startsWith("./") ||
+    text.startsWith("../") ||
+    text.startsWith("references/") ||
+    (text.includes("/") && Boolean(path.posix.extname(text))) ||
+    Object.prototype.hasOwnProperty.call(MIME_TYPES, path.posix.extname(text).toLowerCase())
   );
 }
 
@@ -164,24 +160,27 @@ function collectAssetReferences(document) {
   if (typeof computation === "string") {
     add("computation", "computation", computation, true);
   } else if (computation && typeof computation === "object" && !Array.isArray(computation)) {
-    const fileComputation = computation.mode === "file"
-      ? computation
-      : computation.computation && computation.computation.mode === "file"
-        ? computation.computation
-        : null;
+    const fileComputation =
+      computation.mode === "file"
+        ? computation
+        : computation.computation && computation.computation.mode === "file"
+          ? computation.computation
+          : null;
     if (fileComputation) {
       add("computation", "computation", fileComputation.path, true);
     }
   }
 
-  const executor = documentValue(document, "executor")
-    || (computation && typeof computation === "object" && computation.executor);
+  const executor =
+    documentValue(document, "executor") ||
+    (computation && typeof computation === "object" && computation.executor);
   if (executor && typeof executor === "object" && !Array.isArray(executor)) {
     add("executor", "executor.resource", executor.resource, true);
   }
 
-  const attester = documentValue(document, "attester")
-    || (computation && typeof computation === "object" && computation.attester);
+  const attester =
+    documentValue(document, "attester") ||
+    (computation && typeof computation === "object" && computation.attester);
   if (attester && typeof attester === "object" && !Array.isArray(attester)) {
     add("attester", "attester.resource", attester.resource, true);
   }
@@ -196,24 +195,44 @@ function isInsidePath(root, target) {
 
 function resolveBundleAssetPath(bundleRoot, fromPath, reference) {
   if (!bundleRoot) {
-    throw new AssetRegistryError("asset_bundle_root_missing", "Referenced asset has no local bundle root.");
+    throw new AssetRegistryError(
+      "asset_bundle_root_missing",
+      "Referenced asset has no local bundle root.",
+    );
   }
   const raw = normalizeSlashes(String(reference || "").trim());
   if (!raw || raw.includes("\0") || isExternalReference(raw)) {
-    throw new AssetRegistryError("asset_invalid_reference", "Referenced asset is not a safe bundle-local path.");
+    throw new AssetRegistryError(
+      "asset_invalid_reference",
+      "Referenced asset is not a safe bundle-local path.",
+    );
   }
 
   const root = path.resolve(bundleRoot);
   const relative = raw.startsWith("/")
     ? path.posix.normalize(raw.slice(1))
-    : path.posix.normalize(path.posix.join(path.posix.dirname(normalizeSlashes(fromPath || "")), raw));
-  if (!relative || relative === "." || relative === ".." || relative.startsWith("../") || path.posix.isAbsolute(relative)) {
-    throw new AssetRegistryError("asset_outside_root", `Referenced asset resolves outside bundle root: ${raw}`);
+    : path.posix.normalize(
+        path.posix.join(path.posix.dirname(normalizeSlashes(fromPath || "")), raw),
+      );
+  if (
+    !relative ||
+    relative === "." ||
+    relative === ".." ||
+    relative.startsWith("../") ||
+    path.posix.isAbsolute(relative)
+  ) {
+    throw new AssetRegistryError(
+      "asset_outside_root",
+      `Referenced asset resolves outside bundle root: ${raw}`,
+    );
   }
 
   const absolutePath = path.resolve(root, ...relative.split("/"));
   if (!isInsidePath(root, absolutePath)) {
-    throw new AssetRegistryError("asset_outside_root", `Referenced asset resolves outside bundle root: ${raw}`);
+    throw new AssetRegistryError(
+      "asset_outside_root",
+      `Referenced asset resolves outside bundle root: ${raw}`,
+    );
   }
   return {
     root,
@@ -228,15 +247,24 @@ function inspectAssetPath(root, relativePath) {
     rootStat = fs.lstatSync(root);
   } catch (error) {
     if (error && error.code === "ENOENT") {
-      throw new AssetRegistryError("asset_bundle_root_missing", `Bundle root does not exist: ${root}`);
+      throw new AssetRegistryError(
+        "asset_bundle_root_missing",
+        `Bundle root does not exist: ${root}`,
+      );
     }
     throw error;
   }
   if (rootStat.isSymbolicLink()) {
-    throw new AssetRegistryError("asset_symlink", "Referenced assets cannot use a symbolic-link bundle root.");
+    throw new AssetRegistryError(
+      "asset_symlink",
+      "Referenced assets cannot use a symbolic-link bundle root.",
+    );
   }
   if (!rootStat.isDirectory()) {
-    throw new AssetRegistryError("asset_bundle_root_invalid", `Bundle root is not a directory: ${root}`);
+    throw new AssetRegistryError(
+      "asset_bundle_root_invalid",
+      `Bundle root is not a directory: ${root}`,
+    );
   }
 
   const segments = normalizeSlashes(relativePath).split("/");
@@ -248,28 +276,46 @@ function inspectAssetPath(root, relativePath) {
       stat = fs.lstatSync(current);
     } catch (error) {
       if (error && error.code === "ENOENT") {
-        throw new AssetRegistryError("asset_missing", `Referenced asset does not exist: ${relativePath}`);
+        throw new AssetRegistryError(
+          "asset_missing",
+          `Referenced asset does not exist: ${relativePath}`,
+        );
       }
       throw error;
     }
     if (stat.isSymbolicLink()) {
-      throw new AssetRegistryError("asset_symlink", `Referenced asset path traverses a symbolic link: ${relativePath}`);
+      throw new AssetRegistryError(
+        "asset_symlink",
+        `Referenced asset path traverses a symbolic link: ${relativePath}`,
+      );
     }
     if (index < segments.length - 1 && !stat.isDirectory()) {
-      throw new AssetRegistryError("asset_path_component_not_directory", `Referenced asset path has a non-directory component: ${relativePath}`);
+      throw new AssetRegistryError(
+        "asset_path_component_not_directory",
+        `Referenced asset path has a non-directory component: ${relativePath}`,
+      );
     }
     if (index === segments.length - 1 && !stat.isFile()) {
-      throw new AssetRegistryError("asset_not_file", `Referenced asset is not a regular file: ${relativePath}`);
+      throw new AssetRegistryError(
+        "asset_not_file",
+        `Referenced asset is not a regular file: ${relativePath}`,
+      );
     }
   }
 }
 
 function mimeTypeForPath(relativePath) {
-  return MIME_TYPES[path.posix.extname(String(relativePath || "")).toLowerCase()] || "application/octet-stream";
+  return (
+    MIME_TYPES[path.posix.extname(String(relativePath || "")).toLowerCase()] ||
+    "application/octet-stream"
+  );
 }
 
 function mimeIsDefinitelyBinary(mimeType) {
-  return BINARY_MIME_TYPES.has(mimeType) || BINARY_MIME_PREFIXES.some((prefix) => mimeType.startsWith(prefix));
+  return (
+    BINARY_MIME_TYPES.has(mimeType) ||
+    BINARY_MIME_PREFIXES.some((prefix) => mimeType.startsWith(prefix))
+  );
 }
 
 function mimeIsText(mimeType) {
@@ -307,16 +353,19 @@ function bundleMapFor(bundles) {
 
 function diagnosticFor(error, reference, extra) {
   const known = error instanceof AssetRegistryError;
-  return Object.assign({
-    code: known ? error.code : "asset_read_error",
-    severity: "warning",
-    layer: "project",
-    bundle: reference.bundle,
-    path: reference.fromPath,
-    field: reference.field,
-    target: reference.value,
-    message: error && error.message ? error.message : String(error),
-  }, extra || {});
+  return Object.assign(
+    {
+      code: known ? error.code : "asset_read_error",
+      severity: "warning",
+      layer: "project",
+      bundle: reference.bundle,
+      path: reference.fromPath,
+      field: reference.field,
+      target: reference.value,
+      message: error && error.message ? error.message : String(error),
+    },
+    extra || {},
+  );
 }
 
 function publicReference(reference) {
@@ -331,9 +380,8 @@ function publicReference(reference) {
 
 function buildAssetRegistry(documents, bundles, options) {
   const config = options || {};
-  const maxAssetBytes = config.maxAssetBytes === undefined
-    ? DEFAULT_MAX_ASSET_BYTES
-    : Number(config.maxAssetBytes);
+  const maxAssetBytes =
+    config.maxAssetBytes === undefined ? DEFAULT_MAX_ASSET_BYTES : Number(config.maxAssetBytes);
   if (!Number.isSafeInteger(maxAssetBytes) || maxAssetBytes < 1) {
     throw new TypeError("maxAssetBytes must be a positive safe integer.");
   }
@@ -353,16 +401,33 @@ function buildAssetRegistry(documents, bundles, options) {
         diagnostics.push(diagnosticFor(error, reference));
         return;
       }
-      if (typeof config.skipResolvedPath === "function"
-        && config.skipResolvedPath(configuredBundle || { id: reference.bundle }, resolved.path, reference)) {
+      if (
+        typeof config.skipResolvedPath === "function" &&
+        config.skipResolvedPath(
+          configuredBundle || { id: reference.bundle },
+          resolved.path,
+          reference,
+        )
+      ) {
         return;
       }
-      if (typeof config.allowResolvedPath === "function"
-        && !config.allowResolvedPath(configuredBundle || { id: reference.bundle }, resolved.path, reference)) {
-        diagnostics.push(diagnosticFor(
-          new AssetRegistryError("asset_excluded", `Referenced asset is excluded by bundle policy: ${resolved.path}`),
+      if (
+        typeof config.allowResolvedPath === "function" &&
+        !config.allowResolvedPath(
+          configuredBundle || { id: reference.bundle },
+          resolved.path,
           reference,
-        ));
+        )
+      ) {
+        diagnostics.push(
+          diagnosticFor(
+            new AssetRegistryError(
+              "asset_excluded",
+              `Referenced asset is excluded by bundle policy: ${resolved.path}`,
+            ),
+            reference,
+          ),
+        );
         return;
       }
       const groupKey = `${reference.bundle}\u0000${resolved.path}`;
@@ -382,7 +447,10 @@ function buildAssetRegistry(documents, bundles, options) {
 
   const assets = [];
   Array.from(groups.values())
-    .sort((left, right) => left.bundle.localeCompare(right.bundle) || left.path.localeCompare(right.path))
+    .sort(
+      (left, right) =>
+        left.bundle.localeCompare(right.bundle) || left.path.localeCompare(right.path),
+    )
     .forEach((group) => {
       const first = group.references[0];
       let content;
@@ -390,11 +458,17 @@ function buildAssetRegistry(documents, bundles, options) {
         inspectAssetPath(group.root, group.path);
         const stat = fs.statSync(group.absolutePath);
         if (stat.size > maxAssetBytes) {
-          throw new AssetRegistryError("asset_too_large", `Referenced asset exceeds the ${maxAssetBytes} byte limit: ${group.path}`);
+          throw new AssetRegistryError(
+            "asset_too_large",
+            `Referenced asset exceeds the ${maxAssetBytes} byte limit: ${group.path}`,
+          );
         }
         let descriptor;
         try {
-          descriptor = fs.openSync(group.absolutePath, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0));
+          descriptor = fs.openSync(
+            group.absolutePath,
+            fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0),
+          );
           content = fs.readFileSync(descriptor);
         } finally {
           if (descriptor !== undefined) {
@@ -402,23 +476,36 @@ function buildAssetRegistry(documents, bundles, options) {
           }
         }
         if (content.length > maxAssetBytes) {
-          throw new AssetRegistryError("asset_too_large", `Referenced asset exceeds the ${maxAssetBytes} byte limit: ${group.path}`);
+          throw new AssetRegistryError(
+            "asset_too_large",
+            `Referenced asset exceeds the ${maxAssetBytes} byte limit: ${group.path}`,
+          );
         }
       } catch (error) {
-        const normalizedError = error && error.code === "ELOOP"
-          ? new AssetRegistryError("asset_symlink", `Referenced asset is a symbolic link: ${group.path}`)
-          : error;
-        diagnostics.push(diagnosticFor(normalizedError, first, {
-          referencedBy: group.references.map(publicReference),
-        }));
+        const normalizedError =
+          error && error.code === "ELOOP"
+            ? new AssetRegistryError(
+                "asset_symlink",
+                `Referenced asset is a symbolic link: ${group.path}`,
+              )
+            : error;
+        diagnostics.push(
+          diagnosticFor(normalizedError, first, {
+            referencedBy: group.references.map(publicReference),
+          }),
+        );
         return;
       }
 
       const mimeType = mimeTypeForPath(group.path);
       const classification = classifyAssetContent(content, mimeType);
-      const referencedBy = group.references.map(publicReference).sort((left, right) => (
-        String(left.uri).localeCompare(String(right.uri)) || left.field.localeCompare(right.field)
-      ));
+      const referencedBy = group.references
+        .map(publicReference)
+        .sort(
+          (left, right) =>
+            String(left.uri).localeCompare(String(right.uri)) ||
+            left.field.localeCompare(right.field),
+        );
       const roles = Array.from(new Set(group.references.map((reference) => reference.role))).sort();
       const asset = {
         key: assetKey(group.bundle, group.path),
@@ -442,11 +529,16 @@ function buildAssetRegistry(documents, bundles, options) {
       assets.push(asset);
 
       if (mimeIsText(mimeType) && !classification.validUtf8) {
-        diagnostics.push(diagnosticFor(
-          new AssetRegistryError("asset_invalid_utf8", `Text asset is not valid UTF-8: ${group.path}`),
-          first,
-          { referencedBy },
-        ));
+        diagnostics.push(
+          diagnosticFor(
+            new AssetRegistryError(
+              "asset_invalid_utf8",
+              `Text asset is not valid UTF-8: ${group.path}`,
+            ),
+            first,
+            { referencedBy },
+          ),
+        );
       }
     });
 

@@ -38,7 +38,9 @@ function sortedJson(value) {
   }
   if (value && typeof value === "object") {
     return Object.fromEntries(
-      Object.keys(value).sort().map((key) => [key, sortedJson(value[key])]),
+      Object.keys(value)
+        .sort()
+        .map((key) => [key, sortedJson(value[key])]),
     );
   }
   return value;

@@ -61,7 +61,10 @@ function writeJson(filePath, value) {
     `.${path.basename(filePath)}.${process.pid}.${crypto.randomBytes(6).toString("hex")}.tmp`,
   );
   try {
-    fs.writeFileSync(temporaryPath, JSON.stringify(value, null, 2) + "\n", { encoding: "utf8", flag: "wx" });
+    fs.writeFileSync(temporaryPath, JSON.stringify(value, null, 2) + "\n", {
+      encoding: "utf8",
+      flag: "wx",
+    });
     fs.renameSync(temporaryPath, filePath);
   } finally {
     if (fs.existsSync(temporaryPath)) {
@@ -108,7 +111,9 @@ function isInside(root, candidate) {
 }
 
 function normalizeBundleFilePath(value) {
-  const raw = String(value || "").trim().replace(/\\/g, "/");
+  const raw = String(value || "")
+    .trim()
+    .replace(/\\/g, "/");
   if (!raw || raw.startsWith("/") || raw.includes("\0")) {
     throw new Error("Bundle file path must be a safe relative path.");
   }
@@ -134,10 +139,14 @@ function rejectSymlinkTraversal(realRoot, relativePath, label) {
       throw error;
     }
     if (stat.isSymbolicLink()) {
-      throw new Error(`${label || "Concept path"} cannot traverse a symbolic link: ${segments.slice(0, index + 1).join("/")}`);
+      throw new Error(
+        `${label || "Concept path"} cannot traverse a symbolic link: ${segments.slice(0, index + 1).join("/")}`,
+      );
     }
     if (index < segments.length - 1 && !stat.isDirectory()) {
-      throw new Error(`Concept path parent is not a directory: ${segments.slice(0, index + 1).join("/")}`);
+      throw new Error(
+        `Concept path parent is not a directory: ${segments.slice(0, index + 1).join("/")}`,
+      );
     }
     const resolved = fs.realpathSync(current);
     if (!isInside(realRoot, resolved)) {
@@ -155,17 +164,17 @@ class FileConceptStore {
     this.strictLinks = Boolean(options.strictLinks || (this.project && this.project.strictLinks));
     this.projectRoot = this.project ? fs.realpathSync(this.project.root) : null;
     const configuredProposalRoot = options.proposalRoot || ".okf-proposals";
-    this.proposalRoot = path.resolve(
-      this.projectRoot || process.cwd(),
-      configuredProposalRoot,
-    );
+    this.proposalRoot = path.resolve(this.projectRoot || process.cwd(), configuredProposalRoot);
     if (this.projectRoot) {
       const relative = path.relative(this.projectRoot, this.proposalRoot);
       if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) {
         throw new Error("Proposal root must be a dedicated directory inside the project root.");
       }
       rejectSymlinkTraversal(this.projectRoot, relative.replace(/\\/g, "/"), "Proposal root");
-    } else if (fs.existsSync(this.proposalRoot) && fs.lstatSync(this.proposalRoot).isSymbolicLink()) {
+    } else if (
+      fs.existsSync(this.proposalRoot) &&
+      fs.lstatSync(this.proposalRoot).isSymbolicLink()
+    ) {
       throw new Error("Proposal root cannot be a symbolic link.");
     }
     this.proposalLocks = new Map();
@@ -175,7 +184,9 @@ class FileConceptStore {
   static fromProject(projectPath, options) {
     const project = loadProjectConfig(projectPath);
     if (project.errors.length) {
-      throw new Error("Cannot configure writable concept storage from an invalid project configuration.");
+      throw new Error(
+        "Cannot configure writable concept storage from an invalid project configuration.",
+      );
     }
     return new FileConceptStore({
       project,
@@ -192,9 +203,10 @@ class FileConceptStore {
     if (!fs.statSync(root).isDirectory()) {
       throw new Error("Writable OKF root must be an existing directory.");
     }
-    const id = String((options && options.id) || path.basename(root) || "bundle")
-      .replace(/[^A-Za-z0-9_.-]+/g, "-")
-      .replace(/^-+|-+$/g, "") || "bundle";
+    const id =
+      String((options && options.id) || path.basename(root) || "bundle")
+        .replace(/[^A-Za-z0-9_.-]+/g, "-")
+        .replace(/^-+|-+$/g, "") || "bundle";
     const bundles = [{ id, root, include: [], exclude: [] }];
     const project = {
       project: id,
@@ -370,7 +382,8 @@ class FileConceptStore {
     if (!fs.existsSync(root)) {
       return [];
     }
-    return fs.readdirSync(root)
+    return fs
+      .readdirSync(root)
       .filter((name) => name.endsWith(".json"))
       .sort()
       .map((name) => path.join(root, name));
@@ -396,7 +409,9 @@ class FileConceptStore {
       message: input.message || "",
       validation: input.validation || null,
       assetFiles: Array.isArray(input.assetFiles) ? input.assetFiles : [],
-      dependencyRevisions: Array.isArray(input.dependencyRevisions) ? input.dependencyRevisions : [],
+      dependencyRevisions: Array.isArray(input.dependencyRevisions)
+        ? input.dependencyRevisions
+        : [],
       migrationId: input.migrationId || null,
       prerequisites: Array.isArray(input.prerequisites) ? input.prerequisites : [],
       createdAt: timestamp,
@@ -408,28 +423,31 @@ class FileConceptStore {
 
   async listProposals(filters) {
     const options = filters || {};
-    return this.listProposalFiles().map(readJson).filter((proposal) => {
-      if (options.bundle && proposal.bundle !== options.bundle) {
-        return false;
-      }
-      if (options.status && proposal.status !== options.status) {
-        return false;
-      }
-      return true;
-    }).map((proposal) => ({
-      id: proposal.id,
-      status: proposal.status,
-      op: proposal.op || "create",
-      targetUri: proposal.targetUri || null,
-      bundle: proposal.bundle,
-      path: proposal.path,
-      uri: proposal.uri,
-      message: proposal.message,
-      assetFileCount: Array.isArray(proposal.assetFiles) ? proposal.assetFiles.length : 0,
-      migrationId: proposal.migrationId || null,
-      createdAt: proposal.createdAt,
-      updatedAt: proposal.updatedAt,
-    }));
+    return this.listProposalFiles()
+      .map(readJson)
+      .filter((proposal) => {
+        if (options.bundle && proposal.bundle !== options.bundle) {
+          return false;
+        }
+        if (options.status && proposal.status !== options.status) {
+          return false;
+        }
+        return true;
+      })
+      .map((proposal) => ({
+        id: proposal.id,
+        status: proposal.status,
+        op: proposal.op || "create",
+        targetUri: proposal.targetUri || null,
+        bundle: proposal.bundle,
+        path: proposal.path,
+        uri: proposal.uri,
+        message: proposal.message,
+        assetFileCount: Array.isArray(proposal.assetFiles) ? proposal.assetFiles.length : 0,
+        migrationId: proposal.migrationId || null,
+        createdAt: proposal.createdAt,
+        updatedAt: proposal.updatedAt,
+      }));
   }
 
   async getProposal(id) {
@@ -456,15 +474,18 @@ class FileConceptStore {
     return {
       accepted: false,
       conflict: true,
-      message: "The concept changed after this update was proposed. Create a new proposal from the current concept.",
+      message:
+        "The concept changed after this update was proposed. Create a new proposal from the current concept.",
       proposal,
     };
   }
 
   async acceptProposal(id, authoringService, options) {
-    return this.withWriteLock(() => (
-      this.withProposalLock(id, (canonicalId) => this.acceptProposalUnlocked(canonicalId, authoringService, options))
-    ));
+    return this.withWriteLock(() =>
+      this.withProposalLock(id, (canonicalId) =>
+        this.acceptProposalUnlocked(canonicalId, authoringService, options),
+      ),
+    );
   }
 
   async acceptProposalUnlocked(id, authoringService, options) {
@@ -477,13 +498,17 @@ class FileConceptStore {
       throw new Error(`Unsupported proposal operation: ${op}`);
     }
     if (op === "create_computation" && !(options && options.allowComputation)) {
-      throw new Error("Accepting an Attested Computation proposal requires the computation-authoring capability.");
+      throw new Error(
+        "Accepting an Attested Computation proposal requires the computation-authoring capability.",
+      );
     }
     if (op === "migration_index") {
       for (const prerequisite of proposal.prerequisites || []) {
         const required = await this.getProposal(prerequisite);
         if (required.status !== "accepted") {
-          throw new Error(`Migration index proposal requires accepted child proposal: ${prerequisite}`);
+          throw new Error(
+            `Migration index proposal requires accepted child proposal: ${prerequisite}`,
+          );
         }
       }
       const target = this.resolveBundleFile(proposal.bundle, proposal.path);
@@ -534,9 +559,9 @@ class FileConceptStore {
       }
       existing = authoringService.resolveConcept(proposal.targetUri);
       if (
-        proposal.bundle !== existing.bundle
-        || proposal.path !== existing.path
-        || proposal.targetPathUri !== existing.pathUri
+        proposal.bundle !== existing.bundle ||
+        proposal.path !== existing.path ||
+        proposal.targetPathUri !== existing.pathUri
       ) {
         throw new Error("Update proposal target does not match the current concept identity.");
       }
@@ -547,29 +572,35 @@ class FileConceptStore {
       frontmatter: proposal.frontmatter,
       body: proposal.body,
     };
-    const validation = op === "update"
-      ? authoringService.validateUpdateCandidate(candidate, existing)
-      : op === "create_computation"
-        ? authoringService.validateAttestedComputation(candidate, {
-          assetFiles: proposal.assetFiles || [],
-          accepting: true,
-        })
-        : authoringService.validateConcept(candidate);
+    const validation =
+      op === "update"
+        ? authoringService.validateUpdateCandidate(candidate, existing)
+        : op === "create_computation"
+          ? authoringService.validateAttestedComputation(candidate, {
+              assetFiles: proposal.assetFiles || [],
+              accepting: true,
+            })
+          : authoringService.validateConcept(candidate);
     if (!validation.valid) {
       proposal.validation = validation;
       this.saveExistingProposal(proposal);
       return { accepted: false, proposal, validation };
     }
     if (op === "create_computation") {
-      const normalizeDependencies = (entries) => (Array.isArray(entries) ? entries : [])
-        .map((entry) => ({
-          field: entry.field,
-          bundle: entry.bundle,
-          path: entry.path,
-          bytes: entry.bytes,
-          revision: entry.revision,
-        }))
-        .sort((left, right) => `${left.field}\u0000${left.bundle}\u0000${left.path}`.localeCompare(`${right.field}\u0000${right.bundle}\u0000${right.path}`));
+      const normalizeDependencies = (entries) =>
+        (Array.isArray(entries) ? entries : [])
+          .map((entry) => ({
+            field: entry.field,
+            bundle: entry.bundle,
+            path: entry.path,
+            bytes: entry.bytes,
+            revision: entry.revision,
+          }))
+          .sort((left, right) =>
+            `${left.field}\u0000${left.bundle}\u0000${left.path}`.localeCompare(
+              `${right.field}\u0000${right.bundle}\u0000${right.path}`,
+            ),
+          );
       const expectedDependencies = normalizeDependencies(proposal.dependencyRevisions);
       const actualDependencies = normalizeDependencies(validation.dependencyRevisions);
       if (JSON.stringify(expectedDependencies) !== JSON.stringify(actualDependencies)) {
@@ -584,7 +615,8 @@ class FileConceptStore {
         return {
           accepted: false,
           conflict: true,
-          message: "A referenced computation dependency changed after review. Create a new proposal from the current artifacts.",
+          message:
+            "A referenced computation dependency changed after review. Create a new proposal from the current artifacts.",
           proposal,
           validation,
         };
@@ -598,7 +630,11 @@ class FileConceptStore {
       }
       const safeTarget = this.resolveConceptFile(proposal.bundle, proposal.path);
       const originalText = fs.readFileSync(safeTarget.absolutePath, "utf8");
-      const write = writeFileAtomic(safeTarget.absolutePath, validation.markdown, proposal.baseRevision);
+      const write = writeFileAtomic(
+        safeTarget.absolutePath,
+        validation.markdown,
+        proposal.baseRevision,
+      );
       if (!write.written) {
         return this.markProposalConflict(proposal, write.currentRevision);
       }
@@ -609,7 +645,9 @@ class FileConceptStore {
           revisionFor(validation.markdown),
         );
         if (!rollback.written) {
-          throw new Error("Could not roll back an update after proposal status persistence failed.");
+          throw new Error(
+            "Could not roll back an update after proposal status persistence failed.",
+          );
         }
       };
     } else if (op === "create_computation") {
@@ -622,7 +660,9 @@ class FileConceptStore {
       });
       const staged = [];
       const written = [];
-      const allTargets = assetTargets.concat([{ relativePath, absolutePath, content: validation.markdown }]);
+      const allTargets = assetTargets.concat([
+        { relativePath, absolutePath, content: validation.markdown },
+      ]);
       const uniqueTargets = new Set(allTargets.map((target) => path.resolve(target.absolutePath)));
       if (uniqueTargets.size !== allTargets.length) {
         throw new Error("Computation proposal targets must resolve to distinct files.");
@@ -642,11 +682,14 @@ class FileConceptStore {
           written.push(target.absolutePath);
         });
         rollbackAcceptance = () => {
-          written.slice().reverse().forEach((target) => {
-            if (fs.existsSync(target)) {
-              fs.unlinkSync(target);
-            }
-          });
+          written
+            .slice()
+            .reverse()
+            .forEach((target) => {
+              if (fs.existsSync(target)) {
+                fs.unlinkSync(target);
+              }
+            });
         };
       } catch (error) {
         staged.forEach((target) => {
@@ -664,7 +707,10 @@ class FileConceptStore {
     } else {
       ensureDir(path.dirname(absolutePath));
       const safeTarget = this.resolveConceptFile(proposal.bundle, proposal.path);
-      fs.writeFileSync(safeTarget.absolutePath, validation.markdown, { encoding: "utf8", flag: "wx" });
+      fs.writeFileSync(safeTarget.absolutePath, validation.markdown, {
+        encoding: "utf8",
+        flag: "wx",
+      });
       rollbackAcceptance = () => {
         if (fs.existsSync(safeTarget.absolutePath)) {
           fs.unlinkSync(safeTarget.absolutePath);
@@ -697,7 +743,9 @@ class FileConceptStore {
   }
 
   async rejectProposal(id, reason) {
-    return this.withProposalLock(id, (canonicalId) => this.rejectProposalUnlocked(canonicalId, reason));
+    return this.withProposalLock(id, (canonicalId) =>
+      this.rejectProposalUnlocked(canonicalId, reason),
+    );
   }
 
   async rejectProposalUnlocked(id, reason) {
@@ -715,13 +763,17 @@ class FileConceptStore {
   async saveMigrationManifest(input) {
     const id = input.id || proposalId();
     const timestamp = nowIso();
-    const manifest = Object.assign({
-      id,
-      status: "proposed",
-      kind: "okf-v0.2-stage-a",
-      createdAt: timestamp,
-      updatedAt: timestamp,
-    }, input, { id });
+    const manifest = Object.assign(
+      {
+        id,
+        status: "proposed",
+        kind: "okf-v0.2-stage-a",
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      },
+      input,
+      { id },
+    );
     writeJson(this.proposalFile(id, "migrations", true), manifest);
     return manifest;
   }

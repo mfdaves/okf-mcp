@@ -48,15 +48,18 @@ function ensureParentDirectories(store, candidate, createdDirectories) {
 }
 
 function cleanupDirectories(createdDirectories) {
-  createdDirectories.slice().sort((left, right) => right.length - left.length).forEach((directory) => {
-    try {
-      fs.rmdirSync(directory);
-    } catch (error) {
-      if (!error || !["ENOENT", "ENOTEMPTY"].includes(error.code)) {
-        throw error;
+  createdDirectories
+    .slice()
+    .sort((left, right) => right.length - left.length)
+    .forEach((directory) => {
+      try {
+        fs.rmdirSync(directory);
+      } catch (error) {
+        if (!error || !["ENOENT", "ENOTEMPTY"].includes(error.code)) {
+          throw error;
+        }
       }
-    }
-  });
+    });
 }
 
 function stageCandidates(store, candidates) {
@@ -170,22 +173,25 @@ function rollback(applied, staged, createdDirectories) {
       }
     }
   });
-  applied.slice().reverse().forEach((candidate) => {
-    try {
-      outcomes.push(rollbackCandidate(candidate));
-    } catch (error) {
-      const failure = {
-        op: candidate.op,
-        path: candidate.path,
-        absolutePath: candidate.target.absolutePath,
-        status: "error",
-        restored: false,
-        error: error && error.message ? error.message : String(error),
-      };
-      outcomes.push(failure);
-      failures.push(failure);
-    }
-  });
+  applied
+    .slice()
+    .reverse()
+    .forEach((candidate) => {
+      try {
+        outcomes.push(rollbackCandidate(candidate));
+      } catch (error) {
+        const failure = {
+          op: candidate.op,
+          path: candidate.path,
+          absolutePath: candidate.target.absolutePath,
+          status: "error",
+          restored: false,
+          error: error && error.message ? error.message : String(error),
+        };
+        outcomes.push(failure);
+        failures.push(failure);
+      }
+    });
   try {
     cleanupDirectories(createdDirectories || []);
   } catch (error) {

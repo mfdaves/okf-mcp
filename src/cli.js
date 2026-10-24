@@ -33,8 +33,22 @@ const { validActor } = require("./v02");
 const packageMetadata = require("../package.json");
 
 const COMMANDS = new Set([
-  "mcp", "validate", "graph", "search", "concept", "neighbors", "paths", "generate", "serve",
-  "provenance", "edge-kinds", "computation", "asset", "source", "migrate", "producer",
+  "mcp",
+  "validate",
+  "graph",
+  "search",
+  "concept",
+  "neighbors",
+  "paths",
+  "generate",
+  "serve",
+  "provenance",
+  "edge-kinds",
+  "computation",
+  "asset",
+  "source",
+  "migrate",
+  "producer",
 ]);
 const PRODUCER_ACTIONS = new Set(["list", "preview", "run"]);
 const WRITE_COMMANDS = new Set(["mcp", "producer"]);
@@ -544,7 +558,8 @@ function parseRepositoryMappings(values) {
   (values || []).forEach((value) => {
     const text = String(value || "");
     const separator = text.indexOf("=");
-    const conceptId = separator > 0 ? text.slice(0, separator).replace(/^\/+/, "").replace(/\.md$/i, "") : "";
+    const conceptId =
+      separator > 0 ? text.slice(0, separator).replace(/^\/+/, "").replace(/\.md$/i, "") : "";
     const repositoryPath = separator > 0 ? text.slice(separator + 1) : "";
     if (!conceptId || !repositoryPath) {
       throw usageError("--repo requires repository-concept-id=checkout-or-bare-repository-path.");
@@ -571,7 +586,13 @@ function parseRemoteBundleArg(value, index) {
 }
 
 function discoverProject(args, startDir) {
-  if (!args.project && !args.root && !args.bundles.length && !args.remoteBundles.length && !resolveLegacyBundles(args).length) {
+  if (
+    !args.project &&
+    !args.root &&
+    !args.bundles.length &&
+    !args.remoteBundles.length &&
+    !resolveLegacyBundles(args).length
+  ) {
     args.root = findOkfRoot(startDir);
     if (!args.root) {
       args.project = findProjectConfig(startDir);
@@ -677,7 +698,9 @@ async function main(argv, runtime) {
     throw usageError(`Unknown OKF command: ${command}`);
   }
   if (!WRITE_COMMANDS.has(command) && (args.write || args.actor || args.gitCommit)) {
-    throw usageError("--write, --actor, and --git-commit are available only with the mcp and producer commands.");
+    throw usageError(
+      "--write, --actor, and --git-commit are available only with the mcp and producer commands.",
+    );
   }
   if (command === "producer" && args.gitCommit) {
     throw usageError("--git-commit is available only with the mcp command.");
@@ -750,7 +773,9 @@ async function main(argv, runtime) {
       throw usageError(`producer ${action} requires a configured producer name.`);
     }
     if (action === "run" && !args.write) {
-      throw usageError("producer run requires --write --actor <human:id|process:id|provider/model>.");
+      throw usageError(
+        "producer run requires --write --actor <human:id|process:id|provider/model>.",
+      );
     }
     const receipt = action === "run" ? await service.run(name) : await service.preview(name);
     printJson(producerReceipt(receipt, "full"));
@@ -767,11 +792,13 @@ async function main(argv, runtime) {
     return;
   }
   if (command === "graph") {
-    process.stdout.write(exportGraph(index, {
-      format: args.positional[1] || "json",
-      includeExternal: args.includeExternal,
-      includeAssets: args.includeAssets,
-    }) + "\n");
+    process.stdout.write(
+      exportGraph(index, {
+        format: args.positional[1] || "json",
+        includeExternal: args.includeExternal,
+        includeAssets: args.includeAssets,
+      }) + "\n",
+    );
     return;
   }
   if (command === "search") {
@@ -788,22 +815,26 @@ async function main(argv, runtime) {
       throw usageError("concept requires a Concept ID or locator.");
     }
     const doc = requireValidConcept(index, locator);
-    printJson(Object.assign(conceptSummary(doc), {
-      frontmatter: doc.frontmatter,
-      body: doc.body,
-      links: doc.links,
-      referencedAssets: (index.assets || []).filter((asset) => (
-        (asset.referencedBy || []).some((reference) => reference.uri === doc.uri)
-      )).map((asset) => ({
-        uri: asset.uri,
-        path: asset.path,
-        mimeType: asset.mimeType,
-        size: asset.size,
-        sha256: asset.sha256,
-        roles: asset.roles,
-      })),
-      gitSources: describeConceptGitSources(index, doc, repositoryMappings),
-    }));
+    printJson(
+      Object.assign(conceptSummary(doc), {
+        frontmatter: doc.frontmatter,
+        body: doc.body,
+        links: doc.links,
+        referencedAssets: (index.assets || [])
+          .filter((asset) =>
+            (asset.referencedBy || []).some((reference) => reference.uri === doc.uri),
+          )
+          .map((asset) => ({
+            uri: asset.uri,
+            path: asset.path,
+            mimeType: asset.mimeType,
+            size: asset.size,
+            sha256: asset.sha256,
+            roles: asset.roles,
+          })),
+        gitSources: describeConceptGitSources(index, doc, repositoryMappings),
+      }),
+    );
     return;
   }
   if (command === "neighbors") {
@@ -811,10 +842,12 @@ async function main(argv, runtime) {
       throw usageError("neighbors requires a URI.");
     }
     const doc = requireValidConcept(index, args.positional[1]);
-    printJson(getNeighbors(index, doc.uri, {
-      includeAssets: args.includeAssets,
-      includeExternal: args.includeExternal,
-    }));
+    printJson(
+      getNeighbors(index, doc.uri, {
+        includeAssets: args.includeAssets,
+        includeExternal: args.includeExternal,
+      }),
+    );
     return;
   }
   if (command === "paths") {
@@ -857,7 +890,9 @@ async function main(argv, runtime) {
     }
     if (operation === "prepare") {
       if (args.positional[3]) {
-        throw usageError("Raw computation parameters are not accepted in argv; use --parameters-file <path|->.");
+        throw usageError(
+          "Raw computation parameters are not accepted in argv; use --parameters-file <path|->.",
+        );
       }
       const parameters = args.parametersFile
         ? readJsonObjectSource(args.parametersFile, "computation parameters", runtime)
@@ -865,17 +900,14 @@ async function main(argv, runtime) {
       if (!parameters) {
         throw usageError("computation prepare requires --parameters-file <path|->.");
       }
-      printJson(prepareAttestedComputation(
-        index,
-        uri,
-        parameters,
-        { asOf: args.search.asOf },
-      ));
+      printJson(prepareAttestedComputation(index, uri, parameters, { asOf: args.search.asOf }));
       return;
     }
     if (operation === "check-receipt") {
       if (args.positional[3]) {
-        throw usageError("Raw computation receipts are not accepted in argv; use --receipt-file <path|->.");
+        throw usageError(
+          "Raw computation receipts are not accepted in argv; use --receipt-file <path|->.",
+        );
       }
       const receipt = args.receiptFile
         ? readJsonObjectSource(args.receiptFile, "computation receipt", runtime)
@@ -883,11 +915,7 @@ async function main(argv, runtime) {
       if (!receipt) {
         throw usageError("computation check-receipt requires --receipt-file <path|->.");
       }
-      printJson(checkComputationReceipt(
-        index,
-        uri,
-        receipt,
-      ));
+      printJson(checkComputationReceipt(index, uri, receipt));
       return;
     }
     throw usageError(`Unknown computation operation: ${operation}`);
@@ -896,23 +924,23 @@ async function main(argv, runtime) {
     if (!args.positional[1]) {
       throw usageError("asset requires an okf-asset URI.");
     }
-    printJson(readBundleAsset(index, {
-      uri: args.positional[1],
-      maxContentBytes: args.maxContentBytes,
-    }));
+    printJson(
+      readBundleAsset(index, {
+        uri: args.positional[1],
+        maxContentBytes: args.maxContentBytes,
+      }),
+    );
     return;
   }
   if (command === "source") {
     if (!args.positional[1] || !args.positional[2]) {
       throw usageError("source requires <concept-id-or-locator> and <source-id>.");
     }
-    printJson(readConceptGitSource(
-      index,
-      args.positional[1],
-      args.positional[2],
-      repositoryMappings,
-      { maxBytes: args.maxContentBytes },
-    ));
+    printJson(
+      readConceptGitSource(index, args.positional[1], args.positional[2], repositoryMappings, {
+        maxBytes: args.maxContentBytes,
+      }),
+    );
     return;
   }
   if (command === "migrate") {
@@ -922,10 +950,12 @@ async function main(argv, runtime) {
     }
     let bundleArgument = args.positional[2] || "";
     let actorMappingsArgument = args.positional[3] || "";
-    if (operation === "preview"
-      && index.bundles.length === 1
-      && !actorMappingsArgument
-      && bundleArgument.trim().startsWith("{")) {
+    if (
+      operation === "preview" &&
+      index.bundles.length === 1 &&
+      !actorMappingsArgument &&
+      bundleArgument.trim().startsWith("{")
+    ) {
       actorMappingsArgument = bundleArgument;
       bundleArgument = "";
     }
@@ -939,9 +969,14 @@ async function main(argv, runtime) {
     const actorMappings = actorMappingsArgument
       ? parseJsonObject(actorMappingsArgument, "actor mappings")
       : {};
-    const result = operation === "check"
-      ? checkV02Migration(index, { bundle, actorMappings, generatedPaths: args.generatedPaths })
-      : buildV02MigrationPlan(index, { bundle, actorMappings, generatedPaths: args.generatedPaths });
+    const result =
+      operation === "check"
+        ? checkV02Migration(index, { bundle, actorMappings, generatedPaths: args.generatedPaths })
+        : buildV02MigrationPlan(index, {
+            bundle,
+            actorMappings,
+            generatedPaths: args.generatedPaths,
+          });
     printJson(result);
     const report = operation === "check" ? result : result.report;
     process.exitCode = report.blockers.length ? 1 : 0;

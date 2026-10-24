@@ -14,7 +14,12 @@ const lockMetadata = require(path.join(repositoryRoot, "package-lock.json"));
 const serverMetadata = require(path.join(repositoryRoot, "server.json"));
 
 function executable(directory, name) {
-  return path.join(directory, "node_modules", ".bin", process.platform === "win32" ? `${name}.cmd` : name);
+  return path.join(
+    directory,
+    "node_modules",
+    ".bin",
+    process.platform === "win32" ? `${name}.cmd` : name,
+  );
 }
 
 function run(command, args, options) {
@@ -53,10 +58,7 @@ async function smokeMcp(okfMcp, installedRoot, mode) {
     await client.connect(transport);
     const modern = typeof mode === "object";
     assert.equal(client.getProtocolEra(), modern ? "modern" : "legacy");
-    assert.equal(
-      client.getNegotiatedProtocolVersion(),
-      modern ? "2026-07-28" : "2025-11-25",
-    );
+    assert.equal(client.getNegotiatedProtocolVersion(), modern ? "2026-07-28" : "2025-11-25");
     assert.equal(client.getServerVersion().version, packageMetadata.version);
 
     const tools = await client.listTools();
@@ -67,7 +69,8 @@ async function smokeMcp(okfMcp, installedRoot, mode) {
     assert.equal(toolNames.includes("okf_apply_changes"), false);
     assert.equal(toolNames.includes("load_remote_bundle"), false);
     assert.deepEqual(
-      tools.tools.find((tool) => tool.name === "search_concepts").inputSchema.properties.detail.enum,
+      tools.tools.find((tool) => tool.name === "search_concepts").inputSchema.properties.detail
+        .enum,
       ["compact", "full"],
     );
 
@@ -90,10 +93,12 @@ async function smokeMcp(okfMcp, installedRoot, mode) {
     });
     const searchPayload = JSON.parse(search.content[0].text);
     assert.equal(searchPayload.results[0].uri, "okf://okf-mcp/runtime/mcp-server");
-    assert.deepEqual(
-      Object.keys(searchPayload.results[0]).sort(),
-      ["description", "title", "type", "uri"],
-    );
+    assert.deepEqual(Object.keys(searchPayload.results[0]).sort(), [
+      "description",
+      "title",
+      "type",
+      "uri",
+    ]);
   } finally {
     await client.close();
   }
@@ -124,16 +129,21 @@ async function smokeLiveValidation(okfMcp, installedRoot, mode) {
     const byName = new Map(tools.tools.map((tool) => [tool.name, tool]));
     assert.equal(byName.get("okf_validate_changes").annotations.readOnlyHint, true);
     assert.equal(byName.get("okf_apply_changes").annotations.destructiveHint, true);
-    assert.equal(byName.get("okf_validate_changes").inputSchema.properties.detail.default, "compact");
+    assert.equal(
+      byName.get("okf_validate_changes").inputSchema.properties.detail.default,
+      "compact",
+    );
     const result = await client.callTool({
       name: "okf_validate_changes",
       arguments: {
-        changes: [{
-          op: "create",
-          path: "package-smoke-preview.md",
-          type: "Reference",
-          title: "Package Smoke Preview",
-        }],
+        changes: [
+          {
+            op: "create",
+            path: "package-smoke-preview.md",
+            type: "Reference",
+            title: "Package Smoke Preview",
+          },
+        ],
       },
     });
     assert.equal(result.isError, undefined);
@@ -153,7 +163,10 @@ async function main() {
   assert.equal(lockMetadata.version, packageMetadata.version);
   assert.equal(lockMetadata.packages[""].name, packageMetadata.name);
   assert.equal(lockMetadata.packages[""].version, packageMetadata.version);
-  assert.equal(serverMetadata.$schema, "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json");
+  assert.equal(
+    serverMetadata.$schema,
+    "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  );
   assert.equal(serverMetadata.name, packageMetadata.mcpName);
   assert.equal(serverMetadata.version, packageMetadata.version);
   assert.equal(serverMetadata.packages.length, 1);
@@ -201,10 +214,9 @@ async function main() {
   fs.mkdirSync(installRoot, { recursive: true });
 
   try {
-    const packed = JSON.parse(run(
-      "npm",
-      ["pack", "--json", "--ignore-scripts", "--pack-destination", packRoot],
-    ).stdout)[0];
+    const packed = JSON.parse(
+      run("npm", ["pack", "--json", "--ignore-scripts", "--pack-destination", packRoot]).stdout,
+    )[0];
     const packedPaths = new Set(packed.files.map((entry) => entry.path));
     assert.equal(packed.name, packageMetadata.name);
     assert.equal(packed.version, packageMetadata.version);
@@ -213,13 +225,11 @@ async function main() {
     assert.equal(packedPaths.has("server.json"), true);
     assert.equal(packedPaths.has(".agents/skills/okf-v02-migration/SKILL.md"), true);
     assert.equal(packedPaths.has(".agents/skills/okf-v02-migration/agents/openai.yaml"), true);
-    assert.equal(packedPaths.has(".agents/skills/okf-v02-migration/references/field-mapping.md"), true);
-    [
-      ".github/",
-      ".okf-proposals/",
-      "scripts/",
-      "test/",
-    ].forEach((prefix) => {
+    assert.equal(
+      packedPaths.has(".agents/skills/okf-v02-migration/references/field-mapping.md"),
+      true,
+    );
+    [".github/", ".okf-proposals/", "scripts/", "test/"].forEach((prefix) => {
       assert.equal(
         Array.from(packedPaths).some((entry) => entry.startsWith(prefix)),
         false,
@@ -239,9 +249,15 @@ async function main() {
       "--no-fund",
     ]);
 
-    const installedPackageRoot = path.join(installRoot, "node_modules", ...packageMetadata.name.split("/"));
+    const installedPackageRoot = path.join(
+      installRoot,
+      "node_modules",
+      ...packageMetadata.name.split("/"),
+    );
     const installedRoot = path.join(installedPackageRoot, "okf", "okf-mcp");
-    const installedServerMetadata = JSON.parse(fs.readFileSync(path.join(installedPackageRoot, "server.json"), "utf8"));
+    const installedServerMetadata = JSON.parse(
+      fs.readFileSync(path.join(installedPackageRoot, "server.json"), "utf8"),
+    );
     const okf = executable(installRoot, "okf");
     const okfMcp = executable(installRoot, "okf-mcp");
 
@@ -261,13 +277,19 @@ async function main() {
     await smokeLiveValidation(okfMcp, installedRoot, "legacy");
     await smokeLiveValidation(okfMcp, installedRoot, { pin: "2026-07-28" });
 
-    process.stdout.write(JSON.stringify({
-      package: `${packageMetadata.name}@${packageMetadata.version}`,
-      entries: packed.entryCount,
-      concepts: 17,
-      binaries: ["okf", "okf-mcp"],
-      stdio: "passed",
-    }, null, 2) + "\n");
+    process.stdout.write(
+      JSON.stringify(
+        {
+          package: `${packageMetadata.name}@${packageMetadata.version}`,
+          entries: packed.entryCount,
+          concepts: 17,
+          binaries: ["okf", "okf-mcp"],
+          stdio: "passed",
+        },
+        null,
+        2,
+      ) + "\n",
+    );
   } finally {
     fs.rmSync(temporaryRoot, { recursive: true, force: true });
   }

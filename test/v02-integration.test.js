@@ -39,7 +39,8 @@ function markdown(frontmatter, body) {
 
 function gitBlobSha(value) {
   const content = Buffer.from(value);
-  return crypto.createHash("sha1")
+  return crypto
+    .createHash("sha1")
     .update(Buffer.from(`blob ${content.length}\0`))
     .update(content)
     .digest("hex");
@@ -47,52 +48,73 @@ function gitBlobSha(value) {
 
 function computationFixture(t) {
   const root = tempRoot(t);
-  write(root, "index.md", [
-    "---",
-    "okf_version: \"0.2\"",
-    "---",
-    "",
-    "# Finance",
-    "",
-    "- [Revenue](computations/revenue.md)",
-    "- [Policy](policies/revenue.md)",
-    "- [Runner](references/run.md)",
-    "",
-  ].join("\n"));
-  write(root, "policies/revenue.md", markdown([
-    "type: Policy",
-    "title: Revenue Policy",
-  ], "# Revenue Policy"));
-  write(root, "references/run.md", markdown([
-    "type: Execution Skill",
-    "title: Run SQLite",
-  ], "# Run SQLite"));
-  write(root, "artifacts/revenue.sql", "SELECT SUM(amount) AS revenue FROM revenue WHERE year = :year;\n");
-  write(root, "artifacts/attest.py", "def attest(receipt): return receipt.get('result') is not None\n");
+  write(
+    root,
+    "index.md",
+    [
+      "---",
+      'okf_version: "0.2"',
+      "---",
+      "",
+      "# Finance",
+      "",
+      "- [Revenue](computations/revenue.md)",
+      "- [Policy](policies/revenue.md)",
+      "- [Runner](references/run.md)",
+      "",
+    ].join("\n"),
+  );
+  write(
+    root,
+    "policies/revenue.md",
+    markdown(["type: Policy", "title: Revenue Policy"], "# Revenue Policy"),
+  );
+  write(
+    root,
+    "references/run.md",
+    markdown(["type: Execution Skill", "title: Run SQLite"], "# Run SQLite"),
+  );
+  write(
+    root,
+    "artifacts/revenue.sql",
+    "SELECT SUM(amount) AS revenue FROM revenue WHERE year = :year;\n",
+  );
+  write(
+    root,
+    "artifacts/attest.py",
+    "def attest(receipt): return receipt.get('result') is not None\n",
+  );
   write(root, "artifacts/ignored.py", "raise RuntimeError('must never be loaded')\n");
-  write(root, "computations/revenue.md", markdown([
-    "type: Attested Computation",
-    "title: Attested Revenue",
-    "runtime: sqlite",
-    "parameters:",
-    "  - name: year",
-    "    type: integer",
-    "    required: true",
-    "computation: ../artifacts/revenue.sql",
-    "executor:",
-    "  resource: ../references/run.md",
-    "  receipt: [job_id, result]",
-    "attester:",
-    "  resource: ../artifacts/attest.py",
-    "sources:",
-    "  - id: policy",
-    "    resource: ../policies/revenue.md",
-    "verified:",
-    "  by: process:nightly",
-    "  at: 2026-08-10T02:00:00Z",
-    "status: stable",
-    "stale_after: 2026-08-20",
-  ], "# Attested Revenue"));
+  write(
+    root,
+    "computations/revenue.md",
+    markdown(
+      [
+        "type: Attested Computation",
+        "title: Attested Revenue",
+        "runtime: sqlite",
+        "parameters:",
+        "  - name: year",
+        "    type: integer",
+        "    required: true",
+        "computation: ../artifacts/revenue.sql",
+        "executor:",
+        "  resource: ../references/run.md",
+        "  receipt: [job_id, result]",
+        "attester:",
+        "  resource: ../artifacts/attest.py",
+        "sources:",
+        "  - id: policy",
+        "    resource: ../policies/revenue.md",
+        "verified:",
+        "  by: process:nightly",
+        "  at: 2026-08-10T02:00:00Z",
+        "status: stable",
+        "stale_after: 2026-08-20",
+      ],
+      "# Attested Revenue",
+    ),
+  );
   return root;
 }
 
@@ -111,14 +133,39 @@ test("v0.2 indexing exposes canonical aliases, semantic edges, inert assets, sig
   assert.equal(computation.signals.freshness, "fresh");
   assert.equal(computation.signals.computation.attestationReady, true);
 
-  assert.deepEqual(index.assets.map((asset) => asset.path), [
-    "artifacts/attest.py",
-    "artifacts/revenue.sql",
-  ]);
-  assert.equal(index.assets.some((asset) => asset.path.includes("ignored")), false);
-  assert.equal(index.edges.some((edge) => edge.source === canonical && edge.kind === "source" && edge.target === "okf://finance/policies/revenue"), true);
-  assert.equal(index.edges.some((edge) => edge.source === canonical && edge.kind === "executor" && edge.target === "okf://finance/references/run"), true);
-  assert.equal(index.edges.some((edge) => edge.source === canonical && edge.kind === "computation" && edge.resolvedAs === "asset"), true);
+  assert.deepEqual(
+    index.assets.map((asset) => asset.path),
+    ["artifacts/attest.py", "artifacts/revenue.sql"],
+  );
+  assert.equal(
+    index.assets.some((asset) => asset.path.includes("ignored")),
+    false,
+  );
+  assert.equal(
+    index.edges.some(
+      (edge) =>
+        edge.source === canonical &&
+        edge.kind === "source" &&
+        edge.target === "okf://finance/policies/revenue",
+    ),
+    true,
+  );
+  assert.equal(
+    index.edges.some(
+      (edge) =>
+        edge.source === canonical &&
+        edge.kind === "executor" &&
+        edge.target === "okf://finance/references/run",
+    ),
+    true,
+  );
+  assert.equal(
+    index.edges.some(
+      (edge) =>
+        edge.source === canonical && edge.kind === "computation" && edge.resolvedAs === "asset",
+    ),
+    true,
+  );
 
   const results = searchConcepts(index, {
     statuses: ["stable"],
@@ -142,17 +189,31 @@ test("v0.2 indexing exposes canonical aliases, semantic edges, inert assets, sig
   const prepared = prepareAttestedComputation(index, canonical, { year: 2026 });
   assert.equal(prepared.prepared, true);
   assert.deepEqual(prepared.parameterNames, ["year"]);
-  assert.equal(Object.prototype.hasOwnProperty.call(prepared, "parameters"), false, "parameter values must not be returned");
-  const receipt = checkComputationReceipt(index, canonical, { job_id: "secret-job", result: { value: 3 } });
+  assert.equal(
+    Object.prototype.hasOwnProperty.call(prepared, "parameters"),
+    false,
+    "parameter values must not be returned",
+  );
+  const receipt = checkComputationReceipt(index, canonical, {
+    job_id: "secret-job",
+    result: { value: 3 },
+  });
   assert.equal(receipt.shapeComplete, true);
-  assert.equal(JSON.stringify(receipt).includes("secret-job"), false, "receipt values must not be returned");
+  assert.equal(
+    JSON.stringify(receipt).includes("secret-job"),
+    false,
+    "receipt values must not be returned",
+  );
 
   const asset = index.assets.find((entry) => entry.path.endsWith("revenue.sql"));
   const read = readBundleAsset(index, { uri: asset.uri });
   assert.equal(read.contentEncoding, "utf-8");
   assert.match(read.content, /SELECT SUM/);
   const provenance = getProvenance(index, canonical);
-  assert.equal(provenance.nodes.some((node) => node.id === "okf://finance/policies/revenue"), true);
+  assert.equal(
+    provenance.nodes.some((node) => node.id === "okf://finance/policies/revenue"),
+    true,
+  );
   assert.equal(provenance.externalFetched, false);
 });
 
@@ -170,10 +231,7 @@ test("broken Markdown links are advisory by default and opt-in strict", (t) => {
 test("binary bundle assets are returned from the bounded indexed snapshot", (t) => {
   const root = tempRoot(t);
   write(root, "blob.bin", Buffer.from([0x00, 0x01, 0xfe, 0xff]));
-  write(root, "artifact.md", markdown([
-    "type: Artifact",
-    "resource: blob.bin",
-  ], "# Artifact"));
+  write(root, "artifact.md", markdown(["type: Artifact", "resource: blob.bin"], "# Artifact"));
   const index = buildIndex([{ id: "binary", root }]);
   const asset = index.assets.find((entry) => entry.path === "blob.bin");
   assert.ok(asset);
@@ -185,17 +243,20 @@ test("binary bundle assets are returned from the bounded indexed snapshot", (t) 
 
 test("path-like missing sources stay unresolved instead of becoming opaque external provenance", (t) => {
   const root = tempRoot(t);
-  write(root, "concept.md", markdown([
-    "type: Concept",
-    "sources:",
-    "  - resource: ../missing.sql",
-  ], "# Concept"));
+  write(
+    root,
+    "concept.md",
+    markdown(["type: Concept", "sources:", "  - resource: ../missing.sql"], "# Concept"),
+  );
   const index = buildIndex([{ id: "demo", root }]);
   const edge = index.edges.find((entry) => entry.kind === "source");
   assert.equal(edge.broken, true);
   assert.equal(edge.external, false);
   assert.equal(edge.resolvedAs, "unresolved");
-  assert.equal(index.warnings.some((entry) => entry.code === "asset_outside_root"), true);
+  assert.equal(
+    index.warnings.some((entry) => entry.code === "asset_outside_root"),
+    true,
+  );
 });
 
 test("invalid or reserved Markdown cannot satisfy computation dependencies", (t) => {
@@ -203,15 +264,22 @@ test("invalid or reserved Markdown cannot satisfy computation dependencies", (t)
   write(root, "index.md", "# Index\n\n- [Compute](compute.md)\n");
   write(root, "executor.md", "# Missing type\n");
   write(root, "attester.md", "# Missing type\n");
-  write(root, "compute.md", markdown([
-    "type: Attested Computation",
-    "runtime: python",
-    "executor:",
-    "  resource: executor.md",
-    "  receipt: [result]",
-    "attester:",
-    "  resource: attester.md",
-  ], "# Compute\n\n# Computation\n\n```python\nprint('static')\n```"));
+  write(
+    root,
+    "compute.md",
+    markdown(
+      [
+        "type: Attested Computation",
+        "runtime: python",
+        "executor:",
+        "  resource: executor.md",
+        "  receipt: [result]",
+        "attester:",
+        "  resource: attester.md",
+      ],
+      "# Compute\n\n# Computation\n\n```python\nprint('static')\n```",
+    ),
+  );
   const index = buildIndex([{ id: "invalid-targets", root }]);
   const uri = "okf://invalid-targets/compute";
   const contract = index.byUri.get(uri).signals.computation;
@@ -222,7 +290,10 @@ test("invalid or reserved Markdown cannot satisfy computation dependencies", (t)
   assert.equal(inspection.attester.resolved, false);
   assert.throws(() => prepareAttestedComputation(index, uri, {}), /not statically ready/);
 
-  const store = new FileConceptStore({ bundles: [{ id: "invalid-targets", root }], relationTypes: [] });
+  const store = new FileConceptStore({
+    bundles: [{ id: "invalid-targets", root }],
+    relationTypes: [],
+  });
   const service = new ConceptAuthoringService(store);
   const validation = service.validateAttestedComputation({
     bundle: "invalid-targets",
@@ -236,7 +307,10 @@ test("invalid or reserved Markdown cannot satisfy computation dependencies", (t)
     body: "# New\n\n# Computation\n\n```python\nprint('static')\n```",
   });
   assert.equal(validation.valid, false);
-  assert.equal(validation.errors.some((entry) => /Markdown resource/.test(entry.message)), true);
+  assert.equal(
+    validation.errors.some((entry) => /Markdown resource/.test(entry.message)),
+    true,
+  );
 });
 
 test("invalid UTF-8 in a text computation asset prevents static readiness", (t) => {
@@ -244,21 +318,31 @@ test("invalid UTF-8 in a text computation asset prevents static readiness", (t) 
   write(root, "runner.md", markdown(["type: Execution Skill"], "# Runner"));
   write(root, "attester.py", "def attest(receipt): return True\n");
   write(root, "bad.sql", Buffer.from([0xc3, 0x28]));
-  write(root, "compute.md", markdown([
-    "type: Attested Computation",
-    "runtime: sqlite",
-    "computation: bad.sql",
-    "executor:",
-    "  resource: runner.md",
-    "  receipt: [result]",
-    "attester:",
-    "  resource: attester.py",
-  ], "# Compute"));
+  write(
+    root,
+    "compute.md",
+    markdown(
+      [
+        "type: Attested Computation",
+        "runtime: sqlite",
+        "computation: bad.sql",
+        "executor:",
+        "  resource: runner.md",
+        "  receipt: [result]",
+        "attester:",
+        "  resource: attester.py",
+      ],
+      "# Compute",
+    ),
+  );
   const index = buildIndex([{ id: "invalid-utf8", root }]);
   const contract = index.byUri.get("okf://invalid-utf8/compute").signals.computation;
   assert.equal(contract.assetsReady, false);
   assert.equal(contract.attestationReady, false);
-  assert.equal(index.warnings.some((entry) => entry.code === "asset_invalid_utf8"), true);
+  assert.equal(
+    index.warnings.some((entry) => entry.code === "asset_invalid_utf8"),
+    true,
+  );
 });
 
 test("MCP exposes v0.2 read tools by default and gates coordinated computation authoring separately", async (t) => {
@@ -284,7 +368,11 @@ test("MCP exposes v0.2 read tools by default and gates coordinated computation a
 test("coordinated computation proposals write neither file before review and accept concept plus computation together", async (t) => {
   const root = computationFixture(t);
   const proposalRoot = path.join(root, ".proposals");
-  const store = new FileConceptStore({ bundles: [{ id: "finance", root }], relationTypes: [], proposalRoot });
+  const store = new FileConceptStore({
+    bundles: [{ id: "finance", root }],
+    relationTypes: [],
+    proposalRoot,
+  });
   const service = new ConceptAuthoringService(store);
   const input = {
     bundle: "finance",
@@ -304,23 +392,39 @@ test("coordinated computation proposals write neither file before review and acc
   };
   const generic = await service.proposeConcept(input);
   assert.equal(generic.created, false);
-  assert.equal(generic.validation.errors.some((entry) => entry.code === "computation_authoring_requires_capability"), true);
+  assert.equal(
+    generic.validation.errors.some(
+      (entry) => entry.code === "computation_authoring_requires_capability",
+    ),
+    true,
+  );
 
   const proposed = await service.proposeAttestedComputation(input);
   assert.equal(proposed.created, true);
   assert.equal(fs.existsSync(path.join(root, input.path)), false);
   assert.equal(fs.existsSync(path.join(root, input.computationPath)), false);
-  const accepted = await service.acceptProposal({ proposalId: proposed.proposal.id, allowComputation: true });
+  const accepted = await service.acceptProposal({
+    proposalId: proposed.proposal.id,
+    allowComputation: true,
+  });
   assert.equal(accepted.accepted, true);
   assert.equal(fs.existsSync(path.join(root, input.path)), true);
   assert.equal(fs.existsSync(path.join(root, input.computationPath)), true);
-  assert.equal(store.getIndex().byUri.get("okf://finance/computations/net-revenue").signals.computation.attestationReady, true);
+  assert.equal(
+    store.getIndex().byUri.get("okf://finance/computations/net-revenue").signals.computation
+      .attestationReady,
+    true,
+  );
 });
 
 test("ordinary acceptance failures roll back all coordinated computation files", async (t) => {
   const root = computationFixture(t);
   const proposalRoot = path.join(root, ".proposals");
-  const store = new FileConceptStore({ bundles: [{ id: "finance", root }], relationTypes: [], proposalRoot });
+  const store = new FileConceptStore({
+    bundles: [{ id: "finance", root }],
+    relationTypes: [],
+    proposalRoot,
+  });
   const service = new ConceptAuthoringService(store);
   const proposed = await service.proposeAttestedComputation({
     bundle: "finance",
@@ -346,7 +450,11 @@ test("ordinary acceptance failures roll back all coordinated computation files",
   );
   assert.equal(fs.existsSync(path.join(root, "computations/rollback.md")), false);
   assert.equal(fs.existsSync(path.join(root, "artifacts/rollback.sql")), false);
-  assert.equal(JSON.parse(fs.readFileSync(path.join(proposalRoot, `${proposed.proposal.id}.json`), "utf8")).status, "proposed");
+  assert.equal(
+    JSON.parse(fs.readFileSync(path.join(proposalRoot, `${proposed.proposal.id}.json`), "utf8"))
+      .status,
+    "proposed",
+  );
 });
 
 test("computation proposals conflict when reviewed dependencies change", async (t) => {
@@ -404,9 +512,16 @@ test("internal concept computation dependencies are revision-bound", async (t) =
   });
   assert.equal(proposed.created, true);
   assert.equal(proposed.proposal.dependencyRevisions.length, 2);
-  write(root, "references/run.md", markdown(["type: Execution Skill", "title: Changed"], "# Changed"));
+  write(
+    root,
+    "references/run.md",
+    markdown(["type: Execution Skill", "title: Changed"], "# Changed"),
+  );
 
-  const accepted = await service.acceptProposal({ proposalId: proposed.proposal.id, allowComputation: true });
+  const accepted = await service.acceptProposal({
+    proposalId: proposed.proposal.id,
+    allowComputation: true,
+  });
   assert.equal(accepted.accepted, false);
   assert.equal(accepted.conflict, true);
   assert.equal(accepted.proposal.conflict.code, "computation_dependency_changed");
@@ -415,7 +530,11 @@ test("internal concept computation dependencies are revision-bound", async (t) =
 test("acceptance rejects a tampered metadata-only computation update", async (t) => {
   const root = computationFixture(t);
   const proposalRoot = path.join(root, ".proposals");
-  const store = new FileConceptStore({ bundles: [{ id: "finance", root }], relationTypes: [], proposalRoot });
+  const store = new FileConceptStore({
+    bundles: [{ id: "finance", root }],
+    relationTypes: [],
+    proposalRoot,
+  });
   const service = new ConceptAuthoringService(store);
   const proposed = await service.proposeUpdate({
     uri: "okf://finance/computations/revenue",
@@ -430,8 +549,14 @@ test("acceptance rejects a tampered metadata-only computation update", async (t)
 
   const accepted = await service.acceptProposal({ proposalId: proposed.proposal.id });
   assert.equal(accepted.accepted, false);
-  assert.equal(accepted.validation.errors.some((entry) => entry.code === "immutable_computation_contract"), true);
-  assert.doesNotMatch(fs.readFileSync(path.join(root, "computations/revenue.md"), "utf8"), /tampered-runtime/);
+  assert.equal(
+    accepted.validation.errors.some((entry) => entry.code === "immutable_computation_contract"),
+    true,
+  );
+  assert.doesNotMatch(
+    fs.readFileSync(path.join(root, "computations/revenue.md"), "utf8"),
+    /tampered-runtime/,
+  );
 });
 
 test("Stage-A migration creates a manifest and per-file proposals without automatic acceptance", async (t) => {
@@ -439,10 +564,14 @@ test("Stage-A migration creates a manifest and per-file proposals without automa
   const bundle = path.join(projectRoot, "bundle");
   fs.mkdirSync(bundle, { recursive: true });
   write(bundle, "index.md", "# Legacy\n\n- [Metric](metric.md)\n");
-  write(bundle, "metric.md", markdown([
-    "type: Metric",
-    "timestamp: 2026-05-28T22:53:05Z",
-  ], "# Metric\n\n# Citations\n\n- [Policy](https://example.test/policy)"));
+  write(
+    bundle,
+    "metric.md",
+    markdown(
+      ["type: Metric", "timestamp: 2026-05-28T22:53:05Z"],
+      "# Metric\n\n# Citations\n\n- [Policy](https://example.test/policy)",
+    ),
+  );
   const store = new FileConceptStore({
     bundles: [{ id: "legacy", root: bundle }],
     relationTypes: [],
@@ -458,28 +587,45 @@ test("Stage-A migration creates a manifest and per-file proposals without automa
   });
   assert.equal(result.created, true);
   assert.equal(result.proposals.length, 2);
-  assert.equal(result.proposals.every((proposal) => proposal.status === "proposed"), true);
+  assert.equal(
+    result.proposals.every((proposal) => proposal.status === "proposed"),
+    true,
+  );
   assert.equal(fs.readFileSync(path.join(bundle, "metric.md"), "utf8"), before);
-  assert.equal(fs.existsSync(path.join(store.proposalRoot, "migrations", `${result.manifest.id}.json`)), true);
+  assert.equal(
+    fs.existsSync(path.join(store.proposalRoot, "migrations", `${result.manifest.id}.json`)),
+    true,
+  );
 });
 
 test("Stage-A can propose metadata-only updates for existing Attested Computations", async (t) => {
   const projectRoot = tempRoot(t);
   const bundle = path.join(projectRoot, "bundle");
   fs.mkdirSync(bundle, { recursive: true });
-  write(bundle, "index.md", "# Legacy\n\n- [Compute](compute.md)\n- [Runner](runner.md)\n- [Attester](attester.md)\n");
+  write(
+    bundle,
+    "index.md",
+    "# Legacy\n\n- [Compute](compute.md)\n- [Runner](runner.md)\n- [Attester](attester.md)\n",
+  );
   write(bundle, "runner.md", markdown(["type: Execution Skill"], "# Runner"));
   write(bundle, "attester.md", markdown(["type: Attester"], "# Attester"));
-  write(bundle, "compute.md", markdown([
-    "type: Attested Computation",
-    "timestamp: 2026-08-11T10:00Z",
-    "runtime: sqlite",
-    "executor:",
-    "  resource: runner.md",
-    "  receipt: [result]",
-    "attester:",
-    "  resource: attester.md",
-  ], "# Compute\n\n# Computation\n\n```sql\nSELECT 1;\n```"));
+  write(
+    bundle,
+    "compute.md",
+    markdown(
+      [
+        "type: Attested Computation",
+        "timestamp: 2026-08-11T10:00Z",
+        "runtime: sqlite",
+        "executor:",
+        "  resource: runner.md",
+        "  receipt: [result]",
+        "attester:",
+        "  resource: attester.md",
+      ],
+      "# Compute\n\n# Computation\n\n```sql\nSELECT 1;\n```",
+    ),
+  );
   const store = new FileConceptStore({
     bundles: [{ id: "legacy-compute", root: bundle }],
     relationTypes: [],
@@ -506,12 +652,17 @@ test("migration index acceptance rejects a tampered version declaration", async 
   const bundle = path.join(projectRoot, "bundle");
   fs.mkdirSync(bundle, { recursive: true });
   write(bundle, "index.md", "# Legacy\n\n- [Metric](metric.md)\n");
-  write(bundle, "metric.md", markdown([
-    "type: Metric",
-    "timestamp: 2026-05-28T22:53:05Z",
-  ], "# Metric"));
+  write(
+    bundle,
+    "metric.md",
+    markdown(["type: Metric", "timestamp: 2026-05-28T22:53:05Z"], "# Metric"),
+  );
   const proposalRoot = path.join(projectRoot, ".okf-proposals");
-  const store = new FileConceptStore({ bundles: [{ id: "tamper", root: bundle }], relationTypes: [], proposalRoot });
+  const store = new FileConceptStore({
+    bundles: [{ id: "tamper", root: bundle }],
+    relationTypes: [],
+    proposalRoot,
+  });
   const service = new ConceptAuthoringService(store);
   const result = await service.proposeV02Migration({
     bundle: "tamper",
@@ -528,23 +679,37 @@ test("migration index acceptance rejects a tampered version declaration", async 
 
   const accepted = await service.acceptProposal({ proposalId: version.id });
   assert.equal(accepted.accepted, false);
-  assert.equal(accepted.validation.errors.some((entry) => entry.code === "invalid_migration_version_declaration"), true);
+  assert.equal(
+    accepted.validation.errors.some(
+      (entry) => entry.code === "invalid_migration_version_declaration",
+    ),
+    true,
+  );
   assert.doesNotMatch(fs.readFileSync(path.join(bundle, "index.md"), "utf8"), /okf_version/);
 });
 
 test("remote loading uses two passes and fetches only explicitly referenced inert assets", async () => {
   const files = new Map([
-    ["okf/bundle/index.md", "---\nokf_version: \"0.2\"\n---\n\n# Remote\n\n- [Compute](computations/revenue.md)\n"],
-    ["okf/bundle/computations/revenue.md", markdown([
-      "type: Attested Computation",
-      "runtime: sqlite",
-      "computation: ../artifacts/revenue.sql",
-      "executor:",
-      "  resource: ../references/run.md",
-      "  receipt: [job_id, result]",
-      "attester:",
-      "  resource: ../artifacts/attest.py",
-    ], "# Revenue")],
+    [
+      "okf/bundle/index.md",
+      '---\nokf_version: "0.2"\n---\n\n# Remote\n\n- [Compute](computations/revenue.md)\n',
+    ],
+    [
+      "okf/bundle/computations/revenue.md",
+      markdown(
+        [
+          "type: Attested Computation",
+          "runtime: sqlite",
+          "computation: ../artifacts/revenue.sql",
+          "executor:",
+          "  resource: ../references/run.md",
+          "  receipt: [job_id, result]",
+          "attester:",
+          "  resource: ../artifacts/attest.py",
+        ],
+        "# Revenue",
+      ),
+    ],
     ["okf/bundle/references/run.md", markdown(["type: Execution Skill"], "# Run")],
     ["okf/bundle/artifacts/revenue.sql", "SELECT 1;\n"],
     ["okf/bundle/artifacts/attest.py", "def attest(receipt): return True\n"],
@@ -559,14 +724,15 @@ test("remote loading uses two passes and fetches only explicitly referenced iner
     if (target.includes("/contents/")) {
       return {
         ok: true,
-        json: async () => Array.from(files.entries()).map(([filePath, text]) => ({
-          type: "file",
-          name: path.posix.basename(filePath),
-          path: filePath,
-          size: Buffer.byteLength(text),
-          sha: gitBlobSha(text),
-          download_url: `https://raw.example/${filePath}`,
-        })),
+        json: async () =>
+          Array.from(files.entries()).map(([filePath, text]) => ({
+            type: "file",
+            name: path.posix.basename(filePath),
+            path: filePath,
+            size: Buffer.byteLength(text),
+            sha: gitBlobSha(text),
+            download_url: `https://raw.example/${filePath}`,
+          })),
       };
     }
     if (target.startsWith("https://raw.example/")) {
@@ -581,11 +747,14 @@ test("remote loading uses two passes and fetches only explicitly referenced iner
     }
     return { ok: false, status: 404, statusText: "Not Found" };
   };
-  const remote = await fetchGitHubBundle({
-    id: "remote",
-    url: "https://github.com/acme/catalog/tree/main/okf/bundle",
-    include: ["*.md", "**/*.md"],
-  }, { fetch });
+  const remote = await fetchGitHubBundle(
+    {
+      id: "remote",
+      url: "https://github.com/acme/catalog/tree/main/okf/bundle",
+      include: ["*.md", "**/*.md"],
+    },
+    { fetch },
+  );
   assert.equal(remote.documents.length, 3);
   assert.deepEqual(remote.assets.map((asset) => asset.path).sort(), [
     "artifacts/attest.py",
@@ -594,26 +763,33 @@ test("remote loading uses two passes and fetches only explicitly referenced iner
   assert.equal(fetchedRaw.includes("okf/bundle/artifacts/unreferenced.py"), false);
   assert.equal(remote.remoteSource.commitSha, "a".repeat(40));
   const index = buildIndex([remote]);
-  assert.equal(index.byUri.get("okf://remote/computations/revenue").signals.computation.attestationReady, true);
+  assert.equal(
+    index.byUri.get("okf://remote/computations/revenue").signals.computation.attestationReady,
+    true,
+  );
 });
 
 test("remote loading requires an immutable revision and diagnoses invalid UTF-8 text assets", async () => {
   await assert.rejects(
-    () => fetchGitHubBundle({
-      id: "unresolved",
-      url: "https://github.com/acme/catalog/tree/main/okf/bundle",
-    }, {
-      fetch: async () => ({ ok: false, status: 404, statusText: "Not Found" }),
-    }),
+    () =>
+      fetchGitHubBundle(
+        {
+          id: "unresolved",
+          url: "https://github.com/acme/catalog/tree/main/okf/bundle",
+        },
+        {
+          fetch: async () => ({ ok: false, status: 404, statusText: "Not Found" }),
+        },
+      ),
     /GitHub request failed|immutable commit SHA/,
   );
 
   const files = new Map([
     ["okf/bundle/index.md", "# Remote\n\n- [Evidence](evidence.md)\n"],
-    ["okf/bundle/evidence.md", markdown([
-      "type: Artifact",
-      "resource: artifacts/evidence.sql",
-    ], "# Evidence")],
+    [
+      "okf/bundle/evidence.md",
+      markdown(["type: Artifact", "resource: artifacts/evidence.sql"], "# Evidence"),
+    ],
     ["okf/bundle/artifacts/evidence.sql", Buffer.from([0xc3, 0x28])],
   ]);
   const fetch = async (url) => {
@@ -624,14 +800,15 @@ test("remote loading requires an immutable revision and diagnoses invalid UTF-8 
     if (target.includes("/contents/")) {
       return {
         ok: true,
-        json: async () => Array.from(files.entries()).map(([filePath, content]) => ({
-          type: "file",
-          name: path.posix.basename(filePath),
-          path: filePath,
-          size: Buffer.byteLength(content),
-          sha: gitBlobSha(content),
-          download_url: `https://raw.example/${filePath}`,
-        })),
+        json: async () =>
+          Array.from(files.entries()).map(([filePath, content]) => ({
+            type: "file",
+            name: path.posix.basename(filePath),
+            path: filePath,
+            size: Buffer.byteLength(content),
+            sha: gitBlobSha(content),
+            download_url: `https://raw.example/${filePath}`,
+          })),
       };
     }
     if (target.startsWith("https://raw.example/")) {
@@ -640,11 +817,20 @@ test("remote loading requires an immutable revision and diagnoses invalid UTF-8 
     }
     return { ok: false, status: 404, statusText: "Not Found" };
   };
-  const remote = await fetchGitHubBundle({
-    id: "utf8",
-    url: "https://github.com/acme/catalog/tree/main/okf/bundle",
-  }, { fetch });
+  const remote = await fetchGitHubBundle(
+    {
+      id: "utf8",
+      url: "https://github.com/acme/catalog/tree/main/okf/bundle",
+    },
+    { fetch },
+  );
   assert.equal(remote.assets[0].kind, "binary");
-  assert.equal(remote.remoteSource.unresolvedReferences.some((entry) => entry.code === "asset_invalid_utf8"), true);
-  assert.equal(buildIndex([remote]).warnings.some((entry) => entry.code === "asset_invalid_utf8"), true);
+  assert.equal(
+    remote.remoteSource.unresolvedReferences.some((entry) => entry.code === "asset_invalid_utf8"),
+    true,
+  );
+  assert.equal(
+    buildIndex([remote]).warnings.some((entry) => entry.code === "asset_invalid_utf8"),
+    true,
+  );
 });

@@ -22,8 +22,9 @@ function listResources(index) {
 }
 
 function readResource(index, uri) {
-  const doc = index.byUri.get(uri)
-    || index.documents.find((candidate) => canonicalResourceUri(candidate.uri) === uri);
+  const doc =
+    index.byUri.get(uri) ||
+    index.documents.find((candidate) => canonicalResourceUri(candidate.uri) === uri);
   if (!doc) {
     throw new ResourceNotFoundError(uri);
   }

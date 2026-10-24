@@ -50,17 +50,21 @@ function publicDiagnostic(entry) {
   const source = entry || {};
   const rawCode = typeof source.code === "string" ? source.code : "";
   const rawField = typeof source.field === "string" ? source.field : "";
-  return Object.fromEntries([
-    ["code", /^[a-z][a-z0-9_]{0,63}$/.test(rawCode) ? rawCode : "producer_invalid"],
-    ["severity", source.severity || "error"],
-    ["layer", source.layer || "producer"],
-    ["path", source.path],
-    ["field", /^[A-Za-z0-9_.[\]-]{1,128}$/.test(rawField) ? rawField : undefined],
-  ].filter(([, value]) => value !== undefined));
+  return Object.fromEntries(
+    [
+      ["code", /^[a-z][a-z0-9_]{0,63}$/.test(rawCode) ? rawCode : "producer_invalid"],
+      ["severity", source.severity || "error"],
+      ["layer", source.layer || "producer"],
+      ["path", source.path],
+      ["field", /^[A-Za-z0-9_.[\]-]{1,128}$/.test(rawField) ? rawField : undefined],
+    ].filter(([, value]) => value !== undefined),
+  );
 }
 
 function diagnostic(code, extra) {
-  return publicDiagnostic(Object.assign({ code, severity: "error", layer: "producer" }, extra || {}));
+  return publicDiagnostic(
+    Object.assign({ code, severity: "error", layer: "producer" }, extra || {}),
+  );
 }
 
 function isInside(root, target) {
@@ -87,8 +91,7 @@ function moduleDirectories(projectRoot) {
 // node_modules directories. Node resolves symbolic links away, so the install
 // location is located lexically first and then tied back to the resolved entry.
 function locateInstalledPackage(projectRoot, projectPath, packageName) {
-  const roots = moduleDirectories(projectRoot)
-    .concat(moduleDirectories(path.dirname(projectPath)));
+  const roots = moduleDirectories(projectRoot).concat(moduleDirectories(path.dirname(projectPath)));
   const seen = new Set();
   for (const directory of roots) {
     if (seen.has(directory)) continue;
@@ -104,10 +107,16 @@ function loadInstalledProducer(project, packageName) {
   try {
     resolved = createRequire(project.path).resolve(packageName);
   } catch {
-    throw new ProducerHostError("The configured producer package is not installed in the project.", "producer_package_not_installed");
+    throw new ProducerHostError(
+      "The configured producer package is not installed in the project.",
+      "producer_package_not_installed",
+    );
   }
   if (!path.isAbsolute(resolved)) {
-    throw new ProducerHostError("The configured producer package must resolve to an installed npm package.", "invalid_producer_package");
+    throw new ProducerHostError(
+      "The configured producer package must resolve to an installed npm package.",
+      "invalid_producer_package",
+    );
   }
   let projectRoot;
   try {
@@ -118,7 +127,10 @@ function loadInstalledProducer(project, packageName) {
   const projectPath = path.resolve(project.path);
   const installDirectory = locateInstalledPackage(projectRoot, projectPath, packageName);
   if (!installDirectory) {
-    throw new ProducerHostError("The configured producer package must be installed under a project node_modules directory.", "invalid_producer_package");
+    throw new ProducerHostError(
+      "The configured producer package must be installed under a project node_modules directory.",
+      "invalid_producer_package",
+    );
   }
   let realInstall;
   let realResolved;
@@ -126,14 +138,20 @@ function loadInstalledProducer(project, packageName) {
     realInstall = fs.realpathSync(installDirectory);
     realResolved = fs.realpathSync(resolved);
   } catch {
-    throw new ProducerHostError("The configured producer package could not be resolved safely.", "invalid_producer_package");
+    throw new ProducerHostError(
+      "The configured producer package could not be resolved safely.",
+      "invalid_producer_package",
+    );
   }
   // A workspace or linked install points out of node_modules; that is an
   // install-tool detail, and anything able to write there can already run
   // install scripts. What must hold is that the entry node resolved belongs to
   // the package the project installed under that exact bare name.
   if (!isInside(realInstall, realResolved)) {
-    throw new ProducerHostError("The configured producer package must resolve inside its installed package directory.", "invalid_producer_package");
+    throw new ProducerHostError(
+      "The configured producer package must resolve inside its installed package directory.",
+      "invalid_producer_package",
+    );
   }
   return require(realResolved);
 }
@@ -143,11 +161,19 @@ function inspectConfig(value, envNames, pathParts) {
   Object.entries(value).forEach(([key, child]) => {
     const normalized = key.toLowerCase().replace(/[^a-z0-9]/g, "");
     if (UNSAFE_CONFIG_KEYS.has(normalized)) {
-      throw new ProducerHostError("Producer config contains a host-controlled or unsafe field.", "unsafe_producer_config", { field: pathParts.concat(key).join(".") });
+      throw new ProducerHostError(
+        "Producer config contains a host-controlled or unsafe field.",
+        "unsafe_producer_config",
+        { field: pathParts.concat(key).join(".") },
+      );
     }
     if (/env$/i.test(key)) {
       if (typeof child !== "string" || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(child)) {
-        throw new ProducerHostError("Producer secret references must be valid environment variable names.", "invalid_producer_secret_reference", { field: pathParts.concat(key).join(".") });
+        throw new ProducerHostError(
+          "Producer secret references must be valid environment variable names.",
+          "invalid_producer_secret_reference",
+          { field: pathParts.concat(key).join(".") },
+        );
       }
       envNames.add(child);
     }
@@ -158,19 +184,33 @@ function inspectConfig(value, envNames, pathParts) {
 function validateDescriptor(instance, moduleValue, allowedRelationTypes) {
   const descriptor = moduleValue && moduleValue.okfProducer;
   if (!descriptor || typeof descriptor !== "object" || Array.isArray(descriptor)) {
-    throw new ProducerHostError("Producer package must export okfProducer.", "invalid_producer_descriptor");
+    throw new ProducerHostError(
+      "Producer package must export okfProducer.",
+      "invalid_producer_descriptor",
+    );
   }
-  if (String(descriptor.apiVersion || "") !== "1"
-    || String(descriptor.okfVersion || "") !== "0.2"
-    || descriptor.id !== instance.type
-    || typeof descriptor.version !== "string" || !descriptor.version.trim()
-    || typeof descriptor.validateConfig !== "function"
-    || typeof descriptor.generate !== "function") {
-    throw new ProducerHostError("Producer descriptor is incompatible with this host.", "incompatible_producer_descriptor");
+  if (
+    String(descriptor.apiVersion || "") !== "1" ||
+    String(descriptor.okfVersion || "") !== "0.2" ||
+    descriptor.id !== instance.type ||
+    typeof descriptor.version !== "string" ||
+    !descriptor.version.trim() ||
+    typeof descriptor.validateConfig !== "function" ||
+    typeof descriptor.generate !== "function"
+  ) {
+    throw new ProducerHostError(
+      "Producer descriptor is incompatible with this host.",
+      "incompatible_producer_descriptor",
+    );
   }
-  const relationTypes = Array.isArray(descriptor.relationTypes) ? descriptor.relationTypes.map(String) : [];
+  const relationTypes = Array.isArray(descriptor.relationTypes)
+    ? descriptor.relationTypes.map(String)
+    : [];
   if (relationTypes.some((type) => !allowedRelationTypes.has(type))) {
-    throw new ProducerHostError("Producer declares a relation type that the project does not allow.", "producer_relation_type_not_allowed");
+    throw new ProducerHostError(
+      "Producer declares a relation type that the project does not allow.",
+      "producer_relation_type_not_allowed",
+    );
   }
   return descriptor;
 }
@@ -179,12 +219,15 @@ function buildCandidate(project, bundles, remoteBundles, files, stalePaths) {
   const overrides = new Map();
   files.forEach((file) => overrides.set(`${file.bundle}\u0000${file.path}`, file.content));
   const deletions = new Set(stalePaths.map((entry) => `${entry.bundle}\u0000${entry.path}`));
-  return attachProject(buildIndex(bundles.concat(remoteBundles || []), {
-    relationTypes: project.relationTypes,
-    strictLinks: project.strictLinks,
-    documentOverrides: overrides,
-    documentDeletions: deletions,
-  }), project);
+  return attachProject(
+    buildIndex(bundles.concat(remoteBundles || []), {
+      relationTypes: project.relationTypes,
+      strictLinks: project.strictLinks,
+      documentOverrides: overrides,
+      documentDeletions: deletions,
+    }),
+    project,
+  );
 }
 
 function validateCandidate(index, instance, outputPaths) {
@@ -193,24 +236,28 @@ function validateCandidate(index, instance, outputPaths) {
   if (!bundle || bundle.okfVersion !== "0.2") {
     diagnostics.push(diagnostic("producer_bundle_requires_okf_0_2", { path: "index.md" }));
   }
-  const root = index.documents.find((doc) => doc.bundle === instance.bundle && doc.path === "index.md");
+  const root = index.documents.find(
+    (doc) => doc.bundle === instance.bundle && doc.path === "index.md",
+  );
   if (!root) {
     diagnostics.push(diagnostic("producer_missing_root_index", { path: "index.md" }));
   } else {
     try {
       const split = splitFrontmatter(root.text);
-      if (!split.frontmatter
-        || Object.keys(split.frontmatter).length !== 1
-        || split.frontmatter.okf_version !== "0.2") {
+      if (
+        !split.frontmatter ||
+        Object.keys(split.frontmatter).length !== 1 ||
+        split.frontmatter.okf_version !== "0.2"
+      ) {
         diagnostics.push(diagnostic("producer_invalid_root_index", { path: "index.md" }));
       }
     } catch {
       diagnostics.push(diagnostic("producer_invalid_root_index", { path: "index.md" }));
     }
   }
-  const documents = new Map(index.documents
-    .filter((doc) => doc.bundle === instance.bundle)
-    .map((doc) => [doc.path, doc]));
+  const documents = new Map(
+    index.documents.filter((doc) => doc.bundle === instance.bundle).map((doc) => [doc.path, doc]),
+  );
   outputPaths.forEach((relativePath) => {
     const doc = documents.get(relativePath);
     if (!doc) {
@@ -224,28 +271,44 @@ function validateCandidate(index, instance, outputPaths) {
         diagnostics.push(diagnostic(`producer_missing_${field}`, { path: relativePath, field }));
       }
     }
-    if (doc.signals.generatedOrigin !== "native"
-      || !doc.signals.generated || doc.signals.generated.valid !== true) {
-      diagnostics.push(diagnostic("producer_invalid_generated", { path: relativePath, field: "generated" }));
+    if (
+      doc.signals.generatedOrigin !== "native" ||
+      !doc.signals.generated ||
+      doc.signals.generated.valid !== true
+    ) {
+      diagnostics.push(
+        diagnostic("producer_invalid_generated", { path: relativePath, field: "generated" }),
+      );
     }
-    if (doc.signals.sourcesOrigin !== "native"
-      || !Array.isArray(doc.signals.sources) || doc.signals.sources.length === 0
-      || doc.signals.sources.some((source) => source.valid !== true)) {
-      diagnostics.push(diagnostic("producer_invalid_sources", { path: relativePath, field: "sources" }));
+    if (
+      doc.signals.sourcesOrigin !== "native" ||
+      !Array.isArray(doc.signals.sources) ||
+      doc.signals.sources.length === 0 ||
+      doc.signals.sources.some((source) => source.valid !== true)
+    ) {
+      diagnostics.push(
+        diagnostic("producer_invalid_sources", { path: relativePath, field: "sources" }),
+      );
     }
     (doc.v02Diagnostics || []).forEach((entry) => diagnostics.push(publicDiagnostic(entry)));
   });
   const generatedPaths = new Set(outputPaths);
-  (index.errors || []).filter((entry) => (
-    entry.bundle === instance.bundle
-    && generatedPaths.has(entry.path)
-    && ["broken_relation", "missing_relation_target", "parse_error"].includes(entry.code)
-  )).forEach((entry) => diagnostics.push(publicDiagnostic(entry)));
-  (index.warnings || []).filter((entry) => (
-    entry.bundle === instance.bundle
-    && generatedPaths.has(entry.path)
-    && ["broken_link", "link_outside_root", "broken_semantic_reference"].includes(entry.code)
-  )).forEach((entry) => diagnostics.push(publicDiagnostic(entry)));
+  (index.errors || [])
+    .filter(
+      (entry) =>
+        entry.bundle === instance.bundle &&
+        generatedPaths.has(entry.path) &&
+        ["broken_relation", "missing_relation_target", "parse_error"].includes(entry.code),
+    )
+    .forEach((entry) => diagnostics.push(publicDiagnostic(entry)));
+  (index.warnings || [])
+    .filter(
+      (entry) =>
+        entry.bundle === instance.bundle &&
+        generatedPaths.has(entry.path) &&
+        ["broken_link", "link_outside_root", "broken_semantic_reference"].includes(entry.code),
+    )
+    .forEach((entry) => diagnostics.push(publicDiagnostic(entry)));
   const projectValidation = index.validation || require("./validation").validateIndex(index);
   if (!index.conformant || !index.validForProject) {
     projectValidation.diagnostics.forEach((entry) => diagnostics.push(publicDiagnostic(entry)));
@@ -266,15 +329,23 @@ function countsFor(changes) {
 
 function normalizeSummary(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new ProducerHostError("Producer generate() must return a numeric summary.", "invalid_producer_summary");
+    throw new ProducerHostError(
+      "Producer generate() must return a numeric summary.",
+      "invalid_producer_summary",
+    );
   }
   const entries = Object.entries(value);
-  if (entries.length > 50 || entries.some(([key, count]) => (
-    !/^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(key)
-    || !Number.isSafeInteger(count)
-    || count < 0
-  ))) {
-    throw new ProducerHostError("Producer summary entries must be bounded non-negative integers.", "invalid_producer_summary");
+  if (
+    entries.length > 50 ||
+    entries.some(
+      ([key, count]) =>
+        !/^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(key) || !Number.isSafeInteger(count) || count < 0,
+    )
+  ) {
+    throw new ProducerHostError(
+      "Producer summary entries must be bounded non-negative integers.",
+      "invalid_producer_summary",
+    );
   }
   return Object.fromEntries(entries.sort(([left], [right]) => left.localeCompare(right)));
 }
@@ -290,7 +361,9 @@ function producerReceipt(receipt, detail) {
     readyToApply: receipt.readyToApply === true,
     ...(receipt.applied !== undefined ? { applied: receipt.applied === true } : {}),
     ...(receipt.conformant !== undefined ? { conformant: receipt.conformant === true } : {}),
-    ...(receipt.validForProject !== undefined ? { validForProject: receipt.validForProject === true } : {}),
+    ...(receipt.validForProject !== undefined
+      ? { validForProject: receipt.validForProject === true }
+      : {}),
     ...(receipt.generatedAt ? { generatedAt: receipt.generatedAt } : {}),
     counts: receipt.counts || { create: 0, update: 0, delete: 0, unchanged: 0 },
     summary: receipt.summary || {},
@@ -329,9 +402,15 @@ class ProducerService {
 
   getInstance(name) {
     const instance = (this.project.producers || []).find((entry) => entry.name === name);
-    if (!instance) throw new ProducerHostError("Unknown configured producer.", "producer_not_found");
-    if ((this.project.errors || []).some((entry) => String(entry.code || "").includes("producer"))) {
-      throw new ProducerHostError("Project producer configuration is invalid.", "invalid_producer_configuration");
+    if (!instance)
+      throw new ProducerHostError("Unknown configured producer.", "producer_not_found");
+    if (
+      (this.project.errors || []).some((entry) => String(entry.code || "").includes("producer"))
+    ) {
+      throw new ProducerHostError(
+        "Project producer configuration is invalid.",
+        "invalid_producer_configuration",
+      );
     }
     return instance;
   }
@@ -347,7 +426,10 @@ class ProducerService {
       );
     } catch (error) {
       if (error instanceof ProducerHostError) throw error;
-      throw new ProducerHostError("The configured producer package could not be loaded.", "producer_load_failed");
+      throw new ProducerHostError(
+        "The configured producer package could not be loaded.",
+        "producer_load_failed",
+      );
     }
     const envNames = new Set();
     inspectConfig(instance.config, envNames, ["config"]);
@@ -355,28 +437,42 @@ class ProducerService {
     try {
       configValidation = await descriptor.validateConfig(structuredClone(instance.config));
     } catch {
-      throw new ProducerHostError("Producer configuration validation failed unexpectedly.", "producer_config_validation_failed");
+      throw new ProducerHostError(
+        "Producer configuration validation failed unexpectedly.",
+        "producer_config_validation_failed",
+      );
     }
     if (!configValidation || configValidation.valid !== true) {
       const entries = Array.isArray(configValidation && configValidation.diagnostics)
-        ? configValidation.diagnostics.slice(0, 100).map((entry) => diagnostic(
-          typeof entry.code === "string" ? entry.code : "producer_config_invalid",
-          typeof entry.field === "string" ? { field: entry.field } : undefined,
-        ))
+        ? configValidation.diagnostics
+            .slice(0, 100)
+            .map((entry) =>
+              diagnostic(
+                typeof entry.code === "string" ? entry.code : "producer_config_invalid",
+                typeof entry.field === "string" ? { field: entry.field } : undefined,
+              ),
+            )
         : [diagnostic("producer_config_invalid")];
       return { instance, descriptor, valid: false, readyToApply: false, diagnostics: entries };
     }
-    const normalizedConfig = configValidation.config === undefined
-      ? structuredClone(instance.config)
-      : configValidation.config;
+    const normalizedConfig =
+      configValidation.config === undefined
+        ? structuredClone(instance.config)
+        : configValidation.config;
     const accessedSecrets = [];
     const getSecret = (secretName) => {
       if (!envNames.has(secretName)) {
-        throw new ProducerHostError("Producer requested a secret not referenced by its configuration.", "producer_secret_not_allowed");
+        throw new ProducerHostError(
+          "Producer requested a secret not referenced by its configuration.",
+          "producer_secret_not_allowed",
+        );
       }
       const value = this.env[secretName];
       if (typeof value !== "string" || value.length === 0) {
-        throw new ProducerHostError("A configured producer secret is unavailable.", "producer_secret_unavailable");
+        throw new ProducerHostError(
+          "A configured producer secret is unavailable.",
+          "producer_secret_unavailable",
+        );
       }
       accessedSecrets.push(value);
       return value;
@@ -389,7 +485,7 @@ class ProducerService {
         config: structuredClone(normalizedConfig),
         generatedAt,
         getSecret,
-        signal: options && options.signal || new AbortController().signal,
+        signal: (options && options.signal) || new AbortController().signal,
       });
     } catch (error) {
       if (error instanceof ProducerHostError) throw error;
@@ -402,37 +498,82 @@ class ProducerService {
       summary = normalizeSummary(generated && generated.summary);
     } catch (error) {
       if (error instanceof ProducerPublicationError || error instanceof ProducerHostError) {
-        return { instance, descriptor, valid: false, readyToApply: false, diagnostics: [publicDiagnostic(error)] };
+        return {
+          instance,
+          descriptor,
+          valid: false,
+          readyToApply: false,
+          diagnostics: [publicDiagnostic(error)],
+        };
       }
       throw error;
     }
-    if (files.length > MAX_PRODUCER_FILES
-      || files.reduce((total, file) => total + Buffer.byteLength(file.content), 0) > MAX_PRODUCER_BYTES) {
-      return { instance, descriptor, valid: false, readyToApply: false, diagnostics: [diagnostic("producer_output_too_large")] };
+    if (
+      files.length > MAX_PRODUCER_FILES ||
+      files.reduce((total, file) => total + Buffer.byteLength(file.content), 0) > MAX_PRODUCER_BYTES
+    ) {
+      return {
+        instance,
+        descriptor,
+        valid: false,
+        readyToApply: false,
+        diagnostics: [diagnostic("producer_output_too_large")],
+      };
     }
-    if (accessedSecrets.some((secret) => files.some((file) => secret && file.content.includes(secret)))) {
-      return { instance, descriptor, valid: false, readyToApply: false, diagnostics: [diagnostic("producer_secret_leak")] };
+    if (
+      accessedSecrets.some((secret) =>
+        files.some((file) => secret && file.content.includes(secret)),
+      )
+    ) {
+      return {
+        instance,
+        descriptor,
+        valid: false,
+        readyToApply: false,
+        diagnostics: [diagnostic("producer_secret_leak")],
+      };
     }
     let inspection;
     try {
-      inspection = this.publisher.inspect(Object.assign({}, instance, { version: descriptor.version }), files);
+      inspection = this.publisher.inspect(
+        Object.assign({}, instance, { version: descriptor.version }),
+        files,
+      );
     } catch (error) {
       if (error instanceof ProducerPublicationError) {
-        return { instance, descriptor, files, valid: false, readyToApply: false, diagnostics: [publicDiagnostic(error)] };
+        return {
+          instance,
+          descriptor,
+          files,
+          valid: false,
+          readyToApply: false,
+          diagnostics: [publicDiagnostic(error)],
+        };
       }
-      throw new ProducerHostError("Producer publication preflight failed.", "producer_publication_preflight_failed");
+      throw new ProducerHostError(
+        "Producer publication preflight failed.",
+        "producer_publication_preflight_failed",
+      );
     }
-    const candidateFiles = (inspection.effective || files)
-      .map((file) => Object.assign({ bundle: instance.bundle }, file));
-    const stalePaths = inspection.changes.delete.map((relativePath) => ({ bundle: instance.bundle, path: relativePath }));
+    const candidateFiles = (inspection.effective || files).map((file) =>
+      Object.assign({ bundle: instance.bundle }, file),
+    );
+    const stalePaths = inspection.changes.delete.map((relativePath) => ({
+      bundle: instance.bundle,
+      path: relativePath,
+    }));
     const candidate = buildCandidate(
       this.project,
       this.bundles,
-      options && options.additionalBundles || [],
+      (options && options.additionalBundles) || [],
       candidateFiles,
       stalePaths,
     );
-    const validation = validateCandidate(candidate, instance, files.map((file) => file.path));
+    const validation = validateCandidate(
+      candidate,
+      instance,
+      files.map((file) => file.path),
+    );
     return {
       instance,
       descriptor,
@@ -457,20 +598,29 @@ class ProducerService {
     return this.store.withWriteLock(async () => {
       const prepared = await this.prepare(name, options);
       if (!prepared.readyToApply) return Object.assign({}, prepared, { applied: false });
-      const producer = Object.assign({}, prepared.instance, { version: prepared.descriptor.version });
+      const producer = Object.assign({}, prepared.instance, {
+        version: prepared.descriptor.version,
+      });
       let changes;
       try {
         changes = await this.publisher.publish(producer, prepared.files, async () => {
           const persisted = buildCandidate(
             this.project,
             this.bundles,
-            options && options.additionalBundles || [],
+            (options && options.additionalBundles) || [],
             [],
             [],
           );
-          const validation = validateCandidate(persisted, prepared.instance, prepared.files.map((file) => file.path));
+          const validation = validateCandidate(
+            persisted,
+            prepared.instance,
+            prepared.files.map((file) => file.path),
+          );
           if (!validation.valid) {
-            throw new ProducerHostError("Persisted producer output failed validation.", "persisted_producer_validation_failed");
+            throw new ProducerHostError(
+              "Persisted producer output failed validation.",
+              "persisted_producer_validation_failed",
+            );
           }
         });
       } catch (error) {

@@ -81,20 +81,20 @@ function stringArrayParameter(description, options) {
   return {
     type: "array",
     description,
-    items: Object.assign(
-      { type: "string" },
-      config.nonEmptyItems ? { minLength: 1 } : {},
-    ),
+    items: Object.assign({ type: "string" }, config.nonEmptyItems ? { minLength: 1 } : {}),
     ...(config.minItems === undefined ? {} : { minItems: config.minItems }),
   };
 }
 
 function objectParameter(description, extra) {
-  return Object.assign({
-    type: "object",
-    description,
-    additionalProperties: true,
-  }, extra || {});
+  return Object.assign(
+    {
+      type: "object",
+      description,
+      additionalProperties: true,
+    },
+    extra || {},
+  );
 }
 
 function detailParameter(description) {
@@ -159,15 +159,14 @@ function defineTool(description, annotations, properties, required, schemaExtras
 const GATES = {
   always: () => true,
   producer: (state) => Boolean(state && state.producerService),
-  producerWrite: (state) => Boolean(state && state.producerService && state.allowWrite && state.actor),
+  producerWrite: (state) =>
+    Boolean(state && state.producerService && state.allowWrite && state.actor),
   projectHelper: (state) => Boolean(state && state.authoringService),
   authoringMutation: (state) => Boolean(state && state.authoringService && state.allowAuthoring),
-  computationAuthoring: (state) => Boolean(
-    state
-    && state.authoringService
-    && state.allowAuthoring
-    && state.allowComputationAuthoring,
-  ),
+  computationAuthoring: (state) =>
+    Boolean(
+      state && state.authoringService && state.allowAuthoring && state.allowComputationAuthoring,
+    ),
   liveWrite: (state) => Boolean(state && state.allowWrite && state.liveAuthoringService),
   runtimeRemote: (state) => Boolean(state && state.allowRuntimeRemoteLoad),
 };
@@ -239,8 +238,8 @@ function composeRegistry(modules) {
   const unlisted = Object.keys(tools).filter((name) => !TOOL_ORDER.includes(name));
   if (missing.length || unlisted.length) {
     throw new Error(
-      `MCP tool registry mismatch: missing ${missing.join(", ") || "none"}; `
-      + `unlisted ${unlisted.join(", ") || "none"}`,
+      `MCP tool registry mismatch: missing ${missing.join(", ") || "none"}; ` +
+        `unlisted ${unlisted.join(", ") || "none"}`,
     );
   }
   return { names: TOOL_ORDER.slice(), tools };
@@ -271,10 +270,11 @@ async function expectedToolOperation(operation, options) {
     if (error instanceof ToolExecutionError) {
       throw error;
     }
-    const programmingError = error instanceof ReferenceError
-      || error instanceof SyntaxError
-      || error instanceof RangeError
-      || (error instanceof TypeError && !(options && options.translateTypeError));
+    const programmingError =
+      error instanceof ReferenceError ||
+      error instanceof SyntaxError ||
+      error instanceof RangeError ||
+      (error instanceof TypeError && !(options && options.translateTypeError));
     if (programmingError) {
       throw error;
     }
@@ -288,7 +288,9 @@ async function expectedToolOperation(operation, options) {
 
 function requireAuthoring(state) {
   if (!state.authoringService) {
-    throw new Error("OKF authoring is not configured. Start the server with --root or --project to enable writable concept proposals.");
+    throw new Error(
+      "OKF authoring is not configured. Start the server with --root or --project to enable writable concept proposals.",
+    );
   }
   return state.authoringService;
 }

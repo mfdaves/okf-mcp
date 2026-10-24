@@ -9,27 +9,16 @@ const test = require("node:test");
 const { callJson, connectMcp } = require("./mcp-client");
 
 function concept(title) {
-  return [
-    "---",
-    "type: Reference",
-    `title: ${title}`,
-    "---",
-    "",
-    `# ${title}`,
-    "",
-  ].join("\n");
+  return ["---", "type: Reference", `title: ${title}`, "---", "", `# ${title}`, ""].join("\n");
 }
 
 function makeRoot() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "okf-live-mcp-contract-"));
-  fs.writeFileSync(path.join(root, "index.md"), [
-    "---",
-    "okf_version: \"0.2\"",
-    "---",
-    "",
-    "# Contract fixture",
-    "",
-  ].join("\n"), "utf8");
+  fs.writeFileSync(
+    path.join(root, "index.md"),
+    ["---", 'okf_version: "0.2"', "---", "", "# Contract fixture", ""].join("\n"),
+    "utf8",
+  );
   fs.writeFileSync(path.join(root, "existing.md"), concept("Existing"), "utf8");
   return root;
 }
@@ -85,12 +74,14 @@ test("live validation and apply advertise projection-friendly matching contracts
           applied: false,
           filesChanged: true,
           status: "applied_uncommitted",
-          changes: [{
-            op: change.op,
-            path: change.path,
-            absolutePath: path.join(root, change.path),
-            title: change.title,
-          }],
+          changes: [
+            {
+              op: change.op,
+              path: change.path,
+              absolutePath: path.join(root, change.path),
+              title: change.title,
+            },
+          ],
           validation: { valid: true },
         };
       }
@@ -98,13 +89,15 @@ test("live validation and apply advertise projection-friendly matching contracts
         applied: true,
         filesChanged: true,
         status: "applied",
-        changes: [{
-          op: change.op,
-          path: change.path,
-          absolutePath: path.join(root, change.path),
-          title: change.title,
-          effects: { bodyChanged: true },
-        }],
+        changes: [
+          {
+            op: change.op,
+            path: change.path,
+            absolutePath: path.join(root, change.path),
+            title: change.title,
+            effects: { bodyChanged: true },
+          },
+        ],
         validation: { valid: true },
       };
     },
@@ -140,10 +133,10 @@ test("live validation and apply advertise projection-friendly matching contracts
   for (const field of ["tags", "sources", "relations"]) {
     assert.equal(updateSchema.properties[field].anyOf, undefined);
     assert.equal(updateSchema.properties[field].minProperties, 1);
-    assert.deepEqual(
-      Object.keys(updateSchema.properties[field].properties).sort(),
-      ["add", "remove"],
-    );
+    assert.deepEqual(Object.keys(updateSchema.properties[field].properties).sort(), [
+      "add",
+      "remove",
+    ]);
   }
   assert.equal(
     updateSchema.properties.relations.properties.add.items.properties.target.type,
@@ -168,12 +161,14 @@ test("live validation and apply advertise projection-friendly matching contracts
   assert.equal(bundles.payload[0].projectRoot, fs.realpathSync(root));
 
   const previewInput = {
-    changes: [{
-      op: "create",
-      path: "preview.md",
-      type: "Reference",
-      title: "Preview",
-    }],
+    changes: [
+      {
+        op: "create",
+        path: "preview.md",
+        type: "Reference",
+        title: "Preview",
+      },
+    ],
   };
   const preview = await callJson(enabled.client, "okf_validate_changes", previewInput);
   assert.equal(preview.result.isError, undefined);
@@ -214,12 +209,14 @@ test("live validation and apply advertise projection-friendly matching contracts
 
   const operationalError = await callJson(enabled.client, "okf_validate_changes", {
     message: "structured-error",
-    changes: [{
-      op: "create",
-      path: "error.md",
-      type: "Reference",
-      title: "Error",
-    }],
+    changes: [
+      {
+        op: "create",
+        path: "error.md",
+        type: "Reference",
+        title: "Error",
+      },
+    ],
   });
   assert.equal(operationalError.result.isError, true);
   assert.equal(operationalError.payload.code, "git_source_too_large");
@@ -232,12 +229,14 @@ test("live validation and apply advertise projection-friendly matching contracts
   assert.deepEqual(operationalError.result.structuredContent, operationalError.payload);
 
   const applied = await callJson(enabled.client, "okf_apply_changes", {
-    changes: [{
-      op: "create",
-      path: "applied.md",
-      type: "Reference",
-      title: "Applied",
-    }],
+    changes: [
+      {
+        op: "create",
+        path: "applied.md",
+        type: "Reference",
+        title: "Applied",
+      },
+    ],
   });
   assert.equal(applied.result.isError, undefined);
   assert.deepEqual(applied.result.structuredContent, applied.payload);
@@ -248,12 +247,14 @@ test("live validation and apply advertise projection-friendly matching contracts
   assert.equal(readApplied.payload.title, "Applied");
 
   const partial = await callJson(enabled.client, "okf_apply_changes", {
-    changes: [{
-      op: "create",
-      path: "partial.md",
-      type: "Reference",
-      title: "Partial",
-    }],
+    changes: [
+      {
+        op: "create",
+        path: "partial.md",
+        type: "Reference",
+        title: "Partial",
+      },
+    ],
   });
   assert.equal(partial.result.isError, true);
   assert.deepEqual(partial.result.structuredContent, partial.payload);

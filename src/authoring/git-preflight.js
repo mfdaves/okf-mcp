@@ -19,17 +19,17 @@ function activeGitFilterAttributes(git, repository, candidates) {
     );
   }
   const paths = sortedUnique(
-    String(tracked.stdout || "").split("\0").filter(Boolean)
+    String(tracked.stdout || "")
+      .split("\0")
+      .filter(Boolean)
       .concat(git.repositoryFiles({ repository }, candidates)),
   );
   const active = [];
   for (let offset = 0; offset < paths.length; offset += 200) {
     const chunk = paths.slice(offset, offset + 200);
-    const inspected = git.runGit(
-      repository,
-      ["check-attr", "-z", "--all", "--"].concat(chunk),
-      { readOnly: true },
-    );
+    const inspected = git.runGit(repository, ["check-attr", "-z", "--all", "--"].concat(chunk), {
+      readOnly: true,
+    });
     if (!commandSucceeded(inspected)) {
       throw new AuthoringOperationalError(
         `Could not inspect Git filter attributes: ${commandFailure(inspected, "git check-attr failed")}`,
@@ -53,17 +53,22 @@ function unsupportedGitIndexFlags(git, repository) {
       `Could not inspect Git index flags: ${commandFailure(inspected, "git ls-files failed")}`,
     );
   }
-  return String(inspected.stdout || "").split("\0").filter(Boolean).flatMap((entry) => {
-    const tag = entry[0] || "";
-    const flagged = tag === "S" || (/[a-z]/.test(tag) && tag === tag.toLowerCase());
-    if (!flagged) {
-      return [];
-    }
-    return [{
-      path: entry.slice(2),
-      flag: tag === "S" ? "skip-worktree" : "assume-unchanged",
-    }];
-  });
+  return String(inspected.stdout || "")
+    .split("\0")
+    .filter(Boolean)
+    .flatMap((entry) => {
+      const tag = entry[0] || "";
+      const flagged = tag === "S" || (/[a-z]/.test(tag) && tag === tag.toLowerCase());
+      if (!flagged) {
+        return [];
+      }
+      return [
+        {
+          path: entry.slice(2),
+          flag: tag === "S" ? "skip-worktree" : "assume-unchanged",
+        },
+      ];
+    });
 }
 
 function prepareGit(git, bundle, candidates) {
@@ -85,7 +90,9 @@ function prepareGit(git, bundle, candidates) {
   const discovered = git.runGit(bundle.root, ["rev-parse", "--show-toplevel"], { readOnly: true });
   if (discovered.error) {
     if (git.gitCommit) {
-      throw new AuthoringOperationalError(`Git executable is unavailable: ${discovered.error.message}`);
+      throw new AuthoringOperationalError(
+        `Git executable is unavailable: ${discovered.error.message}`,
+      );
     }
     return Object.assign(preflight, {
       repositoryStatus: "unavailable",
@@ -99,7 +106,9 @@ function prepareGit(git, bundle, candidates) {
       return preflight;
     }
     if (git.gitCommit) {
-      throw new AuthoringOperationalError(`Could not inspect Git repository: ${detail || `git exited ${discovered.status}`}`);
+      throw new AuthoringOperationalError(
+        `Could not inspect Git repository: ${detail || `git exited ${discovered.status}`}`,
+      );
     }
     return Object.assign(preflight, {
       repositoryStatus: "inspection_failed",
@@ -110,25 +119,17 @@ function prepareGit(git, bundle, candidates) {
   preflight.repository = repository;
   preflight.repositoryRoot = repository;
   preflight.repositoryStatus = "detected";
-  const symbolicHead = git.runGit(
-    repository,
-    ["symbolic-ref", "-q", "HEAD"],
-    { readOnly: true },
-  );
+  const symbolicHead = git.runGit(repository, ["symbolic-ref", "-q", "HEAD"], { readOnly: true });
   if (symbolicHead.error || (symbolicHead.status !== 0 && symbolicHead.status !== 1)) {
     throw new AuthoringOperationalError(
       `Could not inspect the checked-out Git ref: ${commandFailure(symbolicHead, "git symbolic-ref failed")}`,
     );
   }
-  const headRef = commandSucceeded(symbolicHead)
-    ? String(symbolicHead.stdout || "").trim()
-    : null;
+  const headRef = commandSucceeded(symbolicHead) ? String(symbolicHead.stdout || "").trim() : null;
   preflight.headRef = headRef;
-  const headBefore = git.readGitValue(
-    repository,
-    ["rev-parse", "--verify", headRef || "HEAD"],
-    { readOnly: true },
-  );
+  const headBefore = git.readGitValue(repository, ["rev-parse", "--verify", headRef || "HEAD"], {
+    readOnly: true,
+  });
   preflight.headBefore = headBefore;
   const missingIdentity = [];
   for (const key of ["user.name", "user.email"]) {
@@ -153,11 +154,9 @@ function prepareGit(git, bundle, candidates) {
   const activeFilters = activeGitFilterAttributes(git, repository, candidates);
   preflight.activeFilterAttributes = activeFilters.slice(0, MAX_EFFECT_ITEMS);
   if (!activeFilters.length && !unsupportedIndexFlags.length) {
-    const status = git.runGit(
-      repository,
-      ["status", "--porcelain=v1", "--untracked-files=all"],
-      { readOnly: true },
-    );
+    const status = git.runGit(repository, ["status", "--porcelain=v1", "--untracked-files=all"], {
+      readOnly: true,
+    });
     if (!commandSucceeded(status)) {
       throw new AuthoringOperationalError(
         `Could not inspect Git status: ${commandFailure(status, "git status failed")}`,
@@ -165,14 +164,16 @@ function prepareGit(git, bundle, candidates) {
     }
     preflight.worktreeClean = !String(status.stdout || "").trim();
   }
-  preflight.ready = !git.gitCommit || Boolean(
-    headBefore
-    && headRef
-    && preflight.worktreeClean
-    && preflight.identityConfigured
-    && !activeFilters.length
-    && !unsupportedIndexFlags.length,
-  );
+  preflight.ready =
+    !git.gitCommit ||
+    Boolean(
+      headBefore &&
+        headRef &&
+        preflight.worktreeClean &&
+        preflight.identityConfigured &&
+        !activeFilters.length &&
+        !unsupportedIndexFlags.length,
+    );
   if (git.gitCommit && !headBefore) {
     preflight.diagnostics.push({
       code: "git_head_missing",
@@ -182,7 +183,8 @@ function prepareGit(git, bundle, candidates) {
   if (git.gitCommit && headBefore && !headRef) {
     preflight.diagnostics.push({
       code: "git_detached_head_unsupported",
-      message: "Automatic OKF commits require a checked-out symbolic branch; detached HEAD is not supported.",
+      message:
+        "Automatic OKF commits require a checked-out symbolic branch; detached HEAD is not supported.",
     });
   }
   if (git.gitCommit && preflight.worktreeClean === false) {
@@ -200,7 +202,8 @@ function prepareGit(git, bundle, candidates) {
   if (git.gitCommit && activeFilters.length) {
     preflight.diagnostics.push({
       code: "git_filter_attribute_unsupported",
-      message: "Automatic OKF commits reject active Git filter attributes so validation cannot execute repository-configured filters and committed bytes remain exact.",
+      message:
+        "Automatic OKF commits reject active Git filter attributes so validation cannot execute repository-configured filters and committed bytes remain exact.",
       paths: activeFilters.slice(0, MAX_EFFECT_ITEMS),
       omitted: Math.max(0, activeFilters.length - MAX_EFFECT_ITEMS),
     });
@@ -208,7 +211,8 @@ function prepareGit(git, bundle, candidates) {
   if (git.gitCommit && unsupportedIndexFlags.length) {
     preflight.diagnostics.push({
       code: "git_index_flag_unsupported",
-      message: "Automatic OKF commits reject assume-unchanged and skip-worktree Git index flags because they can hide user changes from clean-worktree inspection.",
+      message:
+        "Automatic OKF commits reject assume-unchanged and skip-worktree Git index flags because they can hide user changes from clean-worktree inspection.",
       paths: unsupportedIndexFlags.slice(0, MAX_EFFECT_ITEMS),
       omitted: Math.max(0, unsupportedIndexFlags.length - MAX_EFFECT_ITEMS),
     });

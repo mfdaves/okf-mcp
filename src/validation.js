@@ -1,9 +1,6 @@
 "use strict";
 
-const CONFORMANCE_WARNING_CODES = new Set([
-  "missing_frontmatter",
-  "missing_type",
-]);
+const CONFORMANCE_WARNING_CODES = new Set(["missing_frontmatter", "missing_type"]);
 
 const PROJECT_INVALID_WARNING_CODES = new Set([
   "invalid_id",
@@ -29,12 +26,16 @@ function diagnosticKey(entry) {
 }
 
 function normalizeDiagnostic(entry, defaults) {
-  return Object.assign({
-    code: "validation_diagnostic",
-    severity: "warning",
-    layer: "project",
-    message: "",
-  }, defaults || {}, entry || {});
+  return Object.assign(
+    {
+      code: "validation_diagnostic",
+      severity: "warning",
+      layer: "project",
+      message: "",
+    },
+    defaults || {},
+    entry || {},
+  );
 }
 
 function validateIndex(index, bundle) {
@@ -88,21 +89,21 @@ function validateIndex(index, bundle) {
     add(entry, {
       severity: "warning",
       layer: "project",
-      invalidatesProject: PROJECT_INVALID_WARNING_CODES.has(entry.code)
-        || (entry.code === "broken_link" && strictLinks),
+      invalidatesProject:
+        PROJECT_INVALID_WARNING_CODES.has(entry.code) ||
+        (entry.code === "broken_link" && strictLinks),
     });
   });
 
-  const conformanceErrors = diagnostics.filter((entry) => (
-    entry.layer === "conformance" && entry.severity === "error"
-  ));
+  const conformanceErrors = diagnostics.filter(
+    (entry) => entry.layer === "conformance" && entry.severity === "error",
+  );
   const projectDiagnostics = diagnostics.filter((entry) => entry.layer === "project");
   const advisories = diagnostics.filter((entry) => entry.layer === "v0.2");
   const computations = documents.filter((doc) => doc.signals && doc.signals.computation);
   const conformant = conformanceErrors.length === 0;
-  const validForProject = conformant
-    && errors.length === 0
-    && !diagnostics.some((entry) => entry.invalidatesProject);
+  const validForProject =
+    conformant && errors.length === 0 && !diagnostics.some((entry) => entry.invalidatesProject);
 
   return {
     conformant,
@@ -115,8 +116,11 @@ function validateIndex(index, bundle) {
     advisories,
     readiness: {
       attestedComputations: computations.length,
-      attestationReady: computations.filter((doc) => doc.signals.computation.attestationReady).length,
-      attestationNotReady: computations.filter((doc) => !doc.signals.computation.attestationReady).map((doc) => doc.uri),
+      attestationReady: computations.filter((doc) => doc.signals.computation.attestationReady)
+        .length,
+      attestationNotReady: computations
+        .filter((doc) => !doc.signals.computation.attestationReady)
+        .map((doc) => doc.uri),
     },
     errors,
     warnings,

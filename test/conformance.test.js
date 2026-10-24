@@ -26,18 +26,21 @@ function concept(frontmatter, body) {
 
 test("standards YAML accepts complex mappings, extensions, and unknown concept types", () => {
   const root = fixture({
-    "complex.md": concept([
-      "type: Vendor Specific Runtime",
-      "title: Complex",
-      "description: |",
-      "  First line.",
-      "  Second line.",
-      "aliases: [\"alpha,beta\", gamma]",
-      "x-extension:",
-      "  nested:",
-      "    enabled: true",
-      "    limits: [1, 2, 3]",
-    ].join("\n"), "# Complex"),
+    "complex.md": concept(
+      [
+        "type: Vendor Specific Runtime",
+        "title: Complex",
+        "description: |",
+        "  First line.",
+        "  Second line.",
+        'aliases: ["alpha,beta", gamma]',
+        "x-extension:",
+        "  nested:",
+        "    enabled: true",
+        "    limits: [1, 2, 3]",
+      ].join("\n"),
+      "# Complex",
+    ),
   });
   const index = buildIndex([`fixture=${root}`]);
   const validation = validateIndex(index);
@@ -60,10 +63,12 @@ test("an invalid extension id is a project diagnostic, not a conformance failure
 
   assert.equal(validation.conformant, true);
   assert.equal(validation.validForProject, false);
-  assert.equal(validation.diagnostics.some((entry) => (
-    entry.code === "invalid_id"
-    && entry.layer === "project"
-  )), true);
+  assert.equal(
+    validation.diagnostics.some(
+      (entry) => entry.code === "invalid_id" && entry.layer === "project",
+    ),
+    true,
+  );
 });
 
 test("custom ids require a complete OKF URI and uppercase Markdown suffixes remain extensionless", () => {
@@ -87,18 +92,24 @@ test("relations cannot resolve to reserved or invalid documents", () => {
   const root = fixture({
     "index.md": "# Index\n\n- [Source](source.md)\n",
     "invalid.md": concept("title: Missing type", "# Invalid"),
-    "source.md": concept([
-      "type: Concept",
-      "relations:",
-      "  - type: related_to",
-      "    target: okf://fixture/index.md",
-      "  - type: related_to",
-      "    target: okf://fixture/invalid",
-    ].join("\n"), "# Source"),
+    "source.md": concept(
+      [
+        "type: Concept",
+        "relations:",
+        "  - type: related_to",
+        "    target: okf://fixture/index.md",
+        "  - type: related_to",
+        "    target: okf://fixture/invalid",
+      ].join("\n"),
+      "# Source",
+    ),
   });
   const index = buildIndex([`fixture=${root}`]);
 
-  assert.equal(index.edges.filter((edge) => edge.kind === "relation").every((edge) => edge.broken), true);
+  assert.equal(
+    index.edges.filter((edge) => edge.kind === "relation").every((edge) => edge.broken),
+    true,
+  );
   assert.equal(index.errors.filter((entry) => entry.code === "broken_relation").length, 2);
   assert.equal(validateIndex(index).validForProject, false);
 });
@@ -135,10 +146,7 @@ test("authoring preserves nested extension frontmatter through YAML serializatio
 });
 
 test("YAML requires a mapping root and rejects duplicate mapping keys", () => {
-  assert.throws(
-    () => parseFrontmatterYaml("- Concept\n- Other"),
-    /root must be a mapping/,
-  );
+  assert.throws(() => parseFrontmatterYaml("- Concept\n- Other"), /root must be a mapping/);
   assert.throws(
     () => parseFrontmatterYaml("type: Concept\ntype: Other"),
     /duplicated mapping key/i,
@@ -176,12 +184,17 @@ test("a broken Markdown link is advisory by default and strict only when configu
   assert.equal(validation.validForProject, true);
   assert.equal(validation.valid, true);
   assert.equal(validation.errors.length, 0);
-  assert.equal(validation.warnings.some((entry) => entry.code === "broken_link"), true);
-  assert.equal(validation.diagnostics.some((entry) => (
-    entry.code === "broken_link"
-    && entry.layer === "project"
-    && entry.severity === "warning"
-  )), true);
+  assert.equal(
+    validation.warnings.some((entry) => entry.code === "broken_link"),
+    true,
+  );
+  assert.equal(
+    validation.diagnostics.some(
+      (entry) =>
+        entry.code === "broken_link" && entry.layer === "project" && entry.severity === "warning",
+    ),
+    true,
+  );
   const strict = validateIndex(buildIndex([`fixture=${root}`], { strictLinks: true }));
   assert.equal(strict.conformant, true);
   assert.equal(strict.validForProject, false);
@@ -202,12 +215,19 @@ test("project graph errors do not redefine document conformance", () => {
 
   assert.equal(validation.conformant, true);
   assert.equal(validation.validForProject, false);
-  assert.equal(validation.errors.some((entry) => entry.code === "duplicate_bundle_id"), true);
-  assert.equal(validation.diagnostics.some((entry) => (
-    entry.code === "duplicate_bundle_id"
-    && entry.layer === "project"
-    && entry.severity === "error"
-  )), true);
+  assert.equal(
+    validation.errors.some((entry) => entry.code === "duplicate_bundle_id"),
+    true,
+  );
+  assert.equal(
+    validation.diagnostics.some(
+      (entry) =>
+        entry.code === "duplicate_bundle_id" &&
+        entry.layer === "project" &&
+        entry.severity === "error",
+    ),
+    true,
+  );
 });
 
 test("validateIndex can scope project validity to one bundle", () => {
@@ -217,10 +237,13 @@ test("validateIndex can scope project validity to one bundle", () => {
   const broken = fixture({
     "concept.md": concept("type: Concept", "# Broken\n\n[Missing](missing.md)"),
   });
-  const index = buildIndex([
-    { id: "good", root: good },
-    { id: "broken", root: broken },
-  ], { strictLinks: true });
+  const index = buildIndex(
+    [
+      { id: "good", root: good },
+      { id: "broken", root: broken },
+    ],
+    { strictLinks: true },
+  );
 
   assert.equal(validateIndex(index).validForProject, false);
   assert.equal(validateIndex(index, "good").validForProject, true);
@@ -282,7 +305,7 @@ test("valid reserved index and log resources pass conformance", () => {
     "concept.md": concept("type: Unregistered Concept Type\nx-extra: accepted", "# Concept"),
     "index.md": [
       "---",
-      "okf_version: \"0.1\"",
+      'okf_version: "0.1"',
       "---",
       "",
       "# Bundle Index",

@@ -34,13 +34,13 @@ function hasOwn(value, key) {
 }
 
 function commandOutput(result) {
-  return String((result && (result.stderr || result.stdout)) || "").trim().slice(0, 4000);
+  return String((result && (result.stderr || result.stdout)) || "")
+    .trim()
+    .slice(0, 4000);
 }
 
 function commandFailure(result, fallback) {
-  return commandOutput(result)
-    || (result && result.error && result.error.message)
-    || fallback;
+  return commandOutput(result) || (result && result.error && result.error.message) || fallback;
 }
 
 function commandSucceeded(result) {

@@ -10,15 +10,11 @@ const { callJson, connectMcp } = require("./mcp-client");
 
 function makeBundle() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "okf-mcp-hardening-"));
-  fs.writeFileSync(path.join(root, "concept.md"), [
-    "---",
-    "type: Concept",
-    "title: Concept",
-    "---",
-    "",
-    "# Concept",
-    "",
-  ].join("\n"), "utf8");
+  fs.writeFileSync(
+    path.join(root, "concept.md"),
+    ["---", "type: Concept", "title: Concept", "---", "", "# Concept", ""].join("\n"),
+    "utf8",
+  );
   return root;
 }
 
@@ -26,22 +22,16 @@ function makeProject() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "okf-mcp-hardening-project-"));
   const bundle = path.join(root, "bundle");
   fs.mkdirSync(bundle);
-  fs.writeFileSync(path.join(root, "okf.project.yaml"), [
-    "project: Hardening",
-    "bundles:",
-    "  - id: local",
-    "    root: bundle",
-    "",
-  ].join("\n"), "utf8");
-  fs.writeFileSync(path.join(bundle, "concept.md"), [
-    "---",
-    "type: Concept",
-    "title: Concept",
-    "---",
-    "",
-    "# Concept",
-    "",
-  ].join("\n"), "utf8");
+  fs.writeFileSync(
+    path.join(root, "okf.project.yaml"),
+    ["project: Hardening", "bundles:", "  - id: local", "    root: bundle", ""].join("\n"),
+    "utf8",
+  );
+  fs.writeFileSync(
+    path.join(bundle, "concept.md"),
+    ["---", "type: Concept", "title: Concept", "---", "", "# Concept", ""].join("\n"),
+    "utf8",
+  );
   return { root, bundle, projectPath: path.join(root, "okf.project.yaml") };
 }
 
@@ -56,11 +46,20 @@ function installRemoteFetch(t) {
   });
   globalThis.fetch = async (url) => {
     const textUrl = String(url);
-    const commitMatch = textUrl.match(/^https:\/\/api\.github\.com\/repos\/acme\/([^/]+)\/commits\//);
+    const commitMatch = textUrl.match(
+      /^https:\/\/api\.github\.com\/repos\/acme\/([^/]+)\/commits\//,
+    );
     if (commitMatch) {
-      return { ok: true, async json() { return { sha: "a".repeat(40) }; } };
+      return {
+        ok: true,
+        async json() {
+          return { sha: "a".repeat(40) };
+        },
+      };
     }
-    const apiMatch = textUrl.match(/^https:\/\/api\.github\.com\/repos\/acme\/([^/]+)\/contents\/([^?]+)\?ref=[^&]+$/);
+    const apiMatch = textUrl.match(
+      /^https:\/\/api\.github\.com\/repos\/acme\/([^/]+)\/contents\/([^?]+)\?ref=[^&]+$/,
+    );
     if (apiMatch) {
       const repo = apiMatch[1];
       const rootPath = decodeURIComponent(apiMatch[2]);
@@ -68,13 +67,15 @@ function installRemoteFetch(t) {
       return {
         ok: true,
         async json() {
-          return [{
-            type: "file",
-            name: fileName,
-            path: `${rootPath}/${fileName}`,
-            size: 100,
-            download_url: `https://raw.example/${repo}`,
-          }];
+          return [
+            {
+              type: "file",
+              name: fileName,
+              path: `${rootPath}/${fileName}`,
+              size: 100,
+              download_url: `https://raw.example/${repo}`,
+            },
+          ];
         },
       };
     }
@@ -84,15 +85,7 @@ function installRemoteFetch(t) {
       return {
         ok: true,
         async text() {
-          return [
-            "---",
-            "type: Concept",
-            `title: ${repo}`,
-            "---",
-            "",
-            `# ${repo}`,
-            "",
-          ].join("\n");
+          return ["---", "type: Concept", `title: ${repo}`, "---", "", `# ${repo}`, ""].join("\n");
         },
       };
     }
@@ -114,13 +107,14 @@ test("tools/list and tools/call enforce configured MCP capabilities", async (t) 
   assert.equal(Object.hasOwn(readOnlyBundles.payload[0], "absoluteRoot"), false);
   assert.equal(Object.hasOwn(readOnlyBundles.payload[0], "projectRoot"), false);
   await assert.rejects(
-    () => readOnly.client.callTool({
-      name: "load_remote_bundle",
-      arguments: {
-        id: "blocked",
-        url: "https://github.com/acme/blocked/tree/main/okf",
-      },
-    }),
+    () =>
+      readOnly.client.callTool({
+        name: "load_remote_bundle",
+        arguments: {
+          id: "blocked",
+          url: "https://github.com/acme/blocked/tree/main/okf",
+        },
+      }),
     (error) => {
       assert.equal(error.code, -32602);
       assert.match(error.message, /not found/);
@@ -138,13 +132,14 @@ test("tools/list and tools/call enforce configured MCP capabilities", async (t) 
   assert.equal(projectNames.has("okf_validate_changes"), false);
   assert.equal(projectNames.has("okf_apply_changes"), false);
   await assert.rejects(
-    () => project.client.callTool({
-      name: "okf_validate_changes",
-      arguments: {
-        bundle: "local",
-        changes: [{ op: "create", type: "Concept", title: "Blocked validation" }],
-      },
-    }),
+    () =>
+      project.client.callTool({
+        name: "okf_validate_changes",
+        arguments: {
+          bundle: "local",
+          changes: [{ op: "create", type: "Concept", title: "Blocked validation" }],
+        },
+      }),
     (error) => {
       assert.equal(error.code, -32602);
       assert.match(error.message, /not found/);
@@ -152,14 +147,15 @@ test("tools/list and tools/call enforce configured MCP capabilities", async (t) 
     },
   );
   await assert.rejects(
-    () => project.client.callTool({
-      name: "okf_propose_concept",
-      arguments: {
-        bundle: "local",
-        path: "blocked.md",
-        frontmatter: { type: "Concept", title: "Blocked" },
-      },
-    }),
+    () =>
+      project.client.callTool({
+        name: "okf_propose_concept",
+        arguments: {
+          bundle: "local",
+          path: "blocked.md",
+          frontmatter: { type: "Concept", title: "Blocked" },
+        },
+      }),
     (error) => {
       assert.equal(error.code, -32602);
       assert.match(error.message, /not found/);
@@ -167,13 +163,14 @@ test("tools/list and tools/call enforce configured MCP capabilities", async (t) 
     },
   );
   await assert.rejects(
-    () => project.client.callTool({
-      name: "okf_apply_changes",
-      arguments: {
-        bundle: "local",
-        changes: [{ op: "create", type: "Concept", title: "Blocked live" }],
-      },
-    }),
+    () =>
+      project.client.callTool({
+        name: "okf_apply_changes",
+        arguments: {
+          bundle: "local",
+          changes: [{ op: "create", type: "Concept", title: "Blocked live" }],
+        },
+      }),
     (error) => {
       assert.equal(error.code, -32602);
       assert.match(error.message, /not found/);
@@ -207,29 +204,37 @@ test("tools/list and tools/call enforce configured MCP capabilities", async (t) 
 test("accepted local proposals retain configured and runtime remote bundles and edges", async (t) => {
   installRemoteFetch(t);
   const { root, bundle, projectPath } = makeProject();
-  fs.writeFileSync(projectPath, [
-    "project: Hardening",
-    "bundles:",
-    "  - id: local",
-    "    root: bundle",
-    "remoteBundles:",
-    "  - id: configured",
-    "    provider: github",
-    "    url: https://github.com/acme/configured/tree/main/okf",
-    "",
-  ].join("\n"), "utf8");
-  fs.writeFileSync(path.join(bundle, "source.md"), [
-    "---",
-    "type: Concept",
-    "title: Source",
-    "relations:",
-    "  - type: related_to",
-    "    target: okf://configured/configured.md",
-    "---",
-    "",
-    "# Source",
-    "",
-  ].join("\n"), "utf8");
+  fs.writeFileSync(
+    projectPath,
+    [
+      "project: Hardening",
+      "bundles:",
+      "  - id: local",
+      "    root: bundle",
+      "remoteBundles:",
+      "  - id: configured",
+      "    provider: github",
+      "    url: https://github.com/acme/configured/tree/main/okf",
+      "",
+    ].join("\n"),
+    "utf8",
+  );
+  fs.writeFileSync(
+    path.join(bundle, "source.md"),
+    [
+      "---",
+      "type: Concept",
+      "title: Source",
+      "relations:",
+      "  - type: related_to",
+      "    target: okf://configured/configured.md",
+      "---",
+      "",
+      "# Source",
+      "",
+    ].join("\n"),
+    "utf8",
+  );
 
   const { client } = await connectMcp(t, [], {
     projectPath,
@@ -246,7 +251,10 @@ test("accepted local proposals retain configured and runtime remote bundles and 
     url: "https://github.com/acme/runtime/tree/main/okf",
   });
   const afterRuntime = await callJson(client, "search_concepts", { query: "runtime" });
-  assert.equal(afterRuntime.payload.results.some((result) => result.uri === "okf://runtime/runtime"), true);
+  assert.equal(
+    afterRuntime.payload.results.some((result) => result.uri === "okf://runtime/runtime"),
+    true,
+  );
   for (const uri of ["okf://configured/configured.md", "okf://runtime/runtime.md"]) {
     const concept = await callJson(client, "get_concept", { uri });
     assert.equal(concept.result.isError, undefined);
@@ -262,16 +270,21 @@ test("accepted local proposals retain configured and runtime remote bundles and 
   const proposalId = proposed.payload.proposal.id;
   await callJson(client, "okf_accept_proposal", { proposalId });
   const afterAccepted = await callJson(client, "search_concepts", { query: "accepted" });
-  assert.equal(afterAccepted.payload.results.some((result) => result.uri === "okf://local/accepted"), true);
+  assert.equal(
+    afterAccepted.payload.results.some((result) => result.uri === "okf://local/accepted"),
+    true,
+  );
   const liveInput = {
     bundle: "local",
-    changes: [{
-      op: "create",
-      path: "live.md",
-      type: "Concept",
-      title: "Live",
-      relations: [{ type: "related_to", target: "okf://runtime/runtime.md" }],
-    }],
+    changes: [
+      {
+        op: "create",
+        path: "live.md",
+        type: "Concept",
+        title: "Live",
+        relations: [{ type: "related_to", target: "okf://runtime/runtime.md" }],
+      },
+    ],
   };
   const livePreview = await callJson(client, "okf_validate_changes", liveInput);
   assert.equal(livePreview.payload.valid, true);
@@ -290,18 +303,26 @@ test("accepted local proposals retain configured and runtime remote bundles and 
     assert.equal(concept.result.isError, undefined);
   }
   const graph = await callJson(client, "get_graph", {});
-  assert.equal(graph.payload.edges.some((edge) => (
-    edge.source === "okf://local/source"
-    && edge.target === "okf://configured/configured"
-    && edge.relationType === "related_to"
-    && !edge.broken
-  )), true);
-  assert.equal(graph.payload.edges.some((edge) => (
-    edge.source === "okf://local/live"
-    && edge.target === "okf://runtime/runtime"
-    && edge.relationType === "related_to"
-    && !edge.broken
-  )), true);
+  assert.equal(
+    graph.payload.edges.some(
+      (edge) =>
+        edge.source === "okf://local/source" &&
+        edge.target === "okf://configured/configured" &&
+        edge.relationType === "related_to" &&
+        !edge.broken,
+    ),
+    true,
+  );
+  assert.equal(
+    graph.payload.edges.some(
+      (edge) =>
+        edge.source === "okf://local/live" &&
+        edge.target === "okf://runtime/runtime" &&
+        edge.relationType === "related_to" &&
+        !edge.broken,
+    ),
+    true,
+  );
 });
 
 test("SDK project servers rebuild from their configured local registry", async (t) => {
@@ -318,7 +339,10 @@ test("SDK project servers rebuild from their configured local registry", async (
   });
 
   const bundles = await callJson(client, "list_bundles", {});
-  assert.deepEqual(new Set(bundles.payload.map((bundle) => bundle.id)), new Set(["local", "runtime"]));
+  assert.deepEqual(
+    new Set(bundles.payload.map((bundle) => bundle.id)),
+    new Set(["local", "runtime"]),
+  );
   for (const uri of ["okf://local/concept.md", "okf://runtime/runtime.md"]) {
     const concept = await callJson(client, "get_concept", { uri });
     assert.equal(concept.result.isError, undefined);

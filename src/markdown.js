@@ -22,11 +22,11 @@ function isDocumentChild(node) {
 
 function isTopLevelItem(node) {
   return Boolean(
-    node
-    && node.parent
-    && node.parent.type === "list"
-    && node.parent.parent
-    && node.parent.parent.type === "document",
+    node &&
+      node.parent &&
+      node.parent.type === "list" &&
+      node.parent.parent &&
+      node.parent.parent.type === "document",
   );
 }
 
@@ -63,9 +63,11 @@ function markdownStructure(body) {
       const fenceLength = Number(node._fenceLength || 0);
       const closingLine = lines[node.sourcepos[1][0] - 1] || "";
       const closed = Boolean(
-        node._isFenced
-        && fenceCharacter
-        && new RegExp(`^ {0,3}${fenceCharacter === "`" ? "`" : "~"}{${fenceLength},}\\s*$`).test(closingLine),
+        node._isFenced &&
+          fenceCharacter &&
+          new RegExp(`^ {0,3}${fenceCharacter === "`" ? "`" : "~"}{${fenceLength},}\\s*$`).test(
+            closingLine,
+          ),
       );
       codeBlocks.push({
         node,
@@ -73,7 +75,10 @@ function markdownStructure(body) {
         endLine: node.sourcepos[1][0],
         fenced: Boolean(node._isFenced),
         closed,
-        language: String(node.info || "").trim().split(/\s+/)[0] || "",
+        language:
+          String(node.info || "")
+            .trim()
+            .split(/\s+/)[0] || "",
         content: String(node.literal || "").replace(/\n$/, ""),
       });
     }
@@ -89,9 +94,9 @@ function markdownStructure(body) {
 }
 
 function sectionEndLine(structure, heading) {
-  const next = structure.headings.find((entry) => (
-    entry.startLine > heading.startLine && entry.level <= heading.level
-  ));
+  const next = structure.headings.find(
+    (entry) => entry.startLine > heading.startLine && entry.level <= heading.level,
+  );
   return next ? next.startLine : Number.POSITIVE_INFINITY;
 }
 
@@ -99,10 +104,10 @@ function sectionNodes(heading, options) {
   const nodes = [];
   let current = heading && heading.node ? heading.node.next : null;
   while (current) {
-    if (current.type === "heading" && (
-      options && options.stopAtAnyHeading
-      || current.level <= heading.level
-    )) {
+    if (
+      current.type === "heading" &&
+      ((options && options.stopAtAnyHeading) || current.level <= heading.level)
+    ) {
       break;
     }
     nodes.push(current);

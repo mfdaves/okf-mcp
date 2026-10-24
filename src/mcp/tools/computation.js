@@ -25,14 +25,21 @@ const tools = {
         uri: nonEmptyStringParameter("Canonical or compatibility URI of the Attested Computation."),
         asOf: nonEmptyStringParameter("UTC ISO date or datetime for freshness evaluation."),
         includeComputation: booleanParameter("Include bounded inline or text computation content."),
-        maxContentBytes: integerParameter("Maximum computation bytes to include.", 1, 1048576, 65536),
+        maxContentBytes: integerParameter(
+          "Maximum computation bytes to include.",
+          1,
+          1048576,
+          65536,
+        ),
       },
       ["uri"],
     ),
-    handler: async (state, args) => jsonContent(await expectedToolOperation(
-      () => inspectAttestedComputation(state.index, args.uri, args),
-      { translateTypeError: true },
-    )),
+    handler: async (state, args) =>
+      jsonContent(
+        await expectedToolOperation(() => inspectAttestedComputation(state.index, args.uri, args), {
+          translateTypeError: true,
+        }),
+      ),
   },
   prepare_attested_computation: {
     ...defineTool(
@@ -45,10 +52,13 @@ const tools = {
       },
       ["uri", "parameters"],
     ),
-    handler: async (state, args) => jsonContent(await expectedToolOperation(
-      () => prepareAttestedComputation(state.index, args.uri, args.parameters, args),
-      { translateTypeError: true },
-    )),
+    handler: async (state, args) =>
+      jsonContent(
+        await expectedToolOperation(
+          () => prepareAttestedComputation(state.index, args.uri, args.parameters, args),
+          { translateTypeError: true },
+        ),
+      ),
   },
   check_computation_receipt: {
     ...defineTool(
@@ -60,10 +70,13 @@ const tools = {
       },
       ["uri", "receipt"],
     ),
-    handler: async (state, args) => jsonContent(await expectedToolOperation(
-      () => checkComputationReceipt(state.index, args.uri, args.receipt),
-      { translateTypeError: true },
-    )),
+    handler: async (state, args) =>
+      jsonContent(
+        await expectedToolOperation(
+          () => checkComputationReceipt(state.index, args.uri, args.receipt),
+          { translateTypeError: true },
+        ),
+      ),
   },
 };
 

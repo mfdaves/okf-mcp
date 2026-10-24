@@ -8,10 +8,10 @@ const { createMcpServer } = require("../src/mcp-server");
 
 async function connectMcp(t, bundleArgs, options, mode) {
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-  const handle = serveStdio(
-    () => createMcpServer(bundleArgs || [], options || {}),
-    { legacy: "serve", transport: serverTransport },
-  );
+  const handle = serveStdio(() => createMcpServer(bundleArgs || [], options || {}), {
+    legacy: "serve",
+    transport: serverTransport,
+  });
   const client = new Client(
     { name: "okf-mcp-test", version: "1" },
     { versionNegotiation: { mode: mode || "legacy" } },

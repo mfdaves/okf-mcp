@@ -7,13 +7,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 
 const packageMetadata = require("../package.json");
-const {
-  UsageError,
-  exitCodeForError,
-  main,
-  parseArgs,
-  usage,
-} = require("../src/cli");
+const { UsageError, exitCodeForError, main, parseArgs, usage } = require("../src/cli");
 
 function makeProject(options) {
   const config = options || {};
@@ -22,23 +16,25 @@ function makeProject(options) {
   const nested = path.join(root, "nested", "deeper");
   fs.mkdirSync(bundle, { recursive: true });
   fs.mkdirSync(nested, { recursive: true });
-  fs.writeFileSync(path.join(root, "okf.project.yaml"), [
-    "project: CliContract",
-    "bundles:",
-    "  - id: cli",
-    "    root: okf/bundle",
-    "",
-  ].join("\n"), "utf8");
-  fs.writeFileSync(path.join(bundle, "alpha.md"), [
-    "---",
-    ...(config.invalid ? [] : ["type: Spec"]),
-    "title: Alpha",
-    "description: CLI contract fixture",
-    "---",
-    "",
-    "# Alpha",
-    "",
-  ].join("\n"), "utf8");
+  fs.writeFileSync(
+    path.join(root, "okf.project.yaml"),
+    ["project: CliContract", "bundles:", "  - id: cli", "    root: okf/bundle", ""].join("\n"),
+    "utf8",
+  );
+  fs.writeFileSync(
+    path.join(bundle, "alpha.md"),
+    [
+      "---",
+      ...(config.invalid ? [] : ["type: Spec"]),
+      "title: Alpha",
+      "description: CLI contract fixture",
+      "---",
+      "",
+      "# Alpha",
+      "",
+    ].join("\n"),
+    "utf8",
+  );
   return { root, bundle, nested, projectPath: path.join(root, "okf.project.yaml") };
 }
 
@@ -81,10 +77,11 @@ test("CLI parses contract flags and rejects unknown options as usage errors", ()
 
   assert.throws(
     () => parseArgs(["--unknown"]),
-    (error) => error instanceof UsageError
-      && error.exitCode === 2
-      && exitCodeForError(error) === 2
-      && /Unknown option/.test(error.message),
+    (error) =>
+      error instanceof UsageError &&
+      error.exitCode === 2 &&
+      exitCodeForError(error) === 2 &&
+      /Unknown option/.test(error.message),
   );
   assert.throws(() => parseArgs(["--max-content-bytes", "1048577"]), /1 through 1048576/);
   assert.throws(() => parseArgs(["--write"]), /requires --actor/);
@@ -123,7 +120,9 @@ test("validate and search discover the nearest project config", async () => {
     assert.equal(process.exitCode, 0);
     assert.match(validation, /"valid": true/);
 
-    const search = await captureStdout(() => main(["search", "fixture", "contract"], { cwd: fixture.nested }));
+    const search = await captureStdout(() =>
+      main(["search", "fixture", "contract"], { cwd: fixture.nested }),
+    );
     assert.match(search, /CLI contract fixture/);
   } finally {
     process.exitCode = previousExitCode;
@@ -171,7 +170,9 @@ test("CLI forwards live authoring policy only when explicitly enabled", async ()
   );
 
   await assert.rejects(
-    main(["--write", "--actor", "openai/gpt-5.6", "--git-commit", "producer", "run", "x"], { cwd: fixture.nested }),
+    main(["--write", "--actor", "openai/gpt-5.6", "--git-commit", "producer", "run", "x"], {
+      cwd: fixture.nested,
+    }),
     /--git-commit is available only with the mcp command/,
   );
 });
@@ -190,7 +191,11 @@ test("CLI separates usage, validation, and operational failures", async () => {
     assert.equal(process.exitCode, 1);
     assert.match(validation, /"valid": false/);
 
-    const missingProject = path.join(os.tmpdir(), `okf-missing-project-${process.pid}`, "okf.project.yaml");
+    const missingProject = path.join(
+      os.tmpdir(),
+      `okf-missing-project-${process.pid}`,
+      "okf.project.yaml",
+    );
     await assert.rejects(
       main(["--project", missingProject, "validate"]),
       (error) => exitCodeForError(error) === 1,
@@ -204,49 +209,44 @@ test("CLI treats malformed structured command arguments as usage errors", async 
   const fixture = makeProject();
   await assert.rejects(
     main(["--project", fixture.projectPath, "migrate", "preview", "cli", "{bad"]),
-    (error) => error instanceof UsageError
-      && exitCodeForError(error) === 2
-      && /actor mappings must be valid JSON/.test(error.message),
+    (error) =>
+      error instanceof UsageError &&
+      exitCodeForError(error) === 2 &&
+      /actor mappings must be valid JSON/.test(error.message),
   );
   await assert.rejects(
     main(["--project", fixture.projectPath, "migrate", "preview", "cli", "[]"]),
-    (error) => error instanceof UsageError
-      && exitCodeForError(error) === 2
-      && /actor mappings must be a JSON object/.test(error.message),
+    (error) =>
+      error instanceof UsageError &&
+      exitCodeForError(error) === 2 &&
+      /actor mappings must be a JSON object/.test(error.message),
   );
 });
 
 test("single-root migration preview does not require a bundle id", async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "okf-cli-root-migration-"));
-  fs.writeFileSync(path.join(root, "index.md"), [
-    "---",
-    "okf_version: \"0.2\"",
-    "---",
-    "",
-    "# Index",
-    "",
-    "- [Alpha](alpha.md)",
-    "",
-  ].join("\n"), "utf8");
-  fs.writeFileSync(path.join(root, "alpha.md"), [
-    "---",
-    "type: Reference",
-    "title: Alpha",
-    "---",
-    "",
-    "# Alpha",
-    "",
-  ].join("\n"), "utf8");
+  fs.writeFileSync(
+    path.join(root, "index.md"),
+    ["---", 'okf_version: "0.2"', "---", "", "# Index", "", "- [Alpha](alpha.md)", ""].join("\n"),
+    "utf8",
+  );
+  fs.writeFileSync(
+    path.join(root, "alpha.md"),
+    ["---", "type: Reference", "title: Alpha", "---", "", "# Alpha", ""].join("\n"),
+    "utf8",
+  );
   const previousExitCode = process.exitCode;
   process.exitCode = 0;
   try {
-    const output = await captureStdout(() => main([
-      "--root",
-      root,
-      "migrate",
-      "preview",
-      '{"$default":{"by":"human:owner","confirmed":true}}',
-    ]));
+    const output = await captureStdout(() =>
+      main([
+        "--root",
+        root,
+        "migrate",
+        "preview",
+        '{"$default":{"by":"human:owner","confirmed":true}}',
+      ]),
+    );
     assert.equal(process.exitCode, 0);
     assert.match(output, /"targetVersion": "0\.2"/);
     assert.match(output, new RegExp(`"bundle": "${path.basename(root)}"`));
@@ -257,7 +257,11 @@ test("single-root migration preview does not require a bundle id", async () => {
 
 test("CLI graph and concept commands reject reserved or unknown concept identities", async () => {
   const fixture = makeProject();
-  fs.writeFileSync(path.join(fixture.bundle, "index.md"), "# Index\n\n- [Alpha](alpha.md)\n", "utf8");
+  fs.writeFileSync(
+    path.join(fixture.bundle, "index.md"),
+    "# Index\n\n- [Alpha](alpha.md)\n",
+    "utf8",
+  );
   await assert.rejects(
     main(["--project", fixture.projectPath, "concept", "okf://cli/index.md"]),
     /not a valid OKF concept/,
@@ -297,7 +301,10 @@ test("the producer command validates its action and gates publication behind --w
   // A project without producers still lists cleanly rather than failing.
   const printed = [];
   const write = process.stdout.write;
-  process.stdout.write = (chunk) => { printed.push(String(chunk)); return true; };
+  process.stdout.write = (chunk) => {
+    printed.push(String(chunk));
+    return true;
+  };
   try {
     await main(["--project", projectPath, "producer", "list"], {});
   } finally {

@@ -11,17 +11,13 @@ const packageMetadata = require("../package.json");
 const { callJson, connectMcp } = require("./mcp-client");
 
 function writeConcept(root, name, title, body) {
-  fs.writeFileSync(path.join(root, name), [
-    "---",
-    "type: Concept",
-    `title: ${title}`,
-    "---",
-    "",
-    `# ${title}`,
-    "",
-    body || "",
-    "",
-  ].join("\n"), "utf8");
+  fs.writeFileSync(
+    path.join(root, name),
+    ["---", "type: Concept", `title: ${title}`, "---", "", `# ${title}`, "", body || "", ""].join(
+      "\n",
+    ),
+    "utf8",
+  );
 }
 
 function makeBundle() {
@@ -33,7 +29,8 @@ function makeBundle() {
 }
 
 function estimatePayload(results) {
-  const bytes = results.flatMap((result) => result.result.content)
+  const bytes = results
+    .flatMap((result) => result.result.content)
     .filter((block) => block.type === "text")
     .reduce((total, block) => total + Buffer.byteLength(block.text, "utf8"), 0);
   return { bytes, estimatedTokens: Math.ceil(bytes / 4) };
@@ -57,10 +54,19 @@ test("official SDK serves both modern and legacy MCP eras", async (t) => {
       tools: { listChanged: false },
     });
     const tools = await connection.client.listTools();
-    assert.equal(tools.tools.some((tool) => tool.name === "search_concepts"), true);
+    assert.equal(
+      tools.tools.some((tool) => tool.name === "search_concepts"),
+      true,
+    );
     const resources = await connection.client.listResources();
-    assert.equal(resources.resources.some((resource) => resource.uri === "okf://local/alpha"), true);
-    assert.equal(resources.resources.some((resource) => resource.uri === "okf://local/space%20name"), true);
+    assert.equal(
+      resources.resources.some((resource) => resource.uri === "okf://local/alpha"),
+      true,
+    );
+    assert.equal(
+      resources.resources.some((resource) => resource.uri === "okf://local/space%20name"),
+      true,
+    );
     const resource = await connection.client.readResource({ uri: "okf://local/alpha" });
     assert.match(resource.contents[0].text, /# Alpha/);
     const spaced = await connection.client.readResource({ uri: "okf://local/space%20name" });
@@ -71,13 +77,33 @@ test("official SDK serves both modern and legacy MCP eras", async (t) => {
     );
     const search = await callJson(connection.client, "search_concepts", { tagsAny: [] });
     assert.equal(search.payload.total, 3);
-    const lexical = await callJson(connection.client, "search_concepts", { query: "only alpha", detail: "full" });
-    assert.deepEqual(lexical.payload.results.map((result) => result.path), ["alpha.md"]);
-    const listed = await callJson(connection.client, "list_concepts", { query: "only beta", detail: "full" });
-    assert.deepEqual(listed.payload.results.map((result) => result.path), ["beta.md"]);
+    const lexical = await callJson(connection.client, "search_concepts", {
+      query: "only alpha",
+      detail: "full",
+    });
+    assert.deepEqual(
+      lexical.payload.results.map((result) => result.path),
+      ["alpha.md"],
+    );
+    const listed = await callJson(connection.client, "list_concepts", {
+      query: "only beta",
+      detail: "full",
+    });
+    assert.deepEqual(
+      listed.payload.results.map((result) => result.path),
+      ["beta.md"],
+    );
     const compact = await callJson(connection.client, "list_concepts", { limit: 3 });
-    assert.deepEqual(Object.keys(compact.payload.results[0]).sort(), ["description", "title", "type", "uri"]);
-    const fullList = await callJson(connection.client, "list_concepts", { detail: "full", limit: 3 });
+    assert.deepEqual(Object.keys(compact.payload.results[0]).sort(), [
+      "description",
+      "title",
+      "type",
+      "uri",
+    ]);
+    const fullList = await callJson(connection.client, "list_concepts", {
+      detail: "full",
+      limit: 3,
+    });
     assert.ok(JSON.stringify(compact.payload).length < JSON.stringify(fullList.payload).length / 2);
     await connection.close();
   }
@@ -90,14 +116,25 @@ test("compact discovery keeps a realistic research path within a token budget", 
   const compactList = await callJson(client, "list_concepts", { limit: 10 });
   const fullList = await callJson(client, "list_concepts", { limit: 10, detail: "full" });
   const compactSearch = await callJson(client, "search_concepts", { query: "runtime", limit: 5 });
-  const fullSearch = await callJson(client, "search_concepts", { query: "runtime", limit: 5, detail: "full" });
+  const fullSearch = await callJson(client, "search_concepts", {
+    query: "runtime",
+    limit: 5,
+    detail: "full",
+  });
   const concept = await callJson(client, "get_concept", { uri });
   const neighbors = await callJson(client, "get_neighbors", { uri });
-  assert.deepEqual(compactList.payload.results.map((entry) => entry.uri),
-    fullList.payload.results.map((entry) => entry.uri));
-  assert.deepEqual(compactSearch.payload.results.map((entry) => entry.uri),
-    fullSearch.payload.results.map((entry) => entry.uri));
-  assert.equal(compactSearch.payload.results.some((entry) => entry.uri === uri), true);
+  assert.deepEqual(
+    compactList.payload.results.map((entry) => entry.uri),
+    fullList.payload.results.map((entry) => entry.uri),
+  );
+  assert.deepEqual(
+    compactSearch.payload.results.map((entry) => entry.uri),
+    fullSearch.payload.results.map((entry) => entry.uri),
+  );
+  assert.equal(
+    compactSearch.payload.results.some((entry) => entry.uri === uri),
+    true,
+  );
   const compact = estimatePayload([compactList, compactSearch, concept, neighbors]);
   const full = estimatePayload([fullList, fullSearch, concept, neighbors]);
   assert.ok(compact.estimatedTokens <= 6500, { compact, full });
@@ -182,7 +219,7 @@ test("business failures stay tool errors and unexpected failures are sanitized",
 
 test("SDK stdio transport enforces the configured one MiB input boundary", () => {
   const bundle = makeBundle();
-  const oversized = "é".repeat((1024 * 1024 / 2) + 1) + "\n";
+  const oversized = "é".repeat((1024 * 1024) / 2 + 1) + "\n";
   const initialize = `${JSON.stringify({
     jsonrpc: "2.0",
     id: 1,

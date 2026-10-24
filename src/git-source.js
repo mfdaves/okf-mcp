@@ -62,15 +62,26 @@ function normalizeLines(value) {
 
 function safeGitPath(value) {
   if (typeof value !== "string" || !value || value !== value.trim()) {
-    throw sourceError("git_source_invalid_path", "git.path must be a non-empty repository-relative POSIX path.");
+    throw sourceError(
+      "git_source_invalid_path",
+      "git.path must be a non-empty repository-relative POSIX path.",
+    );
   }
   if (value.includes("\\") || /[\x00-\x1f\x7f]/.test(value) || path.posix.isAbsolute(value)) {
-    throw sourceError("git_source_invalid_path", "git.path must be a safe repository-relative POSIX path.");
+    throw sourceError(
+      "git_source_invalid_path",
+      "git.path must be a safe repository-relative POSIX path.",
+    );
   }
   const segments = value.split("/");
-  if (segments.some((segment) => !segment || segment === "." || segment === "..")
-    || path.posix.normalize(value) !== value) {
-    throw sourceError("git_source_invalid_path", "git.path cannot contain empty, dot, or parent components.");
+  if (
+    segments.some((segment) => !segment || segment === "." || segment === "..") ||
+    path.posix.normalize(value) !== value
+  ) {
+    throw sourceError(
+      "git_source_invalid_path",
+      "git.path cannot contain empty, dot, or parent components.",
+    );
   }
   if (Buffer.byteLength(value, "utf8") > 4096) {
     throw sourceError("git_source_invalid_path", "git.path exceeds the 4096-byte safety limit.");
@@ -92,9 +103,8 @@ function validateGitSource(source) {
     throw sourceError("git_source_metadata_missing", "A Git source entry requires a git mapping.");
   }
 
-  const requestedRevision = typeof source.git.revision === "string"
-    ? source.git.revision.trim()
-    : "";
+  const requestedRevision =
+    typeof source.git.revision === "string" ? source.git.revision.trim() : "";
   const pinned = /^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})$/.test(requestedRevision);
   return {
     repositoryConceptId: source.resource.trim(),
@@ -109,8 +119,10 @@ function mappingFor(repositoryMappings, conceptId) {
   if (repositoryMappings instanceof Map) {
     return repositoryMappings.has(conceptId) ? repositoryMappings.get(conceptId) : undefined;
   }
-  if (isPlainObject(repositoryMappings)
-    && Object.prototype.hasOwnProperty.call(repositoryMappings, conceptId)) {
+  if (
+    isPlainObject(repositoryMappings) &&
+    Object.prototype.hasOwnProperty.call(repositoryMappings, conceptId)
+  ) {
     return repositoryMappings[conceptId];
   }
   return undefined;
@@ -212,11 +224,12 @@ function runGit(repositoryPath, args, options, maxBuffer) {
     throw sourceError("git_source_process_error", "Git returned no process result.");
   }
   if (result.error) {
-    const code = result.error.code === "ETIMEDOUT"
-      ? "git_source_timeout"
-      : result.error.code === "ENOBUFS"
-        ? "git_source_output_too_large"
-        : "git_source_process_error";
+    const code =
+      result.error.code === "ETIMEDOUT"
+        ? "git_source_timeout"
+        : result.error.code === "ENOBUFS"
+          ? "git_source_output_too_large"
+          : "git_source_process_error";
     throw sourceError(code, `Git source inspection failed: ${result.error.message}`);
   }
   if (result.signal) {
@@ -229,9 +242,11 @@ function runGit(repositoryPath, args, options, maxBuffer) {
 }
 
 function decodeAscii(buffer, code, label) {
-  if (!Array.from(buffer).every((byte) => (
-    byte === 9 || byte === 10 || byte === 13 || (byte >= 32 && byte <= 126)
-  ))) {
+  if (
+    !Array.from(buffer).every(
+      (byte) => byte === 9 || byte === 10 || byte === 13 || (byte >= 32 && byte <= 126),
+    )
+  ) {
     throw sourceError(code, `${label} was not valid ASCII.`);
   }
   return buffer.toString("ascii");
@@ -262,10 +277,16 @@ function parseTreeEntry(buffer, expectedPath) {
   try {
     returnedPath = new TextDecoder("utf-8", { fatal: true }).decode(record.subarray(tab + 1));
   } catch (error) {
-    throw sourceError("git_source_invalid_tree_path", "Git returned a tree path that is not valid UTF-8.");
+    throw sourceError(
+      "git_source_invalid_tree_path",
+      "Git returned a tree path that is not valid UTF-8.",
+    );
   }
   if (returnedPath !== expectedPath) {
-    throw sourceError("git_source_tree_path_mismatch", "Git returned a different path than the requested source path.");
+    throw sourceError(
+      "git_source_tree_path_mismatch",
+      "Git returned a different path than the requested source path.",
+    );
   }
   return {
     mode: match[1],
@@ -292,7 +313,10 @@ function sliceInclusiveLines(text, lines) {
     return text;
   }
   if (!text.length) {
-    throw sourceError("git_source_lines_out_of_range", "git.lines cannot select from an empty file.");
+    throw sourceError(
+      "git_source_lines_out_of_range",
+      "git.lines cannot select from an empty file.",
+    );
   }
   const starts = [0];
   for (let index = 0; index < text.length; index += 1) {
@@ -353,7 +377,10 @@ function readGitSource(source, repositoryMappings, options) {
   if (!revisionType.ok) {
     return unavailable(normalized, "revision_unavailable");
   }
-  if (decodeAscii(revisionType.stdout, "git_source_invalid_object_type", "Git object type").trim() !== "commit") {
+  if (
+    decodeAscii(revisionType.stdout, "git_source_invalid_object_type", "Git object type").trim() !==
+    "commit"
+  ) {
     return unavailable(normalized, "revision_not_commit");
   }
 
@@ -377,7 +404,10 @@ function readGitSource(source, repositoryMappings, options) {
     throw sourceError("git_source_submodule", "Git source paths cannot resolve to submodules.");
   }
   if (!["100644", "100755"].includes(entry.mode) || entry.type !== "blob") {
-    throw sourceError("git_source_not_regular_file", "Git source paths must resolve to regular file blobs.");
+    throw sourceError(
+      "git_source_not_regular_file",
+      "Git source paths must resolve to regular file blobs.",
+    );
   }
 
   const sized = runGit(repositoryPath, ["cat-file", "-s", entry.oid], config, metadataBuffer);
@@ -405,12 +435,20 @@ function readGitSource(source, repositoryMappings, options) {
     );
   }
 
-  const fetched = runGit(repositoryPath, ["cat-file", "blob", entry.oid], config, maxBytes + metadataBuffer);
+  const fetched = runGit(
+    repositoryPath,
+    ["cat-file", "blob", entry.oid],
+    config,
+    maxBytes + metadataBuffer,
+  );
   if (!fetched.ok) {
     return unavailable(normalized, "blob_unavailable");
   }
   if (fetched.stdout.length !== size || fetched.stdout.length > maxBytes) {
-    throw sourceError("git_source_size_mismatch", "Git blob content does not match its inspected size.");
+    throw sourceError(
+      "git_source_size_mismatch",
+      "Git blob content does not match its inspected size.",
+    );
   }
   const objectAlgorithm = entry.oid.length === 64 ? "sha256" : "sha1";
   if (blobObjectId(fetched.stdout, objectAlgorithm) !== entry.oid) {
@@ -456,25 +494,29 @@ function readGitSources(sources, repositoryMappings, options) {
     if (!source || source.git === undefined) {
       return results;
     }
-    results.push(Object.assign({ sourceIndex: index }, readGitSource(source, repositoryMappings, options)));
+    results.push(
+      Object.assign({ sourceIndex: index }, readGitSource(source, repositoryMappings, options)),
+    );
     return results;
   }, []);
 }
 
 function declaredSource(document, sourceId) {
-  const sources = document && document.frontmatter && Array.isArray(document.frontmatter.sources)
-    ? document.frontmatter.sources
-    : [];
-  const source = sources.find((entry) => (
-    entry
-    && typeof entry === "object"
-    && !Array.isArray(entry)
-    && String(entry.id || "") === String(sourceId || "")
-  ));
+  const sources =
+    document && document.frontmatter && Array.isArray(document.frontmatter.sources)
+      ? document.frontmatter.sources
+      : [];
+  const source = sources.find(
+    (entry) =>
+      entry &&
+      typeof entry === "object" &&
+      !Array.isArray(entry) &&
+      String(entry.id || "") === String(sourceId || ""),
+  );
   if (!source) {
     throw sourceError(
       "git_source_not_declared",
-      `Concept ${document && document.conceptId || "<unknown>"} has no source with id ${sourceId || "<missing>"}.`,
+      `Concept ${(document && document.conceptId) || "<unknown>"} has no source with id ${sourceId || "<missing>"}.`,
     );
   }
   if (!source.git) {
@@ -485,7 +527,12 @@ function declaredSource(document, sourceId) {
 
 function repositoryForSource(index, source) {
   const repository = resolveConcept(index, source && source.resource);
-  if (!repository || !repository.valid || repository.reserved || repository.type !== "Git Repository") {
+  if (
+    !repository ||
+    !repository.valid ||
+    repository.reserved ||
+    repository.type !== "Git Repository"
+  ) {
     throw sourceError(
       "git_source_repository_invalid",
       "A Git source resource must resolve to a valid concept with type Git Repository.",
@@ -497,34 +544,47 @@ function repositoryForSource(index, source) {
 function readConceptGitSource(index, conceptLocator, sourceId, repositoryMappings, options) {
   const document = resolveConcept(index, conceptLocator);
   if (!document || !document.valid || document.reserved) {
-    throw sourceError("git_source_concept_invalid", `Unknown valid OKF concept: ${conceptLocator || "<missing>"}`);
+    throw sourceError(
+      "git_source_concept_invalid",
+      `Unknown valid OKF concept: ${conceptLocator || "<missing>"}`,
+    );
   }
   const source = declaredSource(document, sourceId);
   const repository = repositoryForSource(index, source);
-  const result = readGitSource(Object.assign({}, source, {
-    resource: repository.conceptId,
-  }), repositoryMappings, options);
-  return Object.assign({
-    conceptId: document.conceptId,
-    sourceId: String(sourceId),
-    repository: {
-      conceptId: repository.conceptId,
-      resource: repository.frontmatter.resource || null,
+  const result = readGitSource(
+    Object.assign({}, source, {
+      resource: repository.conceptId,
+    }),
+    repositoryMappings,
+    options,
+  );
+  return Object.assign(
+    {
+      conceptId: document.conceptId,
+      sourceId: String(sourceId),
+      repository: {
+        conceptId: repository.conceptId,
+        resource: repository.frontmatter.resource || null,
+      },
     },
-  }, result);
+    result,
+  );
 }
 
 function describeConceptGitSources(index, document, repositoryMappings) {
-  const sources = document && document.frontmatter && Array.isArray(document.frontmatter.sources)
-    ? document.frontmatter.sources
-    : [];
+  const sources =
+    document && document.frontmatter && Array.isArray(document.frontmatter.sources)
+      ? document.frontmatter.sources
+      : [];
   return sources.reduce((output, source) => {
     if (!source || typeof source !== "object" || Array.isArray(source) || !source.git) {
       return output;
     }
     try {
       const repository = repositoryForSource(index, source);
-      const normalized = validateGitSource(Object.assign({}, source, { resource: repository.conceptId }));
+      const normalized = validateGitSource(
+        Object.assign({}, source, { resource: repository.conceptId }),
+      );
       output.push({
         id: source.id || null,
         repositoryConceptId: repository.conceptId,

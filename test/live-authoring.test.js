@@ -34,30 +34,37 @@ function concept(title, extra, body) {
 
 function makeRoot(alphaExtra) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "okf-live-authoring-"));
-  write(root, "index.md", [
-    "---",
-    "okf_version: \"0.2\"",
-    "---",
-    "",
-    "# Test catalog",
-    "",
-    "- [Alpha](alpha.md)",
-    "",
-  ].join("\n"));
-  write(root, "alpha.md", concept("Alpha", [
-    "description: Existing concept",
-    "tags: [existing, remove-me]",
-    "x-retained: yes",
-    ...(alphaExtra || []),
-  ]));
+  write(
+    root,
+    "index.md",
+    ["---", 'okf_version: "0.2"', "---", "", "# Test catalog", "", "- [Alpha](alpha.md)", ""].join(
+      "\n",
+    ),
+  );
+  write(
+    root,
+    "alpha.md",
+    concept("Alpha", [
+      "description: Existing concept",
+      "tags: [existing, remove-me]",
+      "x-retained: yes",
+      ...(alphaExtra || []),
+    ]),
+  );
   return root;
 }
 
 function fixedService(root, options) {
-  return new LiveAuthoringService(FileConceptStore.fromRoot(root), Object.assign({
-    actor: "openai/gpt-5.6",
-    now: () => new Date("2026-08-13T12:34:56.000Z"),
-  }, options || {}));
+  return new LiveAuthoringService(
+    FileConceptStore.fromRoot(root),
+    Object.assign(
+      {
+        actor: "openai/gpt-5.6",
+        now: () => new Date("2026-08-13T12:34:56.000Z"),
+      },
+      options || {},
+    ),
+  );
 }
 
 function git(repository, args) {
@@ -124,9 +131,12 @@ test("live MCP applies a cross-linked create batch and exposes it immediately", 
   assert.equal(first.payload.signals.sourceCount, 1);
   assert.equal(first.payload.signals.generated.by, "openai/gpt-5.6");
   const neighbors = await callJson(client, "get_neighbors", { uri: first.payload.uri });
-  assert.equal(neighbors.payload.outbound.some((entry) => (
-    entry.edge.target === `okf://${path.basename(root)}/knowledge-note/second-note`
-  )), true);
+  assert.equal(
+    neighbors.payload.outbound.some(
+      (entry) => entry.edge.target === `okf://${path.basename(root)}/knowledge-note/second-note`,
+    ),
+    true,
+  );
 });
 
 test("live updates patch collections, preserve extensions, and reject no-ops", async (t) => {
@@ -145,22 +155,24 @@ test("live updates patch collections, preserve extensions, and reject no-ops", a
   });
   const uri = `okf://${path.basename(root)}/alpha`;
   const applied = await callJson(client, "okf_apply_changes", {
-    changes: [{
-      op: "update",
-      uri,
-      title: "Alpha Updated",
-      tags: { remove: ["remove-me", "new"], add: ["new"] },
-      sources: {
-        remove: ["repo://example/original.js"],
-        add: [
-          { resource: "repo://example/replaced.js", credibility: "low" },
-          { id: "primary", resource: "repo://example/src/alpha.js" },
-        ],
+    changes: [
+      {
+        op: "update",
+        uri,
+        title: "Alpha Updated",
+        tags: { remove: ["remove-me", "new"], add: ["new"] },
+        sources: {
+          remove: ["repo://example/original.js"],
+          add: [
+            { resource: "repo://example/replaced.js", credibility: "low" },
+            { id: "primary", resource: "repo://example/src/alpha.js" },
+          ],
+        },
+        relations: { add: [{ type: "related_to", target: "/alpha.md" }] },
+        metadata: { status: "stable", obsolete: true },
+        removeMetadataKeys: ["obsolete"],
       },
-      relations: { add: [{ type: "related_to", target: "/alpha.md" }] },
-      metadata: { status: "stable", obsolete: true },
-      removeMetadataKeys: ["obsolete"],
-    }],
+    ],
   });
   assert.equal(applied.payload.applied, true);
   const read = await callJson(client, "get_concept", { uri });
@@ -176,13 +188,15 @@ test("live updates patch collections, preserve extensions, and reject no-ops", a
   assert.equal(read.payload.frontmatter.generated.model_revision, "retained");
 
   const replaced = await callJson(client, "okf_apply_changes", {
-    changes: [{
-      op: "update",
-      uri,
-      sources: {
-        add: [{ resource: "repo://example/replaced.js", credibility: "high" }],
+    changes: [
+      {
+        op: "update",
+        uri,
+        sources: {
+          add: [{ resource: "repo://example/replaced.js", credibility: "high" }],
+        },
       },
-    }],
+    ],
   });
   assert.equal(replaced.payload.applied, true);
   const replacedRead = await callJson(client, "get_concept", { uri });
@@ -250,7 +264,10 @@ test("live validation prevents semantic duplicates and recovers stale update loc
 
   const peerDuplicate = await service.validateChanges({
     changes: ["one", "two"].map((name) => ({
-      op: "create", path: `${name}.md`, type: "Guide", title: "Same Batch",
+      op: "create",
+      path: `${name}.md`,
+      type: "Guide",
+      title: "Same Batch",
     })),
   });
   assert.equal(peerDuplicate.code, "concept_already_exists");
@@ -282,11 +299,13 @@ test("live validation prevents semantic duplicates and recovers stale update loc
   assert.equal(reused.valid, true);
 
   const stale = await service.validateChanges({
-    changes: [{
-      op: "update",
-      uri: `okf://${bundle}/former/location/alpha`,
-      tags: { add: ["recovered"] },
-    }],
+    changes: [
+      {
+        op: "update",
+        uri: `okf://${bundle}/former/location/alpha`,
+        tags: { add: ["recovered"] },
+      },
+    ],
   });
   assert.equal(stale.code, "concept_not_found");
   assert.equal(stale.details.recovery.retryWith.uri, `okf://${bundle}/alpha`);
@@ -295,16 +314,12 @@ test("live validation prevents semantic duplicates and recovers stale update loc
 test("an invalid batch writes nothing and process-generated targets stay protected", async (t) => {
   const root = makeRoot();
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-  write(root, "managed.md", concept("Managed", [
-    "generated:",
-    "  by: process:fixture-generator",
-  ]));
-  write(root, "generated-flag.md", concept("Generated Flag", [
-    "generated_file: true",
-  ]));
+  write(root, "managed.md", concept("Managed", ["generated:", "  by: process:fixture-generator"]));
+  write(root, "generated-flag.md", concept("Generated Flag", ["generated_file: true"]));
   const service = fixedService(root);
   const suggestion = new ConceptAuthoringService(service.store).suggestConceptPath({
-    type: "Reference", title: "Generated Flag",
+    type: "Reference",
+    title: "Generated Flag",
   });
   assert.equal(suggestion.recommendedOperation, "change_generator");
   const rejected = await service.applyChanges({
@@ -325,21 +340,25 @@ test("an invalid batch writes nothing and process-generated targets stay protect
 
   await assert.rejects(
     service.applyChanges({
-      changes: [{
-        op: "update",
-        uri: `okf://${path.basename(root)}/managed`,
-        title: "Overwrite",
-      }],
+      changes: [
+        {
+          op: "update",
+          uri: `okf://${path.basename(root)}/managed`,
+          title: "Overwrite",
+        },
+      ],
     }),
     /must be changed through its generator/,
   );
   await assert.rejects(
     service.applyChanges({
-      changes: [{
-        op: "update",
-        uri: `okf://${path.basename(root)}/generated-flag`,
-        title: "Overwrite",
-      }],
+      changes: [
+        {
+          op: "update",
+          uri: `okf://${path.basename(root)}/generated-flag`,
+          title: "Overwrite",
+        },
+      ],
     }),
     /must be changed through its generator/,
   );
@@ -352,23 +371,27 @@ test("configured generator outputs and computation contracts cannot be authored 
   const bundle = path.join(projectRoot, "bundle");
   fs.mkdirSync(path.join(projectRoot, "source"), { recursive: true });
   fs.mkdirSync(bundle, { recursive: true });
-  write(bundle, "index.md", "---\nokf_version: \"0.2\"\n---\n\n# Project\n");
+  write(bundle, "index.md", '---\nokf_version: "0.2"\n---\n\n# Project\n');
   write(bundle, "generated/owned.md", concept("Generated Output"));
-  write(projectRoot, "okf.project.yaml", [
-    "project: LiveProject",
-    "bundles:",
-    "  - id: live",
-    "    root: bundle",
-    "    exclude:",
-    "      - blocked/**",
-    "plugins:",
-    "  - name: docs",
-    "    type: filesystem",
-    "    root: source",
-    "    output: bundle/generated",
-    "    bundle: live",
-    "",
-  ].join("\n"));
+  write(
+    projectRoot,
+    "okf.project.yaml",
+    [
+      "project: LiveProject",
+      "bundles:",
+      "  - id: live",
+      "    root: bundle",
+      "    exclude:",
+      "      - blocked/**",
+      "plugins:",
+      "  - name: docs",
+      "    type: filesystem",
+      "    root: source",
+      "    output: bundle/generated",
+      "    bundle: live",
+      "",
+    ].join("\n"),
+  );
   const service = new LiveAuthoringService(
     FileConceptStore.fromProject(path.join(projectRoot, "okf.project.yaml")),
     { actor: "openai/gpt-5.6" },
@@ -408,12 +431,14 @@ test("live authoring rejects reserved metadata, duplicate targets, oversized bat
   const service = fixedService(root);
   await assert.rejects(
     service.applyChanges({
-      changes: [{
-        op: "create",
-        type: "Reference",
-        title: "Managed metadata",
-        metadata: { generated: { by: "human:spoofed" } },
-      }],
+      changes: [
+        {
+          op: "create",
+          type: "Reference",
+          title: "Managed metadata",
+          metadata: { generated: { by: "human:spoofed" } },
+        },
+      ],
     }),
     /generated is server-managed/,
   );
@@ -520,7 +545,9 @@ test("Git policy commits a clean batch, rejects dirty state, and preserves commi
   write(root, "dirty.txt", "dirty\n");
   await assert.rejects(
     service.applyChanges({
-      changes: [{ op: "create", path: "dirty-blocked/new.md", type: "Reference", title: "Blocked" }],
+      changes: [
+        { op: "create", path: "dirty-blocked/new.md", type: "Reference", title: "Blocked" },
+      ],
     }),
     /worktree must be completely clean/,
   );
@@ -538,7 +565,9 @@ test("Git policy commits a clean batch, rejects dirty state, and preserves commi
     },
   });
   const uncommitted = await failingCommit.applyChanges({
-    changes: [{ op: "create", path: "git/uncommitted.md", type: "Reference", title: "Uncommitted" }],
+    changes: [
+      { op: "create", path: "git/uncommitted.md", type: "Reference", title: "Uncommitted" },
+    ],
   });
   assert.equal(uncommitted.applied, true);
   assert.equal(uncommitted.status, "applied_uncommitted");

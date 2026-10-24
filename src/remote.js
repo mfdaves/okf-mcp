@@ -22,7 +22,11 @@ function normalizeSlashes(value) {
 }
 
 function encodePath(value) {
-  return String(value || "").split("/").filter(Boolean).map(encodeURIComponent).join("/");
+  return String(value || "")
+    .split("/")
+    .filter(Boolean)
+    .map(encodeURIComponent)
+    .join("/");
 }
 
 function sanitizeRemoteId(value, fallback) {
@@ -37,23 +41,33 @@ function parseGitHubBundleUrl(url) {
   } catch (error) {
     throw new Error(`Invalid GitHub bundle URL: ${url || "<missing>"}`);
   }
-  if (parsed.protocol !== "https:"
-    || parsed.hostname !== "github.com"
-    || parsed.username
-    || parsed.password
-    || parsed.search
-    || parsed.hash) {
+  if (
+    parsed.protocol !== "https:" ||
+    parsed.hostname !== "github.com" ||
+    parsed.username ||
+    parsed.password ||
+    parsed.search ||
+    parsed.hash
+  ) {
     throw new Error("Remote OKF v1 supports only https://github.com URLs.");
   }
   const parts = parsed.pathname.split("/").filter(Boolean);
   if (parts.length < 5 || parts[2] !== "tree") {
-    throw new Error("GitHub bundle URL must be a repository tree URL: https://github.com/<owner>/<repo>/tree/<ref>/<path>");
+    throw new Error(
+      "GitHub bundle URL must be a repository tree URL: https://github.com/<owner>/<repo>/tree/<ref>/<path>",
+    );
   }
   const owner = parts[0];
   const repo = parts[1];
   const ref = parts[3];
   const bundlePath = normalizeSlashes(parts.slice(4).join("/"));
-  if (!owner || !repo || !ref || !bundlePath || bundlePath.split("/").some((part) => part === "." || part === "..")) {
+  if (
+    !owner ||
+    !repo ||
+    !ref ||
+    !bundlePath ||
+    bundlePath.split("/").some((part) => part === "." || part === "..")
+  ) {
     throw new Error("GitHub bundle URL must include owner, repo, ref, and a safe bundle path.");
   }
   return { owner, repo, ref, path: bundlePath, url: String(parsed) };
@@ -67,7 +81,9 @@ async function fetchJson(fetchImpl, url) {
     },
   });
   if (!response || !response.ok) {
-    const status = response ? `${response.status} ${response.statusText || ""}`.trim() : "no response";
+    const status = response
+      ? `${response.status} ${response.statusText || ""}`.trim()
+      : "no response";
     throw new Error(`GitHub request failed: ${status}`);
   }
   return response.json();
@@ -81,7 +97,9 @@ async function fetchBytes(fetchImpl, url) {
     },
   });
   if (!response || !response.ok) {
-    const status = response ? `${response.status} ${response.statusText || ""}`.trim() : "no response";
+    const status = response
+      ? `${response.status} ${response.statusText || ""}`.trim()
+      : "no response";
     throw new Error(`GitHub raw file request failed: ${status}`);
   }
   if (typeof response.arrayBuffer === "function") {
@@ -117,17 +135,21 @@ function patternToRegex(pattern) {
 function matchesPattern(relativePath, pattern) {
   const normalizedPath = normalizeSlashes(relativePath);
   const normalizedPattern = normalizeSlashes(pattern);
-  return normalizedPath === normalizedPattern
-    || (normalizedPattern.endsWith("/") && normalizedPath.startsWith(normalizedPattern))
-    || (normalizedPattern.includes("*") && patternToRegex(normalizedPattern).test(normalizedPath))
-    || (!normalizedPattern.includes("*") && normalizedPath.startsWith(`${normalizedPattern}/`));
+  return (
+    normalizedPath === normalizedPattern ||
+    (normalizedPattern.endsWith("/") && normalizedPath.startsWith(normalizedPattern)) ||
+    (normalizedPattern.includes("*") && patternToRegex(normalizedPattern).test(normalizedPath)) ||
+    (!normalizedPattern.includes("*") && normalizedPath.startsWith(`${normalizedPattern}/`))
+  );
 }
 
 function allowsRemotePath(config, relativePath) {
   const include = Array.isArray(config.include) ? config.include : [];
   const exclude = Array.isArray(config.exclude) ? config.exclude : [];
-  return (!include.length || include.some((pattern) => matchesPattern(relativePath, pattern)))
-    && !exclude.some((pattern) => matchesPattern(relativePath, pattern));
+  return (
+    (!include.length || include.some((pattern) => matchesPattern(relativePath, pattern))) &&
+    !exclude.some((pattern) => matchesPattern(relativePath, pattern))
+  );
 }
 
 function excludesRemotePath(config, relativePath) {
@@ -140,7 +162,13 @@ function remoteReferencePath(fromPath, reference) {
   const relative = raw.startsWith("/")
     ? path.posix.normalize(raw.slice(1))
     : path.posix.normalize(path.posix.join(path.posix.dirname(fromPath), raw));
-  if (!relative || relative === "." || relative === ".." || relative.startsWith("../") || path.posix.isAbsolute(relative)) {
+  if (
+    !relative ||
+    relative === "." ||
+    relative === ".." ||
+    relative.startsWith("../") ||
+    path.posix.isAbsolute(relative)
+  ) {
     return null;
   }
   return relative;
@@ -201,7 +229,9 @@ async function fetchGitHubBundle(config, options) {
         continue;
       }
       if (inventory.size >= limits.maxInventoryFiles) {
-        throw new Error(`Remote bundle exceeds inventory limit of ${limits.maxInventoryFiles} files.`);
+        throw new Error(
+          `Remote bundle exceeds inventory limit of ${limits.maxInventoryFiles} files.`,
+        );
       }
       const relativePath = relativeRemotePath(source.path, entry.path);
       inventory.set(relativePath, entry);
@@ -212,42 +242,44 @@ async function fetchGitHubBundle(config, options) {
     if (documents.length + assets.length >= limits.maxFiles) {
       throw new Error(`Remote bundle exceeds file limit of ${limits.maxFiles}.`);
     }
-      if (Number(entry.size || 0) > limits.maxFileBytes) {
-        throw new Error(`Remote file exceeds byte limit: ${entry.path}`);
+    if (Number(entry.size || 0) > limits.maxFileBytes) {
+      throw new Error(`Remote file exceeds byte limit: ${entry.path}`);
+    }
+    if (!entry.download_url) {
+      throw new Error(`Remote file has no download URL: ${entry.path}`);
+    }
+    const content = await fetchBytes(fetchImpl, entry.download_url);
+    const bytes = content.length;
+    if (bytes > limits.maxFileBytes) {
+      throw new Error(`Remote file exceeds byte limit after download: ${entry.path}`);
+    }
+    totalBytes += bytes;
+    if (totalBytes > limits.maxTotalBytes) {
+      throw new Error(`Remote bundle exceeds total byte limit of ${limits.maxTotalBytes}.`);
+    }
+    if (
+      /^[0-9a-f]{40}$/i.test(String(entry.sha || "")) &&
+      gitBlobSha(content).toLowerCase() !== String(entry.sha).toLowerCase()
+    ) {
+      throw new Error(`Remote file content does not match its Git blob SHA: ${entry.path}`);
+    }
+    if (kind === "document") {
+      let text;
+      try {
+        text = new TextDecoder("utf-8", { fatal: true }).decode(content);
+      } catch {
+        throw new Error(`Remote Markdown document is not valid UTF-8: ${entry.path}`);
       }
-      if (!entry.download_url) {
-        throw new Error(`Remote file has no download URL: ${entry.path}`);
-      }
-      const content = await fetchBytes(fetchImpl, entry.download_url);
-      const bytes = content.length;
-      if (bytes > limits.maxFileBytes) {
-        throw new Error(`Remote file exceeds byte limit after download: ${entry.path}`);
-      }
-      totalBytes += bytes;
-      if (totalBytes > limits.maxTotalBytes) {
-        throw new Error(`Remote bundle exceeds total byte limit of ${limits.maxTotalBytes}.`);
-      }
-      if (/^[0-9a-f]{40}$/i.test(String(entry.sha || ""))
-        && gitBlobSha(content).toLowerCase() !== String(entry.sha).toLowerCase()) {
-        throw new Error(`Remote file content does not match its Git blob SHA: ${entry.path}`);
-      }
-      if (kind === "document") {
-        let text;
-        try {
-          text = new TextDecoder("utf-8", { fatal: true }).decode(content);
-        } catch {
-          throw new Error(`Remote Markdown document is not valid UTF-8: ${entry.path}`);
-        }
-        const document = {
-          path: relativePath,
-          text,
-          source: `github://${source.owner}/${source.repo}/${pinnedRef}/${entry.path}`,
-          blobSha: entry.sha || null,
-        };
-        documents.push(document);
-        return document;
-      }
-      return { content, bytes };
+      const document = {
+        path: relativePath,
+        text,
+        source: `github://${source.owner}/${source.repo}/${pinnedRef}/${entry.path}`,
+        blobSha: entry.sha || null,
+      };
+      documents.push(document);
+      return document;
+    }
+    return { content, bytes };
   }
 
   await walk(source.path);
@@ -306,13 +338,16 @@ async function fetchGitHubBundle(config, options) {
   for (const [relativePath, references] of referenceGroups) {
     const entry = inventory.get(relativePath);
     if (!entry) {
-      unresolvedReferences.push.apply(unresolvedReferences, references.map((reference) => ({
-        path: reference.fromPath,
-        field: reference.field,
-        target: reference.value,
-        resolvedPath: relativePath,
-        code: "asset_missing",
-      })));
+      unresolvedReferences.push.apply(
+        unresolvedReferences,
+        references.map((reference) => ({
+          path: reference.fromPath,
+          field: reference.field,
+          target: reference.value,
+          resolvedPath: relativePath,
+          code: "asset_missing",
+        })),
+      );
       continue;
     }
     const fetched = await fetchInventoryEntry(entry, relativePath, "asset");

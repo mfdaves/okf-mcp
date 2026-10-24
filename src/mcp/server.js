@@ -32,14 +32,11 @@ const registry = composeRegistry([
 ]);
 
 function rebuildStateIndex(state) {
-  const index = buildIndex(
-    state.localBundleArgs.concat(state.remoteBundles),
-    {
-      relationTypes: state.relationTypes,
-      strictLinks: state.strictLinks,
-      allowCustomRelationTypes: state.allowCustomRelationTypes,
-    },
-  );
+  const index = buildIndex(state.localBundleArgs.concat(state.remoteBundles), {
+    relationTypes: state.relationTypes,
+    strictLinks: state.strictLinks,
+    allowCustomRelationTypes: state.allowCustomRelationTypes,
+  });
   state.index = state.project ? attachProject(index, state.project) : index;
   return state.index;
 }
@@ -77,11 +74,9 @@ function createState(bundleArgs, options) {
   const localBundleArgs = project
     ? project.bundles.filter((bundle) => !bundle.remote)
     : (bundleArgs || []).slice();
-  const relationTypes = (options && options.relationTypes)
-    || (project && project.relationTypes);
+  const relationTypes = (options && options.relationTypes) || (project && project.relationTypes);
   const allowCustomRelationTypes = Boolean(
-    (options && options.allowCustomRelationTypes)
-    || (project && project.rootMode),
+    (options && options.allowCustomRelationTypes) || (project && project.rootMode),
   );
   let initialIndex = options && options.initialIndex;
   if (!initialIndex) {
@@ -115,8 +110,13 @@ function createState(bundleArgs, options) {
   // Tool handlers refresh the index through the state so index construction
   // stays in this module; handlers never see bundle arguments or build options.
   state.rebuildIndex = () => rebuildStateIndex(state);
-  if (!state.producerService && project && (project.producers || []).length
-    && authoringService && authoringService.store) {
+  if (
+    !state.producerService &&
+    project &&
+    (project.producers || []).length &&
+    authoringService &&
+    authoringService.store
+  ) {
     state.producerService = new ProducerService({
       project,
       store: authoringService.store,
@@ -135,11 +135,15 @@ async function createStateAsync(bundleArgs, options) {
     const extraRemoteBundles = await fetchRemoteBundles(options.remoteBundles || []);
     const initialRemoteBundles = loaded.remoteBundles.concat(extraRemoteBundles);
     const localBundleArgs = (loaded.bundles || []).filter((bundle) => !bundle.remote);
-    const store = options.authoringStore || FileConceptStore.fromProject(options.projectPath, { proposalRoot: options.proposalRoot });
+    const store =
+      options.authoringStore ||
+      FileConceptStore.fromProject(options.projectPath, { proposalRoot: options.proposalRoot });
     const authoringService = options.authoringService || new ConceptAuthoringService(store);
-    const liveAuthoringService = options.liveAuthoringService || (options.allowWrite
-      ? new LiveAuthoringService(store, { actor: options.actor, gitCommit: options.gitCommit })
-      : null);
+    const liveAuthoringService =
+      options.liveAuthoringService ||
+      (options.allowWrite
+        ? new LiveAuthoringService(store, { actor: options.actor, gitCommit: options.gitCommit })
+        : null);
     const initialIndex = attachProject(
       buildIndex(localBundleArgs.concat(initialRemoteBundles), {
         relationTypes: loaded.project.relationTypes,
@@ -167,21 +171,28 @@ async function createStateAsync(bundleArgs, options) {
     });
   }
   if (options && options.rootPath) {
-    const store = options.authoringStore || FileConceptStore.fromRoot(options.rootPath, {
-      proposalRoot: options.proposalRoot,
-      strictLinks: options.strictLinks,
-    });
+    const store =
+      options.authoringStore ||
+      FileConceptStore.fromRoot(options.rootPath, {
+        proposalRoot: options.proposalRoot,
+        strictLinks: options.strictLinks,
+      });
     const authoringService = options.authoringService || new ConceptAuthoringService(store);
-    const liveAuthoringService = options.liveAuthoringService || (options.allowWrite
-      ? new LiveAuthoringService(store, { actor: options.actor, gitCommit: options.gitCommit })
-      : null);
+    const liveAuthoringService =
+      options.liveAuthoringService ||
+      (options.allowWrite
+        ? new LiveAuthoringService(store, { actor: options.actor, gitCommit: options.gitCommit })
+        : null);
     const localBundleArgs = store.getBundles();
     const remoteBundles = await fetchRemoteBundles(options.remoteBundles || []);
-    const initialIndex = attachProject(buildIndex(localBundleArgs.concat(remoteBundles), {
-      relationTypes: store.getRelationTypes(),
-      strictLinks: options.strictLinks,
-      allowCustomRelationTypes: true,
-    }), store.project);
+    const initialIndex = attachProject(
+      buildIndex(localBundleArgs.concat(remoteBundles), {
+        relationTypes: store.getRelationTypes(),
+        strictLinks: options.strictLinks,
+        allowCustomRelationTypes: true,
+      }),
+      store.project,
+    );
     return createState(localBundleArgs, {
       initialIndex,
       initialRemoteBundles: remoteBundles,
@@ -201,14 +212,15 @@ async function createStateAsync(bundleArgs, options) {
   }
   const remoteBundles = await fetchRemoteBundles((options && options.remoteBundles) || []);
   const localBundleArgs = (bundleArgs || []).slice();
-  const liveAuthoringService = options && options.liveAuthoringService
-    ? options.liveAuthoringService
-    : options && options.allowWrite && options.authoringService && options.authoringService.store
-      ? new LiveAuthoringService(options.authoringService.store, {
-        actor: options.actor,
-        gitCommit: options.gitCommit,
-      })
-      : null;
+  const liveAuthoringService =
+    options && options.liveAuthoringService
+      ? options.liveAuthoringService
+      : options && options.allowWrite && options.authoringService && options.authoringService.store
+        ? new LiveAuthoringService(options.authoringService.store, {
+            actor: options.actor,
+            gitCommit: options.gitCommit,
+          })
+        : null;
   if (options && options.allowWrite && !liveAuthoringService) {
     throw new Error("Live OKF authoring requires --root or --project and a configured actor.");
   }
@@ -233,15 +245,18 @@ async function createStateAsync(bundleArgs, options) {
 }
 
 function registerMcpInterface(state) {
-  const server = new McpServer({
-    name: "okf-mcp",
-    version: packageMetadata.version,
-  }, {
-    capabilities: {
-      resources: { listChanged: false },
-      tools: { listChanged: false },
+  const server = new McpServer(
+    {
+      name: "okf-mcp",
+      version: packageMetadata.version,
     },
-  });
+    {
+      capabilities: {
+        resources: { listChanged: false },
+        tools: { listChanged: false },
+      },
+    },
+  );
   let pendingToolCall = Promise.resolve();
   const resources = new ResourceTemplate("okf://{+locator}", {
     list: async () => listResources(state.index),
@@ -255,34 +270,39 @@ function registerMcpInterface(state) {
     },
     async (uri) => readResource(state.index, uri.href),
   );
-  registry.names.filter((name) => toolEnabled(registry.tools[name], state)).forEach((name) => {
-    const definition = registry.tools[name];
-    server.registerTool(
-      name,
-      {
-        description: definition.description,
-        annotations: definition.annotations,
-        inputSchema: fromJsonSchema(definition.inputSchema),
-        ...(definition.outputSchema
-          ? { outputSchema: fromJsonSchema(definition.outputSchema) }
-          : {}),
-      },
-      async (args) => {
-        const current = pendingToolCall.then(async () => {
-          try {
-            return await callTool(state, name, args);
-          } catch {
-            return jsonContent({
-              error: "Internal tool error",
-              tool: name,
-            }, { isError: true });
-          }
-        });
-        pendingToolCall = current.catch(() => {});
-        return current;
-      },
-    );
-  });
+  registry.names
+    .filter((name) => toolEnabled(registry.tools[name], state))
+    .forEach((name) => {
+      const definition = registry.tools[name];
+      server.registerTool(
+        name,
+        {
+          description: definition.description,
+          annotations: definition.annotations,
+          inputSchema: fromJsonSchema(definition.inputSchema),
+          ...(definition.outputSchema
+            ? { outputSchema: fromJsonSchema(definition.outputSchema) }
+            : {}),
+        },
+        async (args) => {
+          const current = pendingToolCall.then(async () => {
+            try {
+              return await callTool(state, name, args);
+            } catch {
+              return jsonContent(
+                {
+                  error: "Internal tool error",
+                  tool: name,
+                },
+                { isError: true },
+              );
+            }
+          });
+          pendingToolCall = current.catch(() => {});
+          return current;
+        },
+      );
+    });
   return server;
 }
 
@@ -295,10 +315,7 @@ async function runStdioServer(bundleArgs, input, output, options) {
   const transport = new StdioServerTransport(input, output, {
     maxBufferSize: MAX_MCP_MESSAGE_BYTES,
   });
-  return serveStdio(
-    () => registerMcpInterface(state),
-    { legacy: "serve", transport },
-  );
+  return serveStdio(() => registerMcpInterface(state), { legacy: "serve", transport });
 }
 
 module.exports = {

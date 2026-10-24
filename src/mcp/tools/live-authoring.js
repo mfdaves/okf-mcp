@@ -24,7 +24,9 @@ const LIVE_CREATE_CHANGE = {
   additionalProperties: false,
   properties: {
     op: { type: "string", const: "create", description: "Create a new concept." },
-    path: nonEmptyStringParameter("Optional safe bundle-relative Markdown path; derived from type and title when omitted."),
+    path: nonEmptyStringParameter(
+      "Optional safe bundle-relative Markdown path; derived from type and title when omitted.",
+    ),
     type: nonEmptyStringParameter("Concept type."),
     title: nonEmptyStringParameter("Concept title."),
     description: stringParameter("Optional concept description."),
@@ -40,7 +42,9 @@ const LIVE_CREATE_CHANGE = {
       description: "Initial typed relationships.",
       items: relationParameter("Typed relation."),
     },
-    metadata: objectParameter("Optional extension frontmatter; managed concept fields are rejected."),
+    metadata: objectParameter(
+      "Optional extension frontmatter; managed concept fields are rejected.",
+    ),
   },
   required: ["op", "type", "title"],
 };
@@ -67,8 +71,13 @@ const LIVE_UPDATE_CHANGE = {
       "Relations to add/replace and/or remove by exact type plus target.",
       relationParameter("Typed relation."),
     ),
-    metadata: objectParameter("Extension frontmatter fields to add or replace; managed fields are rejected."),
-    removeMetadataKeys: stringArrayParameter("Extension frontmatter keys to remove; managed fields are rejected.", { nonEmptyItems: true }),
+    metadata: objectParameter(
+      "Extension frontmatter fields to add or replace; managed fields are rejected.",
+    ),
+    removeMetadataKeys: stringArrayParameter(
+      "Extension frontmatter keys to remove; managed fields are rejected.",
+      { nonEmptyItems: true },
+    ),
   },
   required: ["op", "uri"],
 };
@@ -80,8 +89,12 @@ const LIVE_CHANGES_DESCRIPTION = [
 ].join(" ");
 
 const LIVE_CHANGE_TOOL_PROPERTIES = {
-  bundle: nonEmptyStringParameter("Writable bundle id; optional when exactly one local root is configured."),
-  detail: detailParameter("Receipt detail level; compact removes repeated planning fields while full preserves the v0.7 receipt layout."),
+  bundle: nonEmptyStringParameter(
+    "Writable bundle id; optional when exactly one local root is configured.",
+  ),
+  detail: detailParameter(
+    "Receipt detail level; compact removes repeated planning fields while full preserves the v0.7 receipt layout.",
+  ),
   message: stringParameter("Optional Git commit summary when automatic commits are enabled.", {
     maxLength: MAX_COMMIT_MESSAGE_BYTES,
   }),
@@ -99,11 +112,15 @@ const LIVE_CHANGE_EFFECTS_OUTPUT = {
   description: "Compact structured summary of the fields changed by this operation.",
   additionalProperties: true,
   properties: {
-    changedFields: stringArrayParameter("Substantive concept fields changed, excluding server-managed generation provenance."),
+    changedFields: stringArrayParameter(
+      "Substantive concept fields changed, excluding server-managed generation provenance.",
+    ),
     bodyChanged: optionalBooleanParameter("Whether the Markdown body changed."),
     tags: objectParameter("Tags added and removed by the operation."),
     sources: objectParameter("Sources added and removed by the operation."),
-    relations: objectParameter("Added, removed, and updated relation values as structured { type, target, label?, description? } objects."),
+    relations: objectParameter(
+      "Added, removed, and updated relation values as structured { type, target, label?, description? } objects.",
+    ),
     metadata: objectParameter("Metadata fields set and removed by the operation."),
   },
 };
@@ -130,10 +147,16 @@ const LIVE_CHANGE_SUMMARY_OUTPUT = {
 
 const LIVE_CHANGE_OUTPUT_PROPERTIES = {
   status: stringParameter("Validation or application outcome."),
-  readyToApply: optionalBooleanParameter("Whether policy, graph, revision, and configured Git preconditions currently allow apply."),
-  filesChanged: optionalBooleanParameter("Whether filesystem changes remain when the request returns."),
+  readyToApply: optionalBooleanParameter(
+    "Whether policy, graph, revision, and configured Git preconditions currently allow apply.",
+  ),
+  filesChanged: optionalBooleanParameter(
+    "Whether filesystem changes remain when the request returns.",
+  ),
   snapshot: objectParameter("Full-receipt time-of-check metadata for this planning result."),
-  preconditions: objectParameter("Full-receipt revision and Git preconditions checked for the batch."),
+  preconditions: objectParameter(
+    "Full-receipt revision and Git preconditions checked for the batch.",
+  ),
   generated: objectParameter("Server-owned generation actor and timestamp."),
   target: objectParameter("Absolute bundle, repository, and affected-file locations."),
   durability: objectParameter("Working-tree and automatic-commit durability state."),
@@ -150,18 +173,27 @@ const LIVE_VALIDATE_OUTPUT = {
   type: "object",
   description: "Read-only validation receipt for a structured concept batch.",
   additionalProperties: true,
-  properties: Object.assign({
-    valid: optionalBooleanParameter("Whether authoring policy and the complete future graph are valid, independent of transient Git readiness."),
-  }, LIVE_CHANGE_OUTPUT_PROPERTIES),
+  properties: Object.assign(
+    {
+      valid: optionalBooleanParameter(
+        "Whether authoring policy and the complete future graph are valid, independent of transient Git readiness.",
+      ),
+    },
+    LIVE_CHANGE_OUTPUT_PROPERTIES,
+  ),
 };
 
 const LIVE_APPLY_OUTPUT = {
   type: "object",
-  description: "Application, target, durability, and validation receipt for a structured concept batch.",
+  description:
+    "Application, target, durability, and validation receipt for a structured concept batch.",
   additionalProperties: true,
-  properties: Object.assign({
-    applied: optionalBooleanParameter("Whether the complete batch was applied."),
-  }, LIVE_CHANGE_OUTPUT_PROPERTIES),
+  properties: Object.assign(
+    {
+      applied: optionalBooleanParameter("Whether the complete batch was applied."),
+    },
+    LIVE_CHANGE_OUTPUT_PROPERTIES,
+  ),
 };
 
 function liveRequest(args) {
@@ -186,7 +218,9 @@ function projectLiveReceipt(receipt, detail) {
     delete change.bundle;
     const effects = change.effects;
     if (!effects) return;
-    ["beforeRevision", "afterRevision", "bytesBefore", "bytesAfter"].forEach((key) => delete effects[key]);
+    ["beforeRevision", "afterRevision", "bytesBefore", "bytesAfter"].forEach(
+      (key) => delete effects[key],
+    );
     if (effects.bodyChanged === false) delete effects.bodyChanged;
     ["tags", "sources", "relations", "metadata"].forEach((name) => {
       const group = effects[name];
@@ -205,7 +239,9 @@ function projectLiveReceipt(receipt, detail) {
 
 function requireLiveAuthoring(state) {
   if (!state.allowWrite || !state.liveAuthoringService) {
-    throw new Error("Live OKF authoring is not configured. Start the server with --write and --actor.");
+    throw new Error(
+      "Live OKF authoring is not configured. Start the server with --write and --actor.",
+    );
   }
   return state.liveAuthoringService;
 }
@@ -224,9 +260,10 @@ const tools = {
     handler: async (state, args) => {
       const request = liveRequest(args);
       const result = await expectedToolOperation(
-        () => requireLiveAuthoring(state).validateChanges(request.input, {
-          additionalBundles: state.remoteBundles,
-        }),
+        () =>
+          requireLiveAuthoring(state).validateChanges(request.input, {
+            additionalBundles: state.remoteBundles,
+          }),
         { translateTypeError: true },
       );
       if (result.applied || result.filesChanged) {
@@ -248,9 +285,10 @@ const tools = {
     handler: async (state, args) => {
       const request = liveRequest(args);
       const result = await expectedToolOperation(
-        () => requireLiveAuthoring(state).applyChanges(request.input, {
-          additionalBundles: state.remoteBundles,
-        }),
+        () =>
+          requireLiveAuthoring(state).applyChanges(request.input, {
+            additionalBundles: state.remoteBundles,
+          }),
         { translateTypeError: true },
       );
       if (result.applied || result.filesChanged) {

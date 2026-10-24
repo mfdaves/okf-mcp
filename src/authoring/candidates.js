@@ -39,7 +39,9 @@ function nonEmptyString(value, field) {
 }
 
 function normalizeBody(value) {
-  return String(value || "").replace(/\r\n/g, "\n").trim();
+  return String(value || "")
+    .replace(/\r\n/g, "\n")
+    .trim();
 }
 
 function canonicalValue(value) {
@@ -48,7 +50,9 @@ function canonicalValue(value) {
   }
   if (isPlainObject(value)) {
     return Object.fromEntries(
-      Object.keys(value).sort().map((key) => [key, canonicalValue(value[key])]),
+      Object.keys(value)
+        .sort()
+        .map((key) => [key, canonicalValue(value[key])]),
     );
   }
   return value;
@@ -101,14 +105,13 @@ function sourceIdentity(source) {
 }
 
 function sourceMatches(source, selector) {
-  const sourceId = isPlainObject(source) && typeof source.id === "string"
-    ? source.id.trim()
-    : "";
-  const sourceResource = typeof source === "string"
-    ? source.trim()
-    : isPlainObject(source) && typeof source.resource === "string"
-      ? source.resource.trim()
-      : "";
+  const sourceId = isPlainObject(source) && typeof source.id === "string" ? source.id.trim() : "";
+  const sourceResource =
+    typeof source === "string"
+      ? source.trim()
+      : isPlainObject(source) && typeof source.resource === "string"
+        ? source.resource.trim()
+        : "";
   if (typeof selector === "string") {
     const value = selector.trim();
     return sourceId === value || sourceResource === value;
@@ -148,22 +151,26 @@ function applySourcePatch(existing, patch, field) {
   if (!Array.isArray(remove)) {
     throw new Error(`${field}.remove must be an array.`);
   }
-  remove.forEach((selector, index) => validateSourceSelector(selector, `${field}.remove[${index}]`));
+  remove.forEach((selector, index) =>
+    validateSourceSelector(selector, `${field}.remove[${index}]`),
+  );
   let result = Array.isArray(existing) ? existing.slice() : [];
   result = result.filter((source) => !remove.some((selector) => sourceMatches(source, selector)));
   const additions = patch.add === undefined ? [] : patch.add;
   if (!Array.isArray(additions)) {
     throw new Error(`${field}.add must be an array.`);
   }
-  additions.map((source, index) => normalizeSource(source, `${field}.add[${index}]`)).forEach((source) => {
-    const identity = sourceIdentity(source);
-    const existingIndex = result.findIndex((candidate) => sourceIdentity(candidate) === identity);
-    if (existingIndex === -1) {
-      result.push(source);
-    } else if (!isDeepStrictEqual(result[existingIndex], source)) {
-      result[existingIndex] = source;
-    }
-  });
+  additions
+    .map((source, index) => normalizeSource(source, `${field}.add[${index}]`))
+    .forEach((source) => {
+      const identity = sourceIdentity(source);
+      const existingIndex = result.findIndex((candidate) => sourceIdentity(candidate) === identity);
+      if (existingIndex === -1) {
+        result.push(source);
+      } else if (!isDeepStrictEqual(result[existingIndex], source)) {
+        result[existingIndex] = source;
+      }
+    });
   const seen = new Set();
   return result.filter((source) => {
     const identity = sourceIdentity(source);
@@ -221,24 +228,29 @@ function applyRelationPatch(existing, patch, field) {
   if (!Array.isArray(remove)) {
     throw new Error(`${field}.remove must be an array.`);
   }
-  const removeKeys = new Set(remove.map((relation, index) => (
-    relationKey(normalizeRelation(relation, `${field}.remove[${index}]`))
-  )));
-  let result = (Array.isArray(existing) ? existing : [])
-    .filter((relation) => !removeKeys.has(relationKey(relation)));
+  const removeKeys = new Set(
+    remove.map((relation, index) =>
+      relationKey(normalizeRelation(relation, `${field}.remove[${index}]`)),
+    ),
+  );
+  let result = (Array.isArray(existing) ? existing : []).filter(
+    (relation) => !removeKeys.has(relationKey(relation)),
+  );
   const additions = patch.add === undefined ? [] : patch.add;
   if (!Array.isArray(additions)) {
     throw new Error(`${field}.add must be an array.`);
   }
-  additions.map((relation, index) => normalizeRelation(relation, `${field}.add[${index}]`)).forEach((relation) => {
-    const key = relationKey(relation);
-    const existingIndex = result.findIndex((candidate) => relationKey(candidate) === key);
-    if (existingIndex === -1) {
-      result.push(relation);
-    } else if (!isDeepStrictEqual(result[existingIndex], relation)) {
-      result[existingIndex] = relation;
-    }
-  });
+  additions
+    .map((relation, index) => normalizeRelation(relation, `${field}.add[${index}]`))
+    .forEach((relation) => {
+      const key = relationKey(relation);
+      const existingIndex = result.findIndex((candidate) => relationKey(candidate) === key);
+      if (existingIndex === -1) {
+        result.push(relation);
+      } else if (!isDeepStrictEqual(result[existingIndex], relation)) {
+        result[existingIndex] = relation;
+      }
+    });
   const seen = new Set();
   return result.filter((relation) => {
     const key = relationKey(relation);
@@ -320,9 +332,11 @@ function semanticConceptKey(type, title) {
 }
 
 function conceptIsManaged(doc, project) {
-  return conceptIsGeneratedFile(doc)
-    || generatedOwners(doc).some((owner) => owner.startsWith("process:"))
-    || isConfiguredGeneratorOutput(project, doc && doc.absolutePath);
+  return (
+    conceptIsGeneratedFile(doc) ||
+    generatedOwners(doc).some((owner) => owner.startsWith("process:")) ||
+    isConfiguredGeneratorOutput(project, doc && doc.absolutePath)
+  );
 }
 
 function conceptConflictDetails(matches, project) {
@@ -343,12 +357,10 @@ function staleUpdateDetails(index, uri, bundle, project) {
   const recovery = recoverConceptLocator(index, uri, { bundle, limit: 5 });
   const only = recovery.candidates.length === 1 ? recovery.candidates[0] : null;
   const matched = only && resolveConcept(index, only.uri);
-  if (only && (conceptIsManaged(matched, project)
-    || only.type === "Attested Computation")) {
+  if (only && (conceptIsManaged(matched, project) || only.type === "Attested Computation")) {
     delete recovery.retryWith;
-    recovery.recommendedOperation = only.type === "Attested Computation"
-      ? "review_computation_owner"
-      : "change_generator";
+    recovery.recommendedOperation =
+      only.type === "Attested Computation" ? "review_computation_owner" : "change_generator";
   } else if (recovery.retryWith) {
     recovery.retryWith.op = "update";
     recovery.recommendedOperation = "update";

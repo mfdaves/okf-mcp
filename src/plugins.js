@@ -14,7 +14,11 @@ function normalizeSlashes(value) {
 }
 
 function slug(value) {
-  return String(value || "concept").replace(/[^A-Za-z0-9_.-]+/g, "-").replace(/^-+|-+$/g, "") || "concept";
+  return (
+    String(value || "concept")
+      .replace(/[^A-Za-z0-9_.-]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "concept"
+  );
 }
 
 function conceptMarkdown(frontmatter, bodyLines) {
@@ -83,28 +87,31 @@ function writeGeneratedFiles(root, files) {
 function generateFilesystemConcepts(project, plugin) {
   const root = sourceRoot(project, plugin);
   const out = new Map();
-  const extensions = Array.isArray(plugin.extensions) ? plugin.extensions.map((ext) => ext.startsWith(".") ? ext : `.${ext}`) : [".md"];
+  const extensions = Array.isArray(plugin.extensions)
+    ? plugin.extensions.map((ext) => (ext.startsWith(".") ? ext : `.${ext}`))
+    : [".md"];
   walkFiles(root, extensions).forEach((filePath) => {
     const relative = normalizeSlashes(path.relative(project.root, filePath));
     const title = path.basename(filePath);
     const idSlug = slug(relative.replace(/\.[^.]+$/, ""));
-    out.set(`${idSlug}.md`, conceptMarkdown({
-      id: `okf://${plugin.bundle || "generated"}/${idSlug}`,
-      type: plugin.conceptType || "Repository File",
-      title,
-      description: `Repository file ${relative}.`,
-      resource: `repo://${relative}`,
-      sources: [{ resource: `repo://${relative}`, title }],
-      generated: generatedMetadata(plugin),
-      // Compatibility extension retained for existing generated catalogs.
-      source: `repo://${relative}`,
-      tags: Array.isArray(plugin.tags) ? plugin.tags : ["generated", "file"],
-    }, [
-      `# ${title}`,
-      "",
-      `Repository file: \`${relative}\``,
-      "",
-    ]));
+    out.set(
+      `${idSlug}.md`,
+      conceptMarkdown(
+        {
+          id: `okf://${plugin.bundle || "generated"}/${idSlug}`,
+          type: plugin.conceptType || "Repository File",
+          title,
+          description: `Repository file ${relative}.`,
+          resource: `repo://${relative}`,
+          sources: [{ resource: `repo://${relative}`, title }],
+          generated: generatedMetadata(plugin),
+          // Compatibility extension retained for existing generated catalogs.
+          source: `repo://${relative}`,
+          tags: Array.isArray(plugin.tags) ? plugin.tags : ["generated", "file"],
+        },
+        [`# ${title}`, "", `Repository file: \`${relative}\``, ""],
+      ),
+    );
   });
   return {
     output: outputRoot(project, plugin),
@@ -124,30 +131,45 @@ function generateJsonSpecConcepts(project, plugin) {
     const json = JSON.parse(raw);
     const key = pickSpecKey(json, filePath);
     const relative = normalizeSlashes(path.relative(project.root, filePath));
-    const destination = json.destination && json.destination.table ? json.destination.table : json.table || json.tablename || "";
-    const relations = destination && plugin.destinationBundle
-      ? [{ type: "persists_to", target: `okf://${plugin.destinationBundle}/${slug(destination)}` }]
-      : [];
-    out.set(`${slug(key)}.md`, conceptMarkdown({
-      id: `okf://${plugin.bundle || "generated"}/${slug(key)}`,
-      type: plugin.conceptType || "JSON Spec",
-      title: key,
-      description: json.description || `Generated concept for JSON spec ${key}.`,
-      resource: `repo://${relative}`,
-      sources: [{ resource: `repo://${relative}`, title: key }],
-      generated: generatedMetadata(plugin),
-      // Compatibility extension retained for existing generated catalogs.
-      source: `repo://${relative}`,
-      tags: Array.isArray(plugin.tags) ? plugin.tags : ["generated", "spec"],
-      relations,
-    }, [
-      `# ${key}`,
-      "",
-      json.description || `Generated concept for JSON spec \`${key}\`.`,
-      "",
-      `Source: \`${relative}\``,
-      "",
-    ]));
+    const destination =
+      json.destination && json.destination.table
+        ? json.destination.table
+        : json.table || json.tablename || "";
+    const relations =
+      destination && plugin.destinationBundle
+        ? [
+            {
+              type: "persists_to",
+              target: `okf://${plugin.destinationBundle}/${slug(destination)}`,
+            },
+          ]
+        : [];
+    out.set(
+      `${slug(key)}.md`,
+      conceptMarkdown(
+        {
+          id: `okf://${plugin.bundle || "generated"}/${slug(key)}`,
+          type: plugin.conceptType || "JSON Spec",
+          title: key,
+          description: json.description || `Generated concept for JSON spec ${key}.`,
+          resource: `repo://${relative}`,
+          sources: [{ resource: `repo://${relative}`, title: key }],
+          generated: generatedMetadata(plugin),
+          // Compatibility extension retained for existing generated catalogs.
+          source: `repo://${relative}`,
+          tags: Array.isArray(plugin.tags) ? plugin.tags : ["generated", "spec"],
+          relations,
+        },
+        [
+          `# ${key}`,
+          "",
+          json.description || `Generated concept for JSON spec \`${key}\`.`,
+          "",
+          `Source: \`${relative}\``,
+          "",
+        ],
+      ),
+    );
   });
   return {
     output: outputRoot(project, plugin),
@@ -162,11 +184,12 @@ function generateProject(project) {
   const results = [];
   project.plugins.forEach((plugin) => {
     const type = plugin.type || plugin.name;
-    const generated = type === "filesystem"
-      ? generateFilesystemConcepts(project, plugin)
-      : type === "json-spec"
-        ? generateJsonSpecConcepts(project, plugin)
-        : null;
+    const generated =
+      type === "filesystem"
+        ? generateFilesystemConcepts(project, plugin)
+        : type === "json-spec"
+          ? generateJsonSpecConcepts(project, plugin)
+          : null;
     if (!generated) {
       throw new Error(`Unknown OKF generator plugin: ${type}`);
     }

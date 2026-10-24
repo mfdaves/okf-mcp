@@ -14,9 +14,7 @@ const {
 } = require("./shared");
 
 function boundedEffectList(values, project) {
-  const normalized = project
-    ? values.map(project)
-    : sortedUnique(values).map(boundedEffectText);
+  const normalized = project ? values.map(project) : sortedUnique(values).map(boundedEffectText);
   return {
     values: normalized.slice(0, MAX_EFFECT_ITEMS),
     omitted: Math.max(0, normalized.length - MAX_EFFECT_ITEMS),
@@ -46,15 +44,17 @@ function relationEffectValue(value) {
 function collectionEffects(before, after, identity, project) {
   const previous = new Map((before || []).map((value) => [identity(value), value]));
   const next = new Map((after || []).map((value) => [identity(value), value]));
-  const added = Array.from(next.keys()).filter((key) => !previous.has(key)).sort();
-  const removed = Array.from(previous.keys()).filter((key) => !next.has(key)).sort();
-  const updated = Array.from(next.keys()).filter((key) => (
-      previous.has(key) && !isDeepStrictEqual(previous.get(key), next.get(key))
-  )).sort();
-  const effectList = (keys, values) => boundedEffectList(
-    project ? keys.map((key) => values.get(key)) : keys,
-    project,
-  );
+  const added = Array.from(next.keys())
+    .filter((key) => !previous.has(key))
+    .sort();
+  const removed = Array.from(previous.keys())
+    .filter((key) => !next.has(key))
+    .sort();
+  const updated = Array.from(next.keys())
+    .filter((key) => previous.has(key) && !isDeepStrictEqual(previous.get(key), next.get(key)))
+    .sort();
+  const effectList = (keys, values) =>
+    boundedEffectList(project ? keys.map((key) => values.get(key)) : keys, project);
   return {
     added: effectList(added, next),
     removed: effectList(removed, previous),
@@ -64,10 +64,13 @@ function collectionEffects(before, after, identity, project) {
 
 function metadataEffects(before, after) {
   const excluded = new Set(["tags", "sources", "relations", "generated"]);
-  const keys = sortedUnique(Object.keys(before || {}).concat(Object.keys(after || {})))
-    .filter((key) => !excluded.has(key));
+  const keys = sortedUnique(Object.keys(before || {}).concat(Object.keys(after || {}))).filter(
+    (key) => !excluded.has(key),
+  );
   return {
-    set: boundedEffectList(keys.filter((key) => hasOwn(after, key) && !isDeepStrictEqual(before[key], after[key]))),
+    set: boundedEffectList(
+      keys.filter((key) => hasOwn(after, key) && !isDeepStrictEqual(before[key], after[key])),
+    ),
     removed: boundedEffectList(keys.filter((key) => hasOwn(before, key) && !hasOwn(after, key))),
   };
 }
@@ -77,17 +80,26 @@ function effectsForCandidate(candidate) {
   const after = candidate.frontmatter;
   const tags = collectionEffects(before.tags, after.tags, (value) => String(value));
   const sources = collectionEffects(before.sources, after.sources, sourceIdentity);
-  const relations = collectionEffects(before.relations, after.relations, relationKey, relationEffectValue);
+  const relations = collectionEffects(
+    before.relations,
+    after.relations,
+    relationKey,
+    relationEffectValue,
+  );
   const metadata = metadataEffects(before, after);
-  const bodyChanged = candidate.op === "create"
-    ? true
-    : normalizeBody(candidate.originalBody) !== normalizeBody(candidate.body);
+  const bodyChanged =
+    candidate.op === "create"
+      ? true
+      : normalizeBody(candidate.originalBody) !== normalizeBody(candidate.body);
   const changedFields = [];
   if (bodyChanged) changedFields.push("body");
   const hasEffect = (group) => group.values.length || group.omitted;
-  if (hasEffect(tags.added) || hasEffect(tags.removed) || hasEffect(tags.updated)) changedFields.push("tags");
-  if (hasEffect(sources.added) || hasEffect(sources.removed) || hasEffect(sources.updated)) changedFields.push("sources");
-  if (hasEffect(relations.added) || hasEffect(relations.removed) || hasEffect(relations.updated)) changedFields.push("relations");
+  if (hasEffect(tags.added) || hasEffect(tags.removed) || hasEffect(tags.updated))
+    changedFields.push("tags");
+  if (hasEffect(sources.added) || hasEffect(sources.removed) || hasEffect(sources.updated))
+    changedFields.push("sources");
+  if (hasEffect(relations.added) || hasEffect(relations.removed) || hasEffect(relations.updated))
+    changedFields.push("relations");
   if (hasEffect(metadata.set) || hasEffect(metadata.removed)) changedFields.push("metadata");
   return {
     changedFields,
@@ -106,7 +118,8 @@ function effectsForCandidate(candidate) {
 function policyCode(message) {
   const text = String(message || "");
   if (/generated|generator/i.test(text)) return "generated_owner_protected";
-  if (/Attested Computation|computation contract/i.test(text)) return "computation_authoring_prohibited";
+  if (/Attested Computation|computation contract/i.test(text))
+    return "computation_authoring_prohibited";
   if (/excluded by the bundle policy/i.test(text)) return "excluded_target";
   if (/no effective changes/i.test(text)) return "no_effective_changes";
   if (/same concept more than once/i.test(text)) return "duplicate_batch_target";
@@ -114,11 +127,19 @@ function policyCode(message) {
   if (/unknown valid OKF concept/i.test(text)) return "concept_not_found";
   if (/server-managed/i.test(text)) return "managed_metadata_protected";
   if (/1 through \d+ operations/i.test(text)) return "invalid_batch_size";
-  if (/outside|travers|safe relative|unsafe segment|reserved index|reserved .*file|Markdown file|Markdown path/i.test(text)) return "unsafe_target_path";
+  if (
+    /outside|travers|safe relative|unsafe segment|reserved index|reserved .*file|Markdown file|Markdown path/i.test(
+      text,
+    )
+  )
+    return "unsafe_target_path";
   if (/worktree must be completely clean/i.test(text)) return "git_worktree_dirty";
-  if (/Git filter attributes|repository-configured filters/i.test(text)) return "git_filter_attribute_unsupported";
-  if (/assume-unchanged|skip-worktree|Git index flags/i.test(text)) return "git_index_flag_unsupported";
-  if (/detached HEAD|symbolic branch|checked-out Git ref/i.test(text)) return "git_head_ref_unsupported";
+  if (/Git filter attributes|repository-configured filters/i.test(text))
+    return "git_filter_attribute_unsupported";
+  if (/assume-unchanged|skip-worktree|Git index flags/i.test(text))
+    return "git_index_flag_unsupported";
+  if (/detached HEAD|symbolic branch|checked-out Git ref/i.test(text))
+    return "git_head_ref_unsupported";
   if (/Git user\.(name|email)/i.test(text)) return "git_identity_missing";
   if (/must have an existing HEAD/i.test(text)) return "git_head_missing";
   if (/commit message/i.test(text)) return "invalid_commit_message";
@@ -127,7 +148,7 @@ function policyCode(message) {
 
 function policyValidation(error) {
   const message = error && error.message ? error.message : String(error);
-  const code = error && error.code || policyCode(message);
+  const code = (error && error.code) || policyCode(message);
   const details = error && error.details;
   const diagnostic = {
     code,
@@ -148,16 +169,13 @@ function policyValidation(error) {
 
 function targetReceipt(store, bundle, candidates, gitPreflight) {
   const bundleRoot = store.resolveWritableBundleRoot(bundle);
-  const projectRoot = store.projectRoot
-    ? path.resolve(store.projectRoot)
-    : bundleRoot;
+  const projectRoot = store.projectRoot ? path.resolve(store.projectRoot) : bundleRoot;
   return {
     bundle: bundle.id,
     bundleRoot,
     projectRoot,
-    repositoryRoot: gitPreflight && gitPreflight.repositoryRoot
-      ? gitPreflight.repositoryRoot
-      : null,
+    repositoryRoot:
+      gitPreflight && gitPreflight.repositoryRoot ? gitPreflight.repositoryRoot : null,
     absolutePaths: candidates.map((candidate) => candidate.target.absolutePath),
   };
 }
@@ -177,17 +195,18 @@ function candidateSummaries(candidates) {
 }
 
 function durabilityReceipt(git, filesChanged, stateOverride) {
-  const persistence = git && git.persistence
-    ? git.persistence
-    : filesChanged ? "working_tree" : "none";
+  const persistence =
+    git && git.persistence ? git.persistence : filesChanged ? "working_tree" : "none";
   return {
-    state: stateOverride || (filesChanged
-      ? git && ["committed", "observed_committed"].includes(git.commitState)
-        ? "git_committed"
-        : git && git.commitState === "unknown"
-          ? "commit_state_unknown"
-          : "filesystem_published_uncommitted"
-      : "not_persisted"),
+    state:
+      stateOverride ||
+      (filesChanged
+        ? git && ["committed", "observed_committed"].includes(git.commitState)
+          ? "git_committed"
+          : git && git.commitState === "unknown"
+            ? "commit_state_unknown"
+            : "filesystem_published_uncommitted"
+        : "not_persisted"),
     filesChanged: Boolean(filesChanged),
     persistence,
     committed: git && hasOwn(git, "committed") ? git.committed : false,

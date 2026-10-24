@@ -2,7 +2,12 @@
 
 const fs = require("fs");
 const path = require("path");
-const { normalizeSlashes, parseMarkdownFile, parseMarkdownText, safeRelativePath } = require("./parser");
+const {
+  normalizeSlashes,
+  parseMarkdownFile,
+  parseMarkdownText,
+  safeRelativePath,
+} = require("./parser");
 const {
   buildAssetRegistry,
   collectAssetReferences,
@@ -158,7 +163,9 @@ function documentAtPath(documentsByPath, pathUri) {
 }
 
 function registerPortableConceptId(map, ambiguous, key, document) {
-  const normalized = normalizeSlashes(String(key || "")).replace(/^\/+/, "").split("#")[0];
+  const normalized = normalizeSlashes(String(key || ""))
+    .replace(/^\/+/, "")
+    .split("#")[0];
   if (!normalized || ambiguous.has(normalized)) {
     return;
   }
@@ -183,7 +190,9 @@ function portableConceptKeys(value) {
 
 function portableConceptMatches(index, value) {
   for (const key of portableConceptKeys(value)) {
-    const matches = (index.documents || []).filter((doc) => doc.conceptId === key || doc.path === key);
+    const matches = (index.documents || []).filter(
+      (doc) => doc.conceptId === key || doc.path === key,
+    );
     if (matches.length) {
       return matches.sort((left, right) => left.uri.localeCompare(right.uri));
     }
@@ -201,8 +210,10 @@ function resolveConcept(index, locator) {
   if (byUri) {
     return byUri;
   }
-  if ((index.ambiguousAliases || new Set()).has(raw)
-    || (index.ambiguousAliases || new Set()).has(fragmentless)) {
+  if (
+    (index.ambiguousAliases || new Set()).has(raw) ||
+    (index.ambiguousAliases || new Set()).has(fragmentless)
+  ) {
     return null;
   }
   const uriMatch = fragmentless.match(/^okf:\/\/([^/]+)\/(.+)$/);
@@ -211,7 +222,9 @@ function resolveConcept(index, locator) {
       return null;
     }
   }
-  for (const key of portableConceptKeys(uriMatch ? `${uriMatch[1]}/${uriMatch[2]}` : fragmentless)) {
+  for (const key of portableConceptKeys(
+    uriMatch ? `${uriMatch[1]}/${uriMatch[2]}` : fragmentless,
+  )) {
     if ((index.ambiguousConceptIds || new Set()).has(key)) return null;
     const owner = index.byConceptId && index.byConceptId.get(key);
     if (owner) return owner;
@@ -220,7 +233,11 @@ function resolveConcept(index, locator) {
 }
 
 function normalizeConceptTitle(value) {
-  return String(value || "").normalize("NFKC").trim().replace(/\s+/gu, " ").toLowerCase();
+  return String(value || "")
+    .normalize("NFKC")
+    .trim()
+    .replace(/\s+/gu, " ")
+    .toLowerCase();
 }
 
 function conceptTitleSlug(value) {
@@ -230,9 +247,12 @@ function conceptTitleSlug(value) {
 }
 
 function conceptIsGeneratedFile(doc) {
-  const frontmatter = doc && doc.frontmatter || {};
-  return Boolean(doc && (doc.generatedFile === true || doc.isGenerated === true)
-    || frontmatter.generated_file === true || frontmatter.generatedFile === true);
+  const frontmatter = (doc && doc.frontmatter) || {};
+  return Boolean(
+    (doc && (doc.generatedFile === true || doc.isGenerated === true)) ||
+      frontmatter.generated_file === true ||
+      frontmatter.generatedFile === true,
+  );
 }
 
 function conceptMatchSummary(doc, matchReasons) {
@@ -242,9 +262,9 @@ function conceptMatchSummary(doc, matchReasons) {
     bundle: doc.bundle,
     path: doc.path,
     conceptId: doc.conceptId || doc.path.replace(/\.md$/i, ""),
-    type: doc.type || doc.frontmatter && doc.frontmatter.type,
+    type: doc.type || (doc.frontmatter && doc.frontmatter.type),
     title: doc.title,
-    generatedBy: generated && generated.by || null,
+    generatedBy: (generated && generated.by) || null,
     ...(conceptIsGeneratedFile(doc) ? { generatedFile: true } : {}),
     ...(matchReasons && matchReasons.length ? { matchReasons } : {}),
   };
@@ -254,34 +274,48 @@ function findConceptMatches(index, options) {
   const config = options || {};
   const title = config.title === undefined ? null : normalizeConceptTitle(config.title);
   const prefix = normalizeSlashes(String(config.pathPrefix || "")).replace(/^\/+|\/+$/g, "");
-  const documents = index && Array.isArray(index.concepts)
-    ? index.concepts
-    : index && Array.isArray(index.documents) ? index.documents : [];
+  const documents =
+    index && Array.isArray(index.concepts)
+      ? index.concepts
+      : index && Array.isArray(index.documents)
+        ? index.documents
+        : [];
   return documents
-    .filter((doc) => (
-      doc && doc.valid !== false && !doc.reserved
-      && typeof doc.path === "string"
-      && (!config.bundle || doc.bundle === config.bundle)
-      && (!config.type || doc.type === config.type)
-      && (title === null || normalizeConceptTitle(doc.title) === title)
-      && (!prefix || doc.path === prefix || doc.path.startsWith(`${prefix}/`))
-    ))
-    .sort((left, right) => left.path.localeCompare(right.path) || left.uri.localeCompare(right.uri));
+    .filter(
+      (doc) =>
+        doc &&
+        doc.valid !== false &&
+        !doc.reserved &&
+        typeof doc.path === "string" &&
+        (!config.bundle || doc.bundle === config.bundle) &&
+        (!config.type || doc.type === config.type) &&
+        (title === null || normalizeConceptTitle(doc.title) === title) &&
+        (!prefix || doc.path === prefix || doc.path.startsWith(`${prefix}/`)),
+    )
+    .sort(
+      (left, right) => left.path.localeCompare(right.path) || left.uri.localeCompare(right.uri),
+    );
 }
 
 function recoveryReceipt(locator, entries, limit, allowRetry, forcedAmbiguity) {
   const maximum = Math.max(1, Math.min(Number(limit || 5), 20));
-  const candidates = entries.slice(0, maximum)
+  const candidates = entries
+    .slice(0, maximum)
     .map((entry) => conceptMatchSummary(entry.doc, entry.reasons));
   const actionable = entries.length === 1 && entries[0].doc.valid && !entries[0].doc.reserved;
   return {
-    status: forcedAmbiguity || entries.length > 1 ? "ambiguous"
-      : actionable ? "replacement_found" : "not_found",
+    status:
+      forcedAmbiguity || entries.length > 1
+        ? "ambiguous"
+        : actionable
+          ? "replacement_found"
+          : "not_found",
     requestedLocator: locator,
     candidates,
     omitted: Math.max(0, entries.length - candidates.length),
     ...(allowRetry && !forcedAmbiguity && actionable
-      ? { retryWith: { uri: entries[0].doc.uri } } : {}),
+      ? { retryWith: { uri: entries[0].doc.uri } }
+      : {}),
   };
 }
 
@@ -294,21 +328,34 @@ function recoverConceptLocator(index, locator, options) {
   }
   const knownBundle = uriMatch && (index.bundles || []).some((entry) => entry.id === uriMatch[1]);
   const bundle = knownBundle ? uriMatch[1] : config.bundle || "";
-  const portablePath = (uriMatch && knownBundle
-    ? uriMatch[2]
-    : raw.replace(/^okf:\/\//, ""))
-    .replace(/^\/+/, "");
-  const aliasOwners = (index.documents || []).filter((doc) => (
-    (index.ambiguousAliases || new Set()).has(raw) && (doc.uriAliases || []).includes(raw)
-  )).sort((left, right) => left.uri.localeCompare(right.uri));
-  const exact = aliasOwners.length ? aliasOwners : knownBundle ? [] : portableConceptMatches(index, portablePath);
+  const portablePath = (
+    uriMatch && knownBundle ? uriMatch[2] : raw.replace(/^okf:\/\//, "")
+  ).replace(/^\/+/, "");
+  const aliasOwners = (index.documents || [])
+    .filter(
+      (doc) =>
+        (index.ambiguousAliases || new Set()).has(raw) && (doc.uriAliases || []).includes(raw),
+    )
+    .sort((left, right) => left.uri.localeCompare(right.uri));
+  const exact = aliasOwners.length
+    ? aliasOwners
+    : knownBundle
+      ? []
+      : portableConceptMatches(index, portablePath);
   if (exact.length) {
-    const portableAmbiguous = portableConceptKeys(portablePath)
-      .some((key) => (index.ambiguousConceptIds || new Set()).has(key));
-    return recoveryReceipt(raw, exact.map((doc) => ({
-      doc, reasons: [aliasOwners.length ? "uri_alias" : "portable_id"],
-    })), config.limit, !aliasOwners.length && !portableAmbiguous,
-    aliasOwners.length > 0 || portableAmbiguous);
+    const portableAmbiguous = portableConceptKeys(portablePath).some((key) =>
+      (index.ambiguousConceptIds || new Set()).has(key),
+    );
+    return recoveryReceipt(
+      raw,
+      exact.map((doc) => ({
+        doc,
+        reasons: [aliasOwners.length ? "uri_alias" : "portable_id"],
+      })),
+      config.limit,
+      !aliasOwners.length && !portableAmbiguous,
+      aliasOwners.length > 0 || portableAmbiguous,
+    );
   }
   const requestedPath = portablePath.replace(/\.md$/i, "");
   const requestedBase = path.posix.basename(requestedPath).toLowerCase();
@@ -320,19 +367,24 @@ function recoverConceptLocator(index, locator, options) {
     const reasons = [];
     if (base === requestedBase) reasons.push("path_basename");
     if (conceptTitleSlug(doc.title) === requestedSlug) reasons.push("title_slug");
-    if ((doc.aliases || []).some((alias) => conceptTitleSlug(alias) === requestedSlug)) reasons.push("alias");
+    if ((doc.aliases || []).some((alias) => conceptTitleSlug(alias) === requestedSlug))
+      reasons.push("alias");
     if (!reasons.length) return;
     ranked.push({
       doc,
       reasons,
-      score: (reasons.includes("path_basename") ? 4 : 0)
-        + (reasons.includes("title_slug") ? 2 : 0)
-        + (reasons.includes("alias") ? 1 : 0),
+      score:
+        (reasons.includes("path_basename") ? 4 : 0) +
+        (reasons.includes("title_slug") ? 2 : 0) +
+        (reasons.includes("alias") ? 1 : 0),
     });
   });
-  ranked.sort((left, right) => right.score - left.score
-    || left.doc.path.localeCompare(right.doc.path)
-    || left.doc.uri.localeCompare(right.doc.uri));
+  ranked.sort(
+    (left, right) =>
+      right.score - left.score ||
+      left.doc.path.localeCompare(right.doc.path) ||
+      left.doc.uri.localeCompare(right.doc.uri),
+  );
   return recoveryReceipt(raw, ranked, config.limit, true);
 }
 
@@ -361,7 +413,12 @@ function resolveIndexedLink(bundleId, resolved, href, documentsByPath) {
 
 function resolveLinkPath(bundle, fromPath, href, documentsByPath) {
   const clean = String(href || "").split("#")[0];
-  if (!clean || clean.startsWith("http://") || clean.startsWith("https://") || clean.startsWith("mailto:")) {
+  if (
+    !clean ||
+    clean.startsWith("http://") ||
+    clean.startsWith("https://") ||
+    clean.startsWith("mailto:")
+  ) {
     return null;
   }
   if (bundle.remote) {
@@ -376,11 +433,16 @@ function resolveLinkPath(bundle, fromPath, href, documentsByPath) {
         uri: null,
       };
     }
-    return resolveIndexedLink(bundle.id, {
-      outsideRoot: false,
-      path: resolvedPath,
-      uri: `okf://${bundle.id}/${resolvedPath}`,
-    }, clean, documentsByPath);
+    return resolveIndexedLink(
+      bundle.id,
+      {
+        outsideRoot: false,
+        path: resolvedPath,
+        uri: `okf://${bundle.id}/${resolvedPath}`,
+      },
+      clean,
+      documentsByPath,
+    );
   }
   const base = clean.startsWith("/")
     ? path.join(bundle.root, clean.slice(1))
@@ -393,11 +455,16 @@ function resolveLinkPath(bundle, fromPath, href, documentsByPath) {
       uri: null,
     };
   }
-  return resolveIndexedLink(bundle.id, {
-    outsideRoot: false,
-    path: relativePath,
-    uri: `okf://${bundle.id}/${relativePath}`,
-  }, clean, documentsByPath);
+  return resolveIndexedLink(
+    bundle.id,
+    {
+      outsideRoot: false,
+      path: relativePath,
+      uri: `okf://${bundle.id}/${relativePath}`,
+    },
+    clean,
+    documentsByPath,
+  );
 }
 
 function relationFrom(value, doc) {
@@ -432,7 +499,13 @@ function relativeReferencePath(fromPath, reference) {
   const relative = raw.startsWith("/")
     ? path.posix.normalize(raw.slice(1))
     : path.posix.normalize(path.posix.join(path.posix.dirname(fromPath), raw));
-  if (!relative || relative === "." || relative === ".." || relative.startsWith("../") || path.posix.isAbsolute(relative)) {
+  if (
+    !relative ||
+    relative === "." ||
+    relative === ".." ||
+    relative.startsWith("../") ||
+    path.posix.isAbsolute(relative)
+  ) {
     return null;
   }
   return normalizeSlashes(relative);
@@ -447,21 +520,30 @@ function semanticReferences(doc) {
     }
   }
   add("resource", "resource", frontmatter.resource);
-  const sources = doc.signals && Array.isArray(doc.signals.sources)
-    ? doc.signals.sources
-    : Array.isArray(frontmatter.sources)
-      ? frontmatter.sources
-      : [];
+  const sources =
+    doc.signals && Array.isArray(doc.signals.sources)
+      ? doc.signals.sources
+      : Array.isArray(frontmatter.sources)
+        ? frontmatter.sources
+        : [];
   sources.forEach((source, index) => {
     if (source && typeof source === "object" && !Array.isArray(source)) {
       add("source", `sources[${index}].resource`, source.resource, source);
     }
   });
   add("computation", "computation", frontmatter.computation);
-  if (frontmatter.executor && typeof frontmatter.executor === "object" && !Array.isArray(frontmatter.executor)) {
+  if (
+    frontmatter.executor &&
+    typeof frontmatter.executor === "object" &&
+    !Array.isArray(frontmatter.executor)
+  ) {
     add("executor", "executor.resource", frontmatter.executor.resource);
   }
-  if (frontmatter.attester && typeof frontmatter.attester === "object" && !Array.isArray(frontmatter.attester)) {
+  if (
+    frontmatter.attester &&
+    typeof frontmatter.attester === "object" &&
+    !Array.isArray(frontmatter.attester)
+  ) {
     add("attester", "attester.resource", frontmatter.attester.resource);
   }
   return references;
@@ -469,15 +551,15 @@ function semanticReferences(doc) {
 
 function buildIndex(bundleArgs, options) {
   const config = options || {};
-  const documentOverrides = config.documentOverrides instanceof Map
-    ? config.documentOverrides
-    : new Map();
-  const documentDeletions = config.documentDeletions instanceof Set
-    ? config.documentDeletions
-    : new Set();
+  const documentOverrides =
+    config.documentOverrides instanceof Map ? config.documentOverrides : new Map();
+  const documentDeletions =
+    config.documentDeletions instanceof Set ? config.documentDeletions : new Set();
   const strictLinks = Boolean(config.strictLinks);
   const requestedBundles = uniqueBundleIds((bundleArgs || []).map(parseBundleArg));
-  const allowedRelationTypes = new Set((config.relationTypes || DEFAULT_RELATION_TYPES).map(String));
+  const allowedRelationTypes = new Set(
+    (config.relationTypes || DEFAULT_RELATION_TYPES).map(String),
+  );
   const allowCustomRelationTypes = Boolean(config.allowCustomRelationTypes);
   const documents = [];
   const concepts = [];
@@ -490,7 +572,11 @@ function buildIndex(bundleArgs, options) {
 
   requestedBundles.forEach((bundle) => {
     if (seenBundleIds.has(bundle.id)) {
-      errors.push({ code: "duplicate_bundle_id", bundle: bundle.id, message: "Duplicate bundle id; the later bundle was ignored." });
+      errors.push({
+        code: "duplicate_bundle_id",
+        bundle: bundle.id,
+        message: "Duplicate bundle id; the later bundle was ignored.",
+      });
       return;
     }
     seenBundleIds.add(bundle.id);
@@ -518,7 +604,10 @@ function buildIndex(bundleArgs, options) {
           } else if (doc.valid) {
             concepts.push(doc);
           }
-          warnings.push.apply(warnings, doc.warnings.map((warning) => Object.assign({ bundle: doc.bundle }, warning)));
+          warnings.push.apply(
+            warnings,
+            doc.warnings.map((warning) => Object.assign({ bundle: doc.bundle }, warning)),
+          );
         } catch (error) {
           errors.push({
             code: "parse_error",
@@ -531,23 +620,32 @@ function buildIndex(bundleArgs, options) {
       return;
     }
     if (!fs.existsSync(bundle.root)) {
-      errors.push({ code: "missing_bundle_root", bundle: bundle.id, path: bundle.root, message: "Bundle root does not exist." });
+      errors.push({
+        code: "missing_bundle_root",
+        bundle: bundle.id,
+        path: bundle.root,
+        message: "Bundle root does not exist.",
+      });
       return;
     }
     const indexedPaths = new Set();
     const indexLocalDocument = (relativePath, text, source) => {
       indexedPaths.add(relativePath);
       try {
-        const doc = text === undefined
-          ? parseMarkdownFile(bundle, source, { asOf: config.asOf })
-          : parseMarkdownText(bundle, relativePath, text, source, { asOf: config.asOf });
+        const doc =
+          text === undefined
+            ? parseMarkdownFile(bundle, source, { asOf: config.asOf })
+            : parseMarkdownText(bundle, relativePath, text, source, { asOf: config.asOf });
         documents.push(doc);
         if (doc.reserved) {
           reserved.push(doc);
         } else if (doc.valid) {
           concepts.push(doc);
         }
-        warnings.push.apply(warnings, doc.warnings.map((warning) => Object.assign({ bundle: doc.bundle }, warning)));
+        warnings.push.apply(
+          warnings,
+          doc.warnings.map((warning) => Object.assign({ bundle: doc.bundle }, warning)),
+        );
       } catch (error) {
         errors.push({
           code: "parse_error",
@@ -578,7 +676,11 @@ function buildIndex(bundleArgs, options) {
         return;
       }
       const relativePath = normalizeSlashes(String(key).slice(prefix.length));
-      if (documentDeletions.has(key) || indexedPaths.has(relativePath) || !bundleAllowsPath(bundle, relativePath)) {
+      if (
+        documentDeletions.has(key) ||
+        indexedPaths.has(relativePath) ||
+        !bundleAllowsPath(bundle, relativePath)
+      ) {
         return;
       }
       indexLocalDocument(
@@ -600,7 +702,11 @@ function buildIndex(bundleArgs, options) {
       byPathUri.set(doc.pathUri, doc);
     }
     if (byCanonicalUri.has(doc.uri)) {
-      errors.push({ code: "duplicate_concept_id", uri: doc.uri, message: "Duplicate canonical OKF Concept ID." });
+      errors.push({
+        code: "duplicate_concept_id",
+        uri: doc.uri,
+        message: "Duplicate canonical OKF Concept ID.",
+      });
       return;
     }
     byCanonicalUri.set(doc.uri, doc);
@@ -619,25 +725,37 @@ function buildIndex(bundleArgs, options) {
     skipResolvedPath: (_bundle, relativePath) => relativePath.toLowerCase().endsWith(".md"),
   });
   warnings.push.apply(warnings, localAssetRegistry.diagnostics);
-  const assets = localAssetRegistry.assets.filter((asset) => (
-    !documentAtPath(byPathUri, `okf://${asset.bundle}/${asset.path}`)
-  ));
-  bundles.filter((bundle) => bundle.remote).forEach((bundle) => {
-    const unresolved = bundle.remoteSource && bundle.remoteSource.unresolvedReferences || [];
-    warnings.push.apply(warnings, unresolved.map((entry) => Object.assign({
-      severity: "warning",
-      layer: "project",
-      bundle: bundle.id,
-      message: `Referenced remote asset is unavailable: ${entry.resolvedPath || entry.target || "<unknown>"}`,
-    }, entry)));
-    (bundle.assets || []).forEach((asset) => {
-      assets.push(Object.assign({}, asset, {
-        bundle: bundle.id,
-        uri: asset.uri || assetUri(bundle.id, asset.path),
-        remote: true,
-      }));
+  const assets = localAssetRegistry.assets.filter(
+    (asset) => !documentAtPath(byPathUri, `okf://${asset.bundle}/${asset.path}`),
+  );
+  bundles
+    .filter((bundle) => bundle.remote)
+    .forEach((bundle) => {
+      const unresolved = (bundle.remoteSource && bundle.remoteSource.unresolvedReferences) || [];
+      warnings.push.apply(
+        warnings,
+        unresolved.map((entry) =>
+          Object.assign(
+            {
+              severity: "warning",
+              layer: "project",
+              bundle: bundle.id,
+              message: `Referenced remote asset is unavailable: ${entry.resolvedPath || entry.target || "<unknown>"}`,
+            },
+            entry,
+          ),
+        ),
+      );
+      (bundle.assets || []).forEach((asset) => {
+        assets.push(
+          Object.assign({}, asset, {
+            bundle: bundle.id,
+            uri: asset.uri || assetUri(bundle.id, asset.path),
+            remote: true,
+          }),
+        );
+      });
     });
-  });
 
   assets.forEach((asset) => {
     asset.uri = asset.uri || assetUri(asset.bundle, asset.path);
@@ -654,7 +772,8 @@ function buildIndex(bundleArgs, options) {
           uri: alias,
           bundle: doc.bundle,
           path: doc.path,
-          message: "Compatibility URI alias conflicts with another canonical Concept ID; the canonical target wins.",
+          message:
+            "Compatibility URI alias conflicts with another canonical Concept ID; the canonical target wins.",
         });
         return;
       }
@@ -717,59 +836,83 @@ function buildIndex(bundleArgs, options) {
         });
       }
     });
-    doc.relations.map((relation) => relationFrom(relation, doc)).forEach((relation) => {
-      const type = String(relation.type || "related_to");
-      const targetUri = String(relation.target || "").trim();
-      if (!targetUri) {
-        errors.push({ code: "missing_relation_target", bundle: doc.bundle, path: doc.path, relationType: type, message: "Relation has no target." });
-        return;
-      }
-      const safeCustomType = /^[A-Za-z0-9_.-]+$/.test(type);
-      if (!allowedRelationTypes.has(type) && !(allowCustomRelationTypes && safeCustomType)) {
-        errors.push({ code: "invalid_relation_type", bundle: doc.bundle, path: doc.path, relationType: type, message: `Unsupported relation type: ${type}` });
-      } else if (allowCustomRelationTypes && safeCustomType) {
-        allowedRelationTypes.add(type);
-      }
-      let targetDocument = byUri.get(targetUri) || null;
-      let internalTarget = targetUri.startsWith("okf://");
-      if (!targetDocument && !/^[A-Za-z][A-Za-z0-9+.-]*:/u.test(targetUri)) {
-        internalTarget = true;
-        const resolved = resolveLinkPath(bundle, doc.path, targetUri, byPathUri);
-        if (resolved && !resolved.outsideRoot) {
-          targetDocument = documentAtPath(byPathUri, `okf://${doc.bundle}/${resolved.path}`);
-          if (!targetDocument && !path.posix.extname(resolved.path)) {
-            targetDocument = documentAtPath(byPathUri, `okf://${doc.bundle}/${resolved.path}.md`);
+    doc.relations
+      .map((relation) => relationFrom(relation, doc))
+      .forEach((relation) => {
+        const type = String(relation.type || "related_to");
+        const targetUri = String(relation.target || "").trim();
+        if (!targetUri) {
+          errors.push({
+            code: "missing_relation_target",
+            bundle: doc.bundle,
+            path: doc.path,
+            relationType: type,
+            message: "Relation has no target.",
+          });
+          return;
+        }
+        const safeCustomType = /^[A-Za-z0-9_.-]+$/.test(type);
+        if (!allowedRelationTypes.has(type) && !(allowCustomRelationTypes && safeCustomType)) {
+          errors.push({
+            code: "invalid_relation_type",
+            bundle: doc.bundle,
+            path: doc.path,
+            relationType: type,
+            message: `Unsupported relation type: ${type}`,
+          });
+        } else if (allowCustomRelationTypes && safeCustomType) {
+          allowedRelationTypes.add(type);
+        }
+        let targetDocument = byUri.get(targetUri) || null;
+        let internalTarget = targetUri.startsWith("okf://");
+        if (!targetDocument && !/^[A-Za-z][A-Za-z0-9+.-]*:/u.test(targetUri)) {
+          internalTarget = true;
+          const resolved = resolveLinkPath(bundle, doc.path, targetUri, byPathUri);
+          if (resolved && !resolved.outsideRoot) {
+            targetDocument = documentAtPath(byPathUri, `okf://${doc.bundle}/${resolved.path}`);
+            if (!targetDocument && !path.posix.extname(resolved.path)) {
+              targetDocument = documentAtPath(byPathUri, `okf://${doc.bundle}/${resolved.path}.md`);
+            }
+          }
+          if (!targetDocument) {
+            const normalizedTarget = normalizeSlashes(targetUri)
+              .replace(/^\/+/, "")
+              .replace(/\.md$/i, "");
+            const portableTarget = byConceptId.get(normalizedTarget);
+            if (portableTarget && portableTarget.bundle === doc.bundle) {
+              targetDocument = portableTarget;
+            }
           }
         }
-        if (!targetDocument) {
-          const normalizedTarget = normalizeSlashes(targetUri).replace(/^\/+/, "").replace(/\.md$/i, "");
-          const portableTarget = byConceptId.get(normalizedTarget);
-          if (portableTarget && portableTarget.bundle === doc.bundle) {
-            targetDocument = portableTarget;
-          }
+        const target =
+          targetDocument && !targetDocument.reserved && targetDocument.valid
+            ? targetDocument
+            : null;
+        const isExternal = !internalTarget;
+        if (isExternal) {
+          externalReferences.set(targetUri, { uri: targetUri, kind: "external" });
         }
-      }
-      const target = targetDocument && !targetDocument.reserved && targetDocument.valid
-        ? targetDocument
-        : null;
-      const isExternal = !internalTarget;
-      if (isExternal) {
-        externalReferences.set(targetUri, { uri: targetUri, kind: "external" });
-      }
-      if (internalTarget && !target) {
-        errors.push({ code: "broken_relation", bundle: doc.bundle, path: doc.path, target: targetUri, relationType: type, message: "Relation target does not resolve to a valid concept." });
-      }
-      edges.push({
-        source: doc.uri,
-        target: target ? target.uri : targetUri,
-        kind: "relation",
-        relationType: type,
-        text: relation.label || type,
-        description: relation.description || "",
-        broken: internalTarget && !target,
-        external: isExternal,
+        if (internalTarget && !target) {
+          errors.push({
+            code: "broken_relation",
+            bundle: doc.bundle,
+            path: doc.path,
+            target: targetUri,
+            relationType: type,
+            message: "Relation target does not resolve to a valid concept.",
+          });
+        }
+        edges.push({
+          source: doc.uri,
+          target: target ? target.uri : targetUri,
+          kind: "relation",
+          relationType: type,
+          text: relation.label || type,
+          description: relation.description || "",
+          broken: internalTarget && !target,
+          external: isExternal,
+        });
       });
-    });
     semanticReferences(doc).forEach((reference) => {
       const rawTarget = reference.value;
       let target = null;
@@ -804,8 +947,8 @@ function buildIndex(bundleArgs, options) {
       } else {
         const targetPath = relativeReferencePath(doc.path, rawTarget);
         const targetDoc = targetPath
-          ? documentAtPath(byPathUri, `okf://${doc.bundle}/${targetPath}`)
-            || byUri.get(`okf://${doc.bundle}/${targetPath.replace(/\.md$/i, "")}`)
+          ? documentAtPath(byPathUri, `okf://${doc.bundle}/${targetPath}`) ||
+            byUri.get(`okf://${doc.bundle}/${targetPath.replace(/\.md$/i, "")}`)
           : null;
         const targetAsset = targetPath ? byAssetKey.get(`${doc.bundle}\u0000${targetPath}`) : null;
         if (targetDoc && !targetDoc.reserved && targetDoc.valid) {
@@ -820,7 +963,8 @@ function buildIndex(bundleArgs, options) {
           resolvedAs = "asset";
         } else {
           target = rawTarget;
-          const opaqueSource = reference.kind === "source" && !isLocalAssetReference(rawTarget, { allowBare: false });
+          const opaqueSource =
+            reference.kind === "source" && !isLocalAssetReference(rawTarget, { allowBare: false });
           external = opaqueSource;
           broken = !opaqueSource;
           resolvedAs = opaqueSource ? "opaque" : "unresolved";
@@ -836,7 +980,8 @@ function buildIndex(bundleArgs, options) {
           field: reference.field,
           target: rawTarget,
           edgeKind: reference.kind,
-          message: "Standard OKF semantic reference does not resolve to a valid local concept or indexed asset.",
+          message:
+            "Standard OKF semantic reference does not resolve to a valid local concept or indexed asset.",
         });
       }
       if (external) {
@@ -861,13 +1006,14 @@ function buildIndex(bundleArgs, options) {
     if (!contract) {
       return;
     }
-    const contractEdges = edges.filter((edge) => (
-      edge.source === doc.uri
-      && ["computation", "executor", "attester"].includes(edge.kind)
-    ));
-    const requiredKinds = contract.computation && contract.computation.mode === "file"
-      ? ["computation", "executor", "attester"]
-      : ["executor", "attester"];
+    const contractEdges = edges.filter(
+      (edge) =>
+        edge.source === doc.uri && ["computation", "executor", "attester"].includes(edge.kind),
+    );
+    const requiredKinds =
+      contract.computation && contract.computation.mode === "file"
+        ? ["computation", "executor", "attester"]
+        : ["executor", "attester"];
     const assetsReady = requiredKinds.every((kind) => {
       const edge = contractEdges.find((entry) => entry.kind === kind);
       if (!edge || edge.broken) {
@@ -918,19 +1064,21 @@ function buildIndex(bundleArgs, options) {
   };
   bundles.forEach((bundle) => {
     const rootIndex = documents.find((doc) => doc.bundle === bundle.id && doc.path === "index.md");
-    const okfVersion = rootIndex
-      && rootIndex.frontmatter
-      && Object.prototype.hasOwnProperty.call(rootIndex.frontmatter, "okf_version")
-      ? rootIndex.frontmatter.okf_version
-      : null;
+    const okfVersion =
+      rootIndex &&
+      rootIndex.frontmatter &&
+      Object.prototype.hasOwnProperty.call(rootIndex.frontmatter, "okf_version")
+        ? rootIndex.frontmatter.okf_version
+        : null;
     bundle.okfVersion = okfVersion === null ? null : String(okfVersion);
-    bundle.versionStatus = bundle.okfVersion === "0.2"
-      ? "understood"
-      : bundle.okfVersion === "0.1"
-        ? "legacy"
-        : bundle.okfVersion
-          ? "unsupported"
-          : "undeclared";
+    bundle.versionStatus =
+      bundle.okfVersion === "0.2"
+        ? "understood"
+        : bundle.okfVersion === "0.1"
+          ? "legacy"
+          : bundle.okfVersion
+            ? "unsupported"
+            : "undeclared";
     bundle.documentCount = documents.filter((doc) => doc.bundle === bundle.id).length;
     bundle.assetCount = assets.filter((asset) => asset.bundle === bundle.id).length;
   });
@@ -960,9 +1108,10 @@ async function buildProjectIndexAsync(projectPath, options) {
   const loaded = await loadProjectBundles(projectPath, options);
   const index = buildIndex(loaded.bundles, {
     relationTypes: loaded.project.relationTypes,
-    strictLinks: options && options.strictLinks !== undefined
-      ? options.strictLinks
-      : loaded.project.strictLinks,
+    strictLinks:
+      options && options.strictLinks !== undefined
+        ? options.strictLinks
+        : loaded.project.strictLinks,
   });
   return attachProject(index, loaded.project);
 }
@@ -1008,13 +1157,15 @@ function conceptSignals(doc, detailed) {
     sourcesOrigin: signals.sourcesOrigin,
     generated: signals.generated,
     generatedOrigin: signals.generatedOrigin,
-    computation: computation ? {
-      runtime: computation.runtime,
-      mode: computation.computation && computation.computation.mode,
-      attestationReady: Boolean(computation.attestationReady),
-      structuralReady: Boolean(computation.structuralReady),
-      assetsReady: Boolean(computation.assetsReady),
-    } : null,
+    computation: computation
+      ? {
+          runtime: computation.runtime,
+          mode: computation.computation && computation.computation.mode,
+          attestationReady: Boolean(computation.attestationReady),
+          structuralReady: Boolean(computation.structuralReady),
+          assetsReady: Boolean(computation.assetsReady),
+        }
+      : null,
   };
   if (detailed) {
     output.resource = signals.resource;

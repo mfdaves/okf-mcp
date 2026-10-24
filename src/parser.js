@@ -21,8 +21,7 @@ function validOkfConceptUri(value) {
   }
   const match = value.match(/^okf:\/\/([^/\s?#]+)\/([^\s?#]+)$/);
   return Boolean(
-    match
-    && match[2].split("/").every((segment) => segment && segment !== "." && segment !== ".."),
+    match && match[2].split("/").every((segment) => segment && segment !== "." && segment !== ".."),
   );
 }
 
@@ -114,11 +113,13 @@ function hasLocalLink(node) {
   const walker = node.walker();
   let event;
   while ((event = walker.next())) {
-    if (event.entering
-      && event.node.type === "link"
-      && event.node.destination
-      && !isExternalMarkdownTarget(event.node.destination)
-      && !String(event.node.destination).startsWith("#")) {
+    if (
+      event.entering &&
+      event.node.type === "link" &&
+      event.node.destination &&
+      !isExternalMarkdownTarget(event.node.destination) &&
+      !String(event.node.destination).startsWith("#")
+    ) {
       return true;
     }
   }
@@ -167,67 +168,80 @@ function validateReservedIndex(bundle, relativePath, split) {
   const rootIndex = normalizeSlashes(relativePath) === "index.md";
   if (split.frontmatter) {
     if (!rootIndex) {
-      diagnostics.push(conformanceDiagnostic(
-        bundle,
-        relativePath,
-        "reserved_index_frontmatter_not_allowed",
-        "Only a bundle-root index.md may declare frontmatter.",
-      ));
+      diagnostics.push(
+        conformanceDiagnostic(
+          bundle,
+          relativePath,
+          "reserved_index_frontmatter_not_allowed",
+          "Only a bundle-root index.md may declare frontmatter.",
+        ),
+      );
     } else {
       const keys = Object.keys(split.frontmatter);
       if (keys.some((key) => key !== "okf_version")) {
-        diagnostics.push(conformanceDiagnostic(
-          bundle,
-          relativePath,
-          "reserved_index_invalid_frontmatter",
-          "Bundle-root index.md frontmatter may contain only okf_version.",
-        ));
+        diagnostics.push(
+          conformanceDiagnostic(
+            bundle,
+            relativePath,
+            "reserved_index_invalid_frontmatter",
+            "Bundle-root index.md frontmatter may contain only okf_version.",
+          ),
+        );
       }
       if (
-        !Object.prototype.hasOwnProperty.call(split.frontmatter, "okf_version")
-        || split.frontmatter.okf_version === null
-        || typeof split.frontmatter.okf_version === "object"
-        || String(split.frontmatter.okf_version).trim() === ""
+        !Object.prototype.hasOwnProperty.call(split.frontmatter, "okf_version") ||
+        split.frontmatter.okf_version === null ||
+        typeof split.frontmatter.okf_version === "object" ||
+        String(split.frontmatter.okf_version).trim() === ""
       ) {
-        diagnostics.push(conformanceDiagnostic(
-          bundle,
-          relativePath,
-          "reserved_index_invalid_okf_version",
-          "Bundle-root index.md frontmatter must declare a non-empty scalar okf_version.",
-        ));
+        diagnostics.push(
+          conformanceDiagnostic(
+            bundle,
+            relativePath,
+            "reserved_index_invalid_okf_version",
+            "Bundle-root index.md frontmatter must declare a non-empty scalar okf_version.",
+          ),
+        );
       }
     }
   }
   const structure = markdownStructure(split.body);
   const blocks = topLevelBlocks(structure.tree);
   if (!structure.headings.length) {
-    diagnostics.push(conformanceDiagnostic(
-      bundle,
-      relativePath,
-      "reserved_index_missing_heading",
-      "Reserved index.md must contain at least one Markdown heading.",
-    ));
+    diagnostics.push(
+      conformanceDiagnostic(
+        bundle,
+        relativePath,
+        "reserved_index_missing_heading",
+        "Reserved index.md must contain at least one Markdown heading.",
+      ),
+    );
   }
   if (blocks.length && blocks[0].type !== "heading") {
-    diagnostics.push(conformanceDiagnostic(
-      bundle,
-      relativePath,
-      "reserved_index_heading_order",
-      "Reserved index.md content must begin with a heading.",
-    ));
+    diagnostics.push(
+      conformanceDiagnostic(
+        bundle,
+        relativePath,
+        "reserved_index_heading_order",
+        "Reserved index.md content must begin with a heading.",
+      ),
+    );
   }
-  const groupedLink = blocks.some((block, index) => (
-    block.type === "list"
-    && blocks.slice(0, index).some((entry) => entry.type === "heading")
-    && hasLocalLink(block)
-  ));
+  const groupedLink = blocks.some(
+    (block, index) =>
+      block.type === "list" &&
+      blocks.slice(0, index).some((entry) => entry.type === "heading") &&
+      hasLocalLink(block),
+  );
   if (!groupedLink) {
-    diagnostics.push(conformanceDiagnostic(
-      bundle,
-      relativePath,
-      "reserved_index_missing_link",
-      "Reserved index.md must contain at least one local Markdown link entry.",
-    ));
+    diagnostics.push(
+      conformanceDiagnostic(
+        bundle,
+        relativePath,
+        "reserved_index_missing_link",
+        "Reserved index.md must contain at least one local Markdown link entry.",
+      ),
+    );
   }
   return diagnostics;
 }
@@ -235,98 +249,116 @@ function validateReservedIndex(bundle, relativePath, split) {
 function validateReservedLog(bundle, relativePath, split) {
   const diagnostics = [];
   if (split.frontmatter) {
-    diagnostics.push(conformanceDiagnostic(
-      bundle,
-      relativePath,
-      "reserved_log_frontmatter_not_allowed",
-      "Reserved log.md must not declare YAML frontmatter.",
-    ));
+    diagnostics.push(
+      conformanceDiagnostic(
+        bundle,
+        relativePath,
+        "reserved_log_frontmatter_not_allowed",
+        "Reserved log.md must not declare YAML frontmatter.",
+      ),
+    );
   }
   const structure = markdownStructure(split.body);
   const blocks = topLevelBlocks(structure.tree);
   const headings = structure.headings;
   const h1 = headings.filter((heading) => heading.level === 1);
   if (!h1.length) {
-    diagnostics.push(conformanceDiagnostic(
-      bundle,
-      relativePath,
-      "reserved_log_missing_h1",
-      "Reserved log.md must start with an H1 title.",
-    ));
+    diagnostics.push(
+      conformanceDiagnostic(
+        bundle,
+        relativePath,
+        "reserved_log_missing_h1",
+        "Reserved log.md must start with an H1 title.",
+      ),
+    );
   } else if (!blocks.length || blocks[0] !== h1[0].node) {
-    diagnostics.push(conformanceDiagnostic(
-      bundle,
-      relativePath,
-      "reserved_log_h1_order",
-      "The H1 title in reserved log.md must precede its dated sections.",
-    ));
+    diagnostics.push(
+      conformanceDiagnostic(
+        bundle,
+        relativePath,
+        "reserved_log_h1_order",
+        "The H1 title in reserved log.md must precede its dated sections.",
+      ),
+    );
   }
   if (h1.length > 1) {
-    diagnostics.push(conformanceDiagnostic(
-      bundle,
-      relativePath,
-      "reserved_log_multiple_h1",
-      "Reserved log.md must contain exactly one H1 title.",
-    ));
+    diagnostics.push(
+      conformanceDiagnostic(
+        bundle,
+        relativePath,
+        "reserved_log_multiple_h1",
+        "Reserved log.md must contain exactly one H1 title.",
+      ),
+    );
   }
 
   const h2 = headings.filter((heading) => heading.level === 2);
   const sections = [];
   h2.forEach((heading) => {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(heading.text)) {
-      diagnostics.push(conformanceDiagnostic(
-        bundle,
-        relativePath,
-        "reserved_log_invalid_date_heading",
-        `Log H2 heading must be a strict ISO date (YYYY-MM-DD): ${heading.text}`,
-      ));
+      diagnostics.push(
+        conformanceDiagnostic(
+          bundle,
+          relativePath,
+          "reserved_log_invalid_date_heading",
+          `Log H2 heading must be a strict ISO date (YYYY-MM-DD): ${heading.text}`,
+        ),
+      );
       return;
     }
     if (!validIsoDate(heading.text)) {
-      diagnostics.push(conformanceDiagnostic(
-        bundle,
-        relativePath,
-        "reserved_log_invalid_date",
-        `Log H2 heading is not a valid calendar date: ${heading.text}`,
-      ));
+      diagnostics.push(
+        conformanceDiagnostic(
+          bundle,
+          relativePath,
+          "reserved_log_invalid_date",
+          `Log H2 heading is not a valid calendar date: ${heading.text}`,
+        ),
+      );
       return;
     }
     sections.push(heading);
   });
   if (!sections.length) {
-    diagnostics.push(conformanceDiagnostic(
-      bundle,
-      relativePath,
-      "reserved_log_missing_date_section",
-      "Reserved log.md must contain at least one valid ISO-dated H2 section.",
-    ));
+    diagnostics.push(
+      conformanceDiagnostic(
+        bundle,
+        relativePath,
+        "reserved_log_missing_date_section",
+        "Reserved log.md must contain at least one valid ISO-dated H2 section.",
+      ),
+    );
   }
   for (let index = 1; index < sections.length; index += 1) {
     if (sections[index - 1].text <= sections[index].text) {
-      diagnostics.push(conformanceDiagnostic(
-        bundle,
-        relativePath,
-        "reserved_log_dates_not_descending",
-        "Log date sections must be ordered newest first without duplicate dates.",
-      ));
+      diagnostics.push(
+        conformanceDiagnostic(
+          bundle,
+          relativePath,
+          "reserved_log_dates_not_descending",
+          "Log date sections must be ordered newest first without duplicate dates.",
+        ),
+      );
       break;
     }
   }
   sections.forEach((section) => {
-    const nextHeading = headings.find((heading) => (
-      heading.startLine > section.startLine && heading.level <= section.level
-    ));
+    const nextHeading = headings.find(
+      (heading) => heading.startLine > section.startLine && heading.level <= section.level,
+    );
     const end = nextHeading ? nextHeading.startLine : Number.POSITIVE_INFINITY;
-    const hasListItem = structure.items.some((item) => (
-      item.startLine > section.startLine && item.startLine < end
-    ));
+    const hasListItem = structure.items.some(
+      (item) => item.startLine > section.startLine && item.startLine < end,
+    );
     if (!hasListItem) {
-      diagnostics.push(conformanceDiagnostic(
-        bundle,
-        relativePath,
-        "reserved_log_missing_list_item",
-        `Log date section ${section.text} must contain at least one prose list item.`,
-      ));
+      diagnostics.push(
+        conformanceDiagnostic(
+          bundle,
+          relativePath,
+          "reserved_log_missing_list_item",
+          `Log date section ${section.text} must contain at least one prose list item.`,
+        ),
+      );
     }
   });
   return diagnostics;
@@ -349,11 +381,19 @@ function parseMarkdownText(bundle, relativePath, text, sourcePath, options) {
   const frontmatter = split.frontmatter || {};
   const warnings = [];
   if (!reserved && !split.frontmatter) {
-    warnings.push({ code: "missing_frontmatter", path: relativePath, message: "Concept file has no YAML frontmatter." });
+    warnings.push({
+      code: "missing_frontmatter",
+      path: relativePath,
+      message: "Concept file has no YAML frontmatter.",
+    });
   }
   const validType = typeof frontmatter.type === "string" && frontmatter.type.trim() !== "";
   if (!reserved && !validType) {
-    warnings.push({ code: "missing_type", path: relativePath, message: "Concept file type must be a non-empty string." });
+    warnings.push({
+      code: "missing_type",
+      path: relativePath,
+      message: "Concept file type must be a non-empty string.",
+    });
   }
   const hasCustomId = Object.prototype.hasOwnProperty.call(frontmatter, "id");
   const customIdValid = hasCustomId && validOkfConceptUri(frontmatter.id);
@@ -361,28 +401,41 @@ function parseMarkdownText(bundle, relativePath, text, sourcePath, options) {
     warnings.push({
       code: "invalid_id",
       path: relativePath,
-      message: "Concept id must match okf://<bundle>/<concept-id> with non-empty safe path segments.",
+      message:
+        "Concept id must match okf://<bundle>/<concept-id> with non-empty safe path segments.",
     });
   }
   const conformanceDiagnostics = reserved
     ? validateReservedDocument(bundle, relativePath, split)
     : warnings
-      .filter((warning) => warning.code === "missing_frontmatter" || warning.code === "missing_type")
-      .map((warning) => conformanceDiagnostic(bundle, relativePath, warning.code, warning.message));
-  const title = frontmatter.title || extractTitle(split.body, path.basename(relativePath).replace(/\.md$/i, ""));
+        .filter(
+          (warning) => warning.code === "missing_frontmatter" || warning.code === "missing_type",
+        )
+        .map((warning) =>
+          conformanceDiagnostic(bundle, relativePath, warning.code, warning.message),
+        );
+  const title =
+    frontmatter.title ||
+    extractTitle(split.body, path.basename(relativePath).replace(/\.md$/i, ""));
   const pathUri = `okf://${bundle.id}/${relativePath}`;
-  const conceptId = reserved
-    ? relativePath
-    : normalizeSlashes(relativePath).replace(/\.md$/i, "");
+  const conceptId = reserved ? relativePath : normalizeSlashes(relativePath).replace(/\.md$/i, "");
   const uri = `okf://${bundle.id}/${conceptId}`;
   const customId = customIdValid ? frontmatter.id : null;
-  const signals = normalizeV02Signals({ frontmatter, body: split.body }, {
-    asOf: options && options.asOf,
-  });
-  const v02Diagnostics = signals.diagnostics.map((entry) => Object.assign({
-    bundle: bundle.id,
-    path: relativePath,
-  }, entry));
+  const signals = normalizeV02Signals(
+    { frontmatter, body: split.body },
+    {
+      asOf: options && options.asOf,
+    },
+  );
+  const v02Diagnostics = signals.diagnostics.map((entry) =>
+    Object.assign(
+      {
+        bundle: bundle.id,
+        path: relativePath,
+      },
+      entry,
+    ),
+  );
   warnings.push.apply(warnings, v02Diagnostics);
   return {
     bundle: bundle.id,
