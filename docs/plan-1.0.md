@@ -1,6 +1,6 @@
 # okf-mcp 1.0 master plan: a knowledge runtime for autonomous agents
 
-Status: revision 3, 2026-10-24, after independent review and confirmation pass. Owner: maintainer. Readers: the maintainer and the agents assigned to work packages.
+Status: revision 4, 2026-10-24, updated after WP7 landed. Owner: maintainer. Readers: the maintainer and the agents assigned to work packages.
 
 ## 0. How to use this document
 
@@ -24,7 +24,7 @@ The reference deployment is an SEO agent (one agent per customer, one bundle per
 | B-2 | OKF v0.2 conformance is kept. okf-mcp additions (typed relations, `okf://` locators, section anchors, policies, caches) stay extensions, documented as such, and never required to read a bundle. |
 | B-3 | Local-first. No database server. Default install makes no network calls. Network features (remote bundles, API embedders, git sync) are opt-in per flag or config, with the destination allowlisted and credentials taken from the environment only. |
 | B-4 | Isolation by construction: one process serves one bundle or one project. Nothing loaded into a process can be reached by a process that did not load it. Multi-tenant hosting is the deployer's composition of processes, not a feature of okf-mcp. |
-| B-5 | Writes are guarded: validation before publish, attributed actor, required provenance, no implicit adoption of hand-authored content, revision checks on update. Derived files (indexes, caches) never make a tenant's git worktree dirty. `.okf-proposals/` is not derived; it stays under the root for compatibility (`store.js:157`), and `--git-commit` requires it to be git-ignored or relocated with `--proposal-root` (documented in WP7). |
+| B-5 | Writes are guarded: validation before publish, attributed actor, required provenance, no implicit adoption of hand-authored content, revision checks on update. Derived files (indexes, caches) never make a tenant's git worktree dirty. `.okf-proposals/` is not derived; it stays under the root for compatibility (`store.js:157`; the dirty-worktree check is `prepareGit` in `src/authoring/git-preflight.js`), and `--git-commit` requires it to be git-ignored or relocated with `--proposal-root` (documented in WP7). |
 | B-6 | Catalog content is data, never instructions. Nothing in a bundle executes. Catalog text (any frontmatter value or body text) appears only in structured result payloads and resource bodies; never in `initialize` instructions, tool descriptions or schemas, prompts, or error messages. Structured listings (`resources/list`, search and context results) are result payloads under this rule. |
 | B-7 | Agent- and vendor-agnostic. The same behaviour through MCP stdio, MCP HTTP, CLI, and the Node library. No dependency on a model vendor; embedders are pluggable and optional. |
 | B-8 | Dependency budget: at most 6 runtime dependencies (4 today). Optional capabilities are separate packages, never pulled in by the default install. Vendored code carries its licence header and a provenance note. |
@@ -113,13 +113,13 @@ Code quality:
 
 | ID | Rule |
 |---|---|
-| Q-1 | No source file above 800 lines; `src/live-authoring.js` (2,331) and `src/mcp-server.js` (1,613) are split in WP7. |
+| Q-1 | No new or split source file above 800 lines. WP7 split the two largest; files still above the cap after formatting are grandfathered by a shrink-only ratchet test (`test/source-size`) and have split owners: `indexer.js` 1,221 → WP2; `authoring.js` 1,092 → `authoring/proposals.js` in WP4; `cli.js` 996 → WP6; `migration.js` 865 → WP5. |
 | Q-2 | Tools grouped by area (`mcp/tools/search.js`, `graph.js`, `authoring.js`, `producers.js`, ...), each exporting schema plus handler; the server composes a registry. |
 | Q-3 | `src/index.js` keeps every 0.9.1 export (B-9); internals get JSDoc `@internal`; a test asserts the 0.9.1 list is a subset. |
-| Q-4 | Lint and format in CI with Biome (single binary, no dependency tree); no new runtime dependency. |
+| Q-4 | Lint and format in CI with Biome 2.5.15 (single binary, no dependency tree); no new runtime dependency. Rules that would need code changes are warnings for now (useOptionalChain 267, useNodejsImportProtocol 36, useIterableCallbackReturn 19, noPrototypeBuiltins 18, others 32); each WP leaves the files it owns warning-free, and the formatter carve-out for `src/search*` and `scripts/search-benchmark.js` is removed by WP1 and WP0. The formatting commit is listed in `.git-blame-ignore-revs`. |
 | Q-5 | Every behaviour change ships with a test; retrieval changes also ship a fixture metric. |
 | Q-6 | Comments explain why; match the current style (CommonJS, `"use strict"`, small pure functions). |
-| Q-7 | CI matrix: Node 22 and 24 on `ubuntu-latest`, plus `npm test` on `windows-latest` (12 modules handle `path.sep`). |
+| Q-7 | CI matrix: Node 22 and 24 on `ubuntu-latest`, plus `npm test` on `windows-latest` (12 modules handle `path.sep`). POSIX permission assertions are skipped on Windows; if the runner lacks the symlink privilege, the ungated symlink tests in `test/assets.test.js`, `test/git-source.test.js`, and `test/producer.test.js` get the same `win32` guard already used in `test/okf-mcp.test.js`. |
 
 Security:
 
@@ -146,8 +146,12 @@ src/
   cache/     store.js                                       XDG cache, content-hash keyed (R-9, O-3)
   context/   sections.js  assemble.js                       R-7, C-1, C-2
   policy/    write-policy.js  duplicates.js  suggest.js     W-1..W-5
-  authoring/ proposals.js  live.js  git-publish.js  sync.js split of authoring.js + live-authoring.js; W-7
-  mcp/       server.js  registry.js  http.js  tools/*.js    Q-2; stdio + http (I-1, I-2)
+  authoring/ live.js  git-publish.js  git-preflight.js  candidates.js  receipts.js  staging.js  shared.js   (WP7, done)
+             proposals.js (split of authoring.js, WP4)   sync.js (W-7, WP6)
+  mcp/       server.js  registry.js  resources.js                                                            (WP7, done)
+             tools/{catalog,search,graph,provenance,computation,migration,remote,proposals,live-authoring,producers}.js
+             http.js (I-2, WP6)
+  mcp-server.js  live-authoring.js                        one-line shims at the old paths (kept through 1.0)
   producers/ host.js  publisher.js                           unchanged roles
   http-server.js                                             existing REST authoring API
 ```
@@ -269,6 +273,7 @@ Rules: thresholds are written down before the change that targets them; fixture 
 - Default search semantics change from `all` to `auto` in 0.10 for `search_concepts` and `list_concepts.query`; `mode: "all"` restores the old behaviour.
 - `score` magnitudes change with stemming; consumers use ordering and `relevance`, not raw scores.
 - Error messages stop embedding concept titles (S-3); they carry URIs and paths.
+- `LiveAuthoringService` no longer carries the git helper methods (`runGit`, `prepareGit`, `commitGit`, and the other publication internals); they live on `GitPublisher`, reachable as `service.git`. Subclass overrides of those methods no longer intercept publication (0.10, WP7). The exported names in `src/index.js` are unchanged.
 - Nothing else is removed. Any further removal needs an entry here before the WP merges.
 
 ## 11. Definition of done
@@ -281,7 +286,7 @@ File ownership while a WP is open: a file has one owner; others wait or send a p
 
 | Group | WPs | May start when | Owns |
 |---|---|---|---|
-| A | WP7, then WP0 and WP8 scaffolding | now (WP7 first, alone, on `src/mcp-server.js` and `src/live-authoring.js`) | WP7: both large files, `test/mcp-schema-snapshot`; WP0: `test/fixtures/`, `scripts/`, `eval:search` |
+| A | WP7 (done), then WP0 and WP8 scaffolding | now | WP7: both large files, `test/mcp-contract-snapshot.test.js`, `test/snapshots/`; WP0: `test/fixtures/`, `scripts/`, `eval:search` |
 | B | WP1, WP2 | WP7 merged, WP0 baseline committed | WP1: `src/search/`, `src/search-index.js`, `src/search.js`, `mcp/tools/search.js`; WP2: `src/indexer/`, `authoring/live.js`, `mcp/server.js` state |
 | C | WP3a, WP3b, WP4 | WP1 and WP2 merged | WP3a: `src/context/`; WP3b: `src/cache/`, `src/search/dense.js`, `fusion.js`; WP4: `src/policy/write-policy.js` |
 | D | WP6, then WP5 | Group C merged | WP6: `mcp/http.js`, `authoring/sync.js`; WP5 (after WP6): `src/policy/duplicates.js`, `suggest.js`, receipts |
@@ -296,7 +301,7 @@ Shared files have one owner per group; everyone else sends a patch to the owner'
 | `.github/workflows/ci.yml` | WP7 first, WP8 after WP7 merges | WP0 (`eval:search` job) | — | WP8 (ratio gates) |
 | `mcp/tools/search.js` | WP7 (move only) | WP1 | WP3b (hybrid options) | — |
 | `mcp/tools/context.js` | — | — | WP3a | — |
-| `mcp/tools/authoring.js` | WP7 (move only) | WP2 (index refresh) | WP4 (error shapes) | WP5 (advice) after WP6 |
+| `mcp/tools/live-authoring.js`, `mcp/tools/proposals.js` | WP7 (done) | WP2 (index refresh) | WP4 (error shapes) | WP5 (advice) after WP6 |
 | `mcp/server.js` | WP7 | WP2 (state) | — | WP6 (HTTP, call queue) |
 
 Brief template for an agent:
@@ -317,3 +322,5 @@ Branch per WP, rebased on main; one PR per WP; CI green including `eval:search` 
 Revision 1 was reviewed independently on 2026-10-24. Blockers fixed in revision 2: cache location (R-9, B-5), evidence for the confidence flag (R-4, `results/abstain-signal.json`), export curation versus the additive promise (Q-3, B-9). Major items folded in: SDK HTTP facts (I-2), file collisions between parallel WPs (section 12), evaluation gating (WP0, section 8), CI budget flakiness (section 4.6, WP8), index update semantics (section 6, WP2), stemmer vendoring (WP1), language defaults (R-2), testability of B-6 (S-3), off-box data paths (B-3, O-2, W-7), existing catalogs (W-1, section 5), remote bundles (R-9), repo-runnable definition of done (section 11).
 
 The confirmation pass on revision 2 returned "ready after listed fixes"; revision 3 applies them: shared-file ownership (section 12), held-out gating rule consistent with WP0 (section 8, section 11), `languages: auto` defined at bundle level and acceptance measured with the shipped default (R-2, WP1), `resources/list` kept unchanged and exempt under B-6 (S-3), `sectionAnchor` labels for WP3a (WP0), `.okf-proposals/` location rule (B-5), cache fallbacks and Windows location (R-9), strict comparison in the confidence flag (R-4).
+
+Revision 4 records WP7 as landed (branch `wp7/code-structure`, 11 commits, 193 tests, MCP contract and tool-order snapshots byte-identical to 0.9.1). An independent Codex review of the branch found one Windows CI failure (fixed by a `win32` skip), the `LiveAuthoringService` surface change (now a section 10 entry), and the unordered snapshot comparison (fixed with ordered snapshots). Sections 6, 10, 12 and Q-1, Q-4, Q-7 updated to match what was built.
