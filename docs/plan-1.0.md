@@ -181,7 +181,9 @@ Sizes: S ≤ 1 day of agent work, M ≤ 3, L ≤ 6. All Must for 1.0 unless mark
 - `npm run eval:search` produces a JSON report (Recall@5, nDCG@10, MRR, P@1, zero-result rate, `lowConfidence` precision and recall on no-answer queries, p50/p95 latency, RSS) and a Markdown summary; `scripts/search-benchmark.js` learns graded qrels and nDCG or is replaced by the runner.
 - Acceptance: both fixtures validate clean in `--root` and `--project` mode; CI runs `eval:search`; the baseline report is committed as the first artifact.
 
-### WP1 Lexical search 0.10 (M)
+### WP1 Lexical search 0.10 (M; done)
+
+- Done on branch `wp1/lexical-search` (12 commits, merged as `f57e223`): vendored it/en stemmers with parity test, language registry with per-bundle detection, `src/search/{lexical,query,languages,cli-options}.js` with shims, modes `auto|all|any`, literal terms (quoted or identifier-like) matched as whole compounds or adjacent raw runs and never against stems, coverage over logical terms, `allTermsTotal`, `lowConfidence`, opt-in floors and freshness prior, MCP and CLI surfaces, `languages` carried through project config and MCP rebuilds. Measured on the full sets: alpinaria Recall@5 0.742 [0.697, 0.784], nDCG@10 0.814, P@1 0.917, zero-result 0; atlas 0.760 [0.693, 0.823], 0.790, 0.831, 0; held-out floors hold; p95 18.9 ms and stemmed ÷ unstemmed 2.12× at 5k. Three independent review rounds; all findings closed. The original specification follows for reference.
 
 - Owns `src/search/` (new) and `src/search-index.js`, `src/search.js` (to be moved). Implements R-1 to R-6, R-11; keeps `searchConcepts(index, options)` backward compatible; exposes `addDocuments(index, docs)` / `removeDocuments(index, uris)` on the search index for WP2.
 - Stemmers: trimmed derivative of `@nlpjs/lang-it` and `@nlpjs/lang-en-min` (`Among`, `BaseStemmer` without container or tokenizer, two stemmers), MIT headers kept, provenance note, bounded per-word cache. Upstream pinned as a devDependency at the latest stable 4.x release (parity so far measured against 5.0.0-alpha.5); `test/stem-parity.test.js` asserts zero disagreements on the 1,998-word comparison list against the pinned version.
@@ -190,7 +192,9 @@ Sizes: S ≤ 1 day of agent work, M ≤ 3, L ≤ 6. All Must for 1.0 unless mark
 - Tests: adjust `test/search.test.js` only where it asserted all-term semantics under the default; new tests for stop words, stems, diacritics, exact field, confidence fields, floors, pagination and `allTermsTotal`.
 - Acceptance (pre-registered in `test/fixtures/retrieval/thresholds.json`; point estimates on the full sets, 95% bootstrap CI reported; the 0.9.1 baseline on the enlarged sets is Recall@5 0.29 alpinaria and 0.27 atlas; measured with the shipped default `languages: auto`): alpinaria Recall@5 ≥ 0.72, nDCG@10 ≥ 0.78, zero-result rate 0 on answerable queries, `lowConfidence` recall ≥ 50% on no-answer queries with ≤ 3% of answerable queries with a relevant top-1 flagged; atlas Recall@5 ≥ 0.70; p95 ≤ 25 ms and stemmed ÷ unstemmed ≤ 2.5× at 5k.
 
-### WP2 Functional index update and write-path performance (M)
+### WP2 Functional index update and write-path performance (M; done)
+
+- Done on branch `wp2/index-update-final` (14 commits, merged as `5240904`): `src/indexer/{build,assemble,update,resolve,paths,cache,index}.js` with shim, `updateIndex` with dependency tracking and a 0.2 change-ratio fallback, `refreshIndex` over Markdown and referenced assets (size + `mtimeNs`), `IndexCache` keyed by snapshot identity, `indexInputs` for server/service compatibility, one write-path bug found and fixed by the property test (create + replace in one batch), `scripts/write-benchmark.js` (`npm run bench:write`). Measured: incremental ÷ full 0.04; git-off batch p95 ≈ 180–220 ms; git-on p95 ≈ 630–730 ms, owed to WP6 (git preflight). Two independent reviews; all findings closed or documented (W-6). The original specification follows for reference.
 
 - Owns `src/indexer/` and the write paths in `authoring/live.js` after WP7. Implements W-6 per section 6; replaces `buildIndex` calls at `live-authoring.js:1958, 2029, 2214, 2277` and the `rebuildStateIndex` calls in the server; producers and `load_remote_bundle` keep full builds through the change-ratio fallback.
 - `applyFilters`: memoise link sets per index in a `WeakMap`, compute lazily, index edges by source (the `relationType` filter is O(concepts × edges) at `search.js:170`; after WP1 the function lives in `src/search/query.js`).
@@ -204,7 +208,9 @@ Sizes: S ≤ 1 day of agent work, M ≤ 3, L ≤ 6. All Must for 1.0 unless mark
 - Tests: packing never exceeds `budgetTokens`; deterministic order; anchors stable across whitespace-only edits; sentinel test (S-3) extended to `get_context`.
 - Acceptance: `get_context` returns the labelled `sectionAnchor` within its packed sections for ≥ 80% of the labelled development queries on both fixtures (WP0 labels).
 
-### WP3b Embedding client and vector cache (M; may start in Group B)
+### WP3b Embedding client and vector cache (M; done)
+
+- Done on branches `wp3b/embed-client` and `wp3b/embed-client-final` (20 commits, merged as `61200ca`): `src/embed/{interface,units,openai,prepare}.js`, `src/cache/{store,lock,files,paths}.js`, 64 offline tests with a fake OpenAI-compatible server, `scripts/embed-smoke.js`. Live run against api.openai.com with `text-embedding-3-small`: alpinaria 228 units in one request, 42,765 prompt tokens, 0.5–1.9 s, 0.0009 USD; second run zero requests. Five independent review passes; the remaining lock and directory races are documented in the file headers as windows Node cannot close without `openat`. The original specification follows for reference.
 
 - R-8, R-8a, R-9, O-3, without any search wiring: `src/embed/interface.js` (the embedder contract and a validator for implementations), `src/embed/openai.js` (the OpenAI-compatible client), `src/cache/store.js` (JSON manifest plus a float32 binary file and a sidecar of section ids and content hashes under the XDG directory; rebuild on any mismatch; delete-safe), and a `prepareEmbeddings(index, embedder, cache)` function that embeds only sections whose hash is missing.
 - Tests, all offline: a fake OpenAI-compatible server on `node:http` returning deterministic hash-derived vectors, exercising batching at the input and token limits, `dimensions`, output order by `index`, 429 and 5xx retries with `Retry-After`, timeouts, key-from-env, refusal of a base URL that is not in project config, error masking (no input text in any error), and `usage` accounting; cache invalidation on content and embedder change; deletion mid-run; git-backed apply succeeds with a populated cache (the blocker found in review). A live smoke script (`scripts/embed-smoke.js`) runs only when `OKF_EMBED_SMOKE=1` and the key variable are set; never in CI.
@@ -304,7 +310,7 @@ File ownership while a WP is open: a file has one owner; others wait or send a p
 | Group | WPs | May start when | Owns |
 |---|---|---|---|
 | A | WP7 (done), WP0 (done), WP8 scaffolding | now | WP7: both large files, `test/mcp-contract-snapshot.test.js`, `test/snapshots/`; WP0: `test/fixtures/`, `scripts/`, `eval:search` |
-| B | WP1, WP2, WP3b | WP7 merged, WP0 baseline committed | WP1: `src/search/`, `src/search-index.js`, `src/search.js`, `mcp/tools/search.js`; WP2: `src/indexer/`, `authoring/live.js`, `mcp/server.js` state; WP3b: `src/embed/`, `src/cache/`, `scripts/embed-smoke.js`, its tests (no `project.js`, no search files) |
+| B | WP1 (done), WP2 (done), WP3b (in review) | WP7 merged, WP0 baseline committed | WP1: `src/search/`, `src/search-index.js`, `src/search.js`, `mcp/tools/search.js`; WP2: `src/indexer/`, `authoring/live.js`, `mcp/server.js` state; WP3b: `src/embed/`, `src/cache/`, `scripts/embed-smoke.js`, its tests (no `project.js`, no search files) |
 | C | WP3a, WP3c, WP4 | WP1, WP2 and WP3b merged | WP3a: `src/context/`; WP3c: `src/search/dense.js`, `fusion.js`, `scripts/eval-search.js --embedder`; WP4: `src/policy/write-policy.js` |
 | D | WP6, then WP5 | Group C merged | WP6: `mcp/http.js`, `authoring/sync.js`; WP5 (after WP6): `src/policy/duplicates.js`, `suggest.js`, receipts |
 | E | WP9 | everything merged | release files |
