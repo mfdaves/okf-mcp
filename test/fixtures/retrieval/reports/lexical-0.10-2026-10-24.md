@@ -1,6 +1,6 @@
 # Retrieval evaluation — src/search.js
 
-Generated 2026-10-24T17:25:49.712Z · Node v24.17.0 (linux x64, gc exposed: false) · search module `src/search.js` · limit 10 · split all · bootstrap 1000 samples (seed 20261024)
+Generated 2026-10-24T17:57:53.473Z · Node v24.17.0 (linux x64, gc exposed: false) · search module `src/search.js` · limit 10 · split all · bootstrap 1000 samples (seed 20261024)
 
 Produced by `scripts/eval-search.js`. Routine runs write to the git-ignored `test/fixtures/retrieval/reports/latest.{json,md}`; a committed baseline is produced only with an explicit `--out test/fixtures/retrieval/reports/baseline-{date}`.
 
@@ -8,8 +8,8 @@ Produced by `scripts/eval-search.js`. Routine runs write to the git-ignored `tes
 
 | fixture | queries | Recall@5 (95% CI) | nDCG@10 (95% CI) | MRR@10 | P@1 | zero-result | no-answer returned any | lowConfidence P / R | p95 ms | RSS MB |
 |---|---|---|---|---|---|---|---|---|---|---|
-| alpinaria | 203 | 0.748 [0.703, 0.788] | 0.817 [0.782, 0.848] | 0.940 | 0.917 | 0.0% | 95.5% | 64.7% / 50.0% | 3.93 | 159.8 |
-| atlas | 99 | 0.760 [0.693, 0.823] | 0.789 [0.727, 0.846] | 0.871 | 0.831 | 0.0% | 100.0% | 63.6% / 70.0% | 4.30 | 170 |
+| alpinaria | 203 | 0.742 [0.697, 0.784] | 0.814 [0.778, 0.846] | 0.940 | 0.917 | 0.0% | 95.5% | 64.7% / 50.0% | 1.96 | 117.6 |
+| atlas | 99 | 0.760 [0.693, 0.823] | 0.790 [0.729, 0.847] | 0.872 | 0.831 | 0.0% | 100.0% | 63.6% / 70.0% | 2.87 | 158.3 |
 
 ## Fixture alpinaria
 
@@ -20,9 +20,9 @@ Queries: 203 (181 answerable, 22 no-answer, 52 with sectionAnchor)
 
 | metric | value | 95% CI |
 |---|---|---|
-| Recall@5 | 0.748 | [0.703, 0.788] |
-| MustRecall@5 | 0.882 | [0.837, 0.923] |
-| nDCG@10 | 0.817 | [0.782, 0.848] |
+| Recall@5 | 0.742 | [0.697, 0.784] |
+| MustRecall@5 | 0.877 | [0.831, 0.917] |
+| nDCG@10 | 0.814 | [0.778, 0.846] |
 | MRR@10 | 0.940 | [0.907, 0.968] |
 | P@1 | 0.917 | [0.873, 0.956] |
 | hit@10 | 0.972 | – |
@@ -33,10 +33,10 @@ Queries: 203 (181 answerable, 22 no-answer, 52 with sectionAnchor)
 
 | group | n | Recall@5 | MustRecall@5 | nDCG@10 | MRR@10 | P@1 | hit@10 | zero-result | distractor outranks |
 |---|---|---|---|---|---|---|---|---|---|
-| accent | 11 | 87.9% | 100.0% | 0.891 | 0.932 | 90.9% | 100.0% | 0.0% | – |
+| accent | 11 | 84.8% | 100.0% | 0.897 | 0.932 | 90.9% | 100.0% | 0.0% | – |
 | disambig | 12 | 65.3% | 83.3% | 0.767 | 1.000 | 100.0% | 100.0% | 0.0% | 2/12 |
-| exact | 18 | 88.5% | 88.9% | 0.913 | 0.963 | 94.4% | 100.0% | 0.0% | 0/1 |
-| freshness | 11 | 78.8% | 90.9% | 0.786 | 1.000 | 100.0% | 100.0% | 0.0% | 7/11 |
+| exact | 18 | 88.5% | 88.9% | 0.915 | 0.963 | 94.4% | 100.0% | 0.0% | 0/1 |
+| freshness | 11 | 72.0% | 81.8% | 0.720 | 1.000 | 100.0% | 100.0% | 0.0% | 7/11 |
 | keyword | 22 | 86.0% | 90.9% | 0.893 | 1.000 | 100.0% | 100.0% | 0.0% | 0/2 |
 | mixed-lang | 14 | 73.8% | 96.4% | 0.835 | 1.000 | 100.0% | 100.0% | 0.0% | 1/2 |
 | morph | 16 | 69.3% | 88.5% | 0.803 | 0.906 | 87.5% | 93.8% | 0.0% | 0/1 |
@@ -48,16 +48,16 @@ Queries: 203 (181 answerable, 22 no-answer, 52 with sectionAnchor)
 
 | group | n | Recall@5 | MustRecall@5 | nDCG@10 | MRR@10 | P@1 | hit@10 | zero-result | distractor outranks |
 |---|---|---|---|---|---|---|---|---|---|
-| en | 85 | 73.0% | 87.1% | 0.797 | 0.917 | 88.2% | 96.5% | 0.0% | 7/20 |
-| it | 80 | 77.6% | 87.7% | 0.840 | 0.959 | 95.0% | 97.5% | 0.0% | 3/12 |
+| en | 85 | 72.6% | 87.1% | 0.797 | 0.917 | 88.2% | 96.5% | 0.0% | 7/20 |
+| it | 80 | 76.7% | 86.5% | 0.832 | 0.959 | 95.0% | 97.5% | 0.0% | 3/12 |
 | mixed | 16 | 70.8% | 96.9% | 0.808 | 0.969 | 93.8% | 100.0% | 0.0% | 1/2 |
 
 ### By split
 
 | group | n | Recall@5 | MustRecall@5 | nDCG@10 | MRR@10 | P@1 | hit@10 | zero-result | distractor outranks |
 |---|---|---|---|---|---|---|---|---|---|
-| dev | 129 | 74.8% | 88.4% | 0.816 | 0.949 | 93.0% | 97.7% | 0.0% | 9/26 |
-| heldout | 52 | 74.9% | 87.8% | 0.820 | 0.920 | 88.5% | 96.2% | 0.0% | 2/8 |
+| dev | 129 | 74.3% | 87.6% | 0.812 | 0.949 | 93.0% | 97.7% | 0.0% | 9/26 |
+| heldout | 52 | 74.2% | 87.8% | 0.819 | 0.920 | 88.5% | 96.2% | 0.0% | 2/8 |
 
 ### No-answer queries
 
@@ -93,13 +93,13 @@ lowConfidence (mode === "any" && top1.coverage < 0.5): flagged 11/22 no-answer (
 
 | metric | value |
 |---|---|
-| query latency p50 | 2.22 ms |
-| query latency p95 | 3.93 ms |
-| query latency mean / max | 2.45 / 7.46 ms |
-| OKF index build | 86.3 ms |
-| search index prepare | 79.2 ms |
-| warm-up pass | 626.7 ms |
-| RSS before build / after build / end | 59.5 / 122.2 / 159.8 MB |
+| query latency p50 | 1.22 ms |
+| query latency p95 | 1.96 ms |
+| query latency mean / max | 1.33 / 3.38 ms |
+| OKF index build | 77.3 ms |
+| search index prepare | 66.9 ms |
+| warm-up pass | 363.1 ms |
+| RSS before build / after build / end | 59.7 / 116.4 / 117.6 MB |
 
 ### Per query (answerable)
 
@@ -129,15 +129,15 @@ lowConfidence (mode === "any" && top1.coverage < 0.5): flagged 11/22 no-answer (
 | Q22 | dev | mixed-lang | mixed | policy claim riciclato | 4 | 1 | 1 | alpinaria/policies/green-claims (2) | – |
 | Q23 | heldout | mixed-lang | mixed | brief guida scarponi invernali women | 10 | 1 | 1 | alpinaria/content-briefs/guida-scarponi-invernali-donna (2) | – |
 | Q24 | heldout | exact | en | TRK-W-042 | 3 | 1 | 1 | alpinaria/products/trk-w-042-dolomiti-aquastop-w (2) | – |
-| Q25 | dev | exact | en | /en/womens-winter-hiking-boots/ | 6 | 1 | 1 | alpinaria/landing-pages/en-womens-winter-hiking-boots (2) | no |
+| Q25 | dev | exact | en | /en/womens-winter-hiking-boots/ | 5 | 1 | 1 | alpinaria/landing-pages/en-womens-winter-hiking-boots (2) | no |
 | Q26 | heldout | exact | en | AquaStop | 10 | 3 | miss | alpinaria/products/trk-m-042-dolomiti-aquastop-m (0) | – |
 | Q27 | dev | exact | it | Montevia | 5 | 1 | 1 | alpinaria/competitors/montevia (2) | – |
-| Q28 | dev | exact | it | /scarponi-da-trekking/donna/ | 10 | 1 | 1 | alpinaria/landing-pages/it-scarponi-da-trekking-donna (2) | – |
+| Q28 | dev | exact | it | /scarponi-da-trekking/donna/ | 8 | 1 | 1 | alpinaria/landing-pages/it-scarponi-da-trekking-donna (2) | – |
 | Q29 | dev | exact | en | JKT-U-310 | 2 | 1 | 1 | alpinaria/products/jkt-u-310-vetta-guscio-u (2) | – |
 | Q30 | dev | exact | en | x-default | 3 | 1 | 2,1 | alpinaria/experiments/hreflang-x-default-en (2) | – |
 | Q31 | dev | morph | it | scarpone trekking donna | 10 | 1 | 3,1 | alpinaria/landing-pages/it-scarponi-da-trekking-donna (2) | – |
 | Q32 | dev | morph | en | canonicalize filtered category pages | 10 | miss | miss,miss | playbook/guidelines/pagination (0) | – |
-| Q33 | dev | morph | it | impermeabilizzazione scarponi | 5 | 1 | 1,2 | alpinaria/seo-findings/featured-snippet-impermeabilizzare (2) | – |
+| Q33 | dev | morph | it | impermeabilizzazione scarponi | 5 | 1 | 2,1 | alpinaria/content-briefs/guida-impermeabilizzare-scarponi (2) | – |
 | Q34 | heldout | morph | en | redirects outlet | 3 | 1 | 1,2 | alpinaria/technical-issues/redirect-chains-outlet (2) | – |
 | Q35 | dev | morph | it | pagina categoria duplicata | 2 | 1 | 1,2 | alpinaria/decisions/canonical-pagine-categoria-duplicate (2) | – |
 | Q36 | heldout | morph | en | missing alt texts images | 2 | 2 | miss,2 | playbook/guidelines/image-alt-text (0) | – |
@@ -201,7 +201,7 @@ lowConfidence (mode === "any" && top1.coverage < 0.5): flagged 11/22 no-answer (
 | Q102 | dev | mixed-lang | mixed | policy claim medici | 4 | 1 | 1 | alpinaria/policies/medical-health-claims (2) | – |
 | Q103 | heldout | exact | en | WIN-W-309 | 6 | 1 | 1 | alpinaria/products/win-w-309-nevaio-polar-w (2) | – |
 | Q104 | dev | exact | it | SCK-U-705 | 4 | 1 | 1 | alpinaria/products/sck-u-705-rifugio-calze-merino-heavy-u (2) | – |
-| Q105 | dev | exact | en | /en/approach-shoes/ | 10 | 1 | 1 | alpinaria/landing-pages/en-approach-shoes (2) | – |
+| Q105 | dev | exact | en | /en/approach-shoes/ | 7 | 1 | 1 | alpinaria/landing-pages/en-approach-shoes (2) | – |
 | Q106 | dev | exact | it | /abbigliamento/pile/ | 2 | 1 | 1 | alpinaria/landing-pages/it-pile (2) | – |
 | Q107 | dev | exact | en | nordpasso.com | 1 | 1 | 1 | alpinaria/competitors/nordpasso (2) | – |
 | Q108 | heldout | exact | it | Dolomyths | 1 | 1 | 1 | alpinaria/audiences/trail-runner (2) | – |
@@ -221,7 +221,7 @@ lowConfidence (mode === "any" && top1.coverage < 0.5): flagged 11/22 no-answer (
 | Q122 | heldout | morph | it | cannibalizzazioni tra pagine | 3 | 1 | 1 | alpinaria/seo-findings/cannibalizzazione-scarponi-donna (2) | – |
 | Q123 | dev | morph | en | hydrating the filter widget | 3 | 1 | 1 | alpinaria/technical-issues/inp-filtri-plp (2) | no |
 | Q124 | heldout | accent | it | priorita editoriale 2027 | 3 | 1 | 1 | alpinaria/decisions/trail-running-line-priority-2027 (2) | – |
-| Q125 | dev | accent | it | sneaker Baita Citta | 3 | 1 | 2,3 | alpinaria/product-lines/baita (1) | – |
+| Q125 | dev | accent | it | sneaker Baita Citta | 3 | 1 | 1,2 | alpinaria/products/lfs-w-901-baita-citt-w (2) | – |
 | Q126 | dev | accent | it | stagionalita cluster scarponi donna | 1 | 1 | 1 | alpinaria/keyword-clusters/scarponi-trekking-donna-transazionale (2) | – |
 | Q127 | dev | accent | it | profondita di catalogo Montevia | 1 | 1 | 1 | alpinaria/seo-findings/competitor-montevia-serp-share (2) | – |
 | Q128 | dev | accent | it | disponibilità immediata famiglie | 1 | 1 | 1 | alpinaria/audiences/famiglie-in-montagna (2) | – |
@@ -240,7 +240,7 @@ lowConfidence (mode === "any" && top1.coverage < 0.5): flagged 11/22 no-answer (
 | Q141 | heldout | freshness | en | referring domains count | 10 | 1 | 2 | alpinaria/seo-findings/backlink-profile-review-2026-q2 (1) | yes |
 | Q142 | dev | freshness | it | pagina categoria scarponi donna attuale | 10 | 1 | 2 | alpinaria/landing-pages/it-scarponi-da-trekking-donna-old (1) | yes |
 | Q143 | dev | freshness | en | current LCP on mobile product pages | 2 | 1 | 2 | alpinaria/seo-findings/core-web-vitals-mobile-2026-01 (1) | yes |
-| Q144 | dev | freshness | it | filtri taglia robots disallow | 10 | 1 | 3,1 | alpinaria/decisions/canonical-pagine-categoria-duplicate (2) | no |
+| Q144 | dev | freshness | it | filtri taglia robots disallow | 1 | 1 | miss,miss | alpinaria/technical-issues/parametri-filtri-indicizzati (1) | no |
 | Q145 | dev | freshness | it | noindex sulle URL con parametri | 1 | 1 | miss | alpinaria/decisions/noindex-filtri-colore-2026-03 (1) | yes |
 | Q146 | heldout | freshness | en | backlink gap to Cimalta | 1 | 1 | 1 | alpinaria/seo-findings/backlink-profile-review-2026-q3 (2) | no |
 | Q147 | dev | freshness | en | mobile CLS value | 10 | 1 | 2 | alpinaria/seo-findings/core-web-vitals-mobile-2026-01 (1) | yes |
@@ -298,8 +298,8 @@ Queries: 99 (89 answerable, 10 no-answer, 58 with sectionAnchor)
 |---|---|---|
 | Recall@5 | 0.760 | [0.693, 0.823] |
 | MustRecall@5 | 0.893 | [0.820, 0.955] |
-| nDCG@10 | 0.789 | [0.727, 0.846] |
-| MRR@10 | 0.871 | [0.810, 0.931] |
+| nDCG@10 | 0.790 | [0.729, 0.847] |
+| MRR@10 | 0.872 | [0.811, 0.931] |
 | P@1 | 0.831 | [0.753, 0.899] |
 | hit@10 | 0.944 | – |
 | zero-result rate | 0.000 | [0.000, 0.000] |
@@ -311,10 +311,10 @@ Queries: 99 (89 answerable, 10 no-answer, 58 with sectionAnchor)
 |---|---|---|---|---|---|---|---|---|---|
 | accent | 4 | 83.3% | 100.0% | 0.910 | 1.000 | 100.0% | 100.0% | 0.0% | – |
 | disambig | 6 | 94.4% | 100.0% | 0.935 | 1.000 | 100.0% | 100.0% | 0.0% | 0/6 |
-| exact | 8 | 100.0% | 100.0% | 0.992 | 1.000 | 100.0% | 100.0% | 0.0% | – |
+| exact | 8 | 100.0% | 100.0% | 1.000 | 1.000 | 100.0% | 100.0% | 0.0% | – |
 | freshness | 3 | 63.9% | 66.7% | 0.614 | 0.833 | 66.7% | 100.0% | 0.0% | 1/3 |
 | keyword | 9 | 95.6% | 100.0% | 0.972 | 1.000 | 100.0% | 100.0% | 0.0% | – |
-| mixed-lang | 4 | 79.2% | 75.0% | 0.652 | 0.800 | 75.0% | 100.0% | 0.0% | – |
+| mixed-lang | 4 | 79.2% | 75.0% | 0.663 | 0.813 | 75.0% | 100.0% | 0.0% | – |
 | morph | 6 | 61.1% | 91.7% | 0.769 | 1.000 | 100.0% | 100.0% | 0.0% | – |
 | nl-task | 39 | 75.0% | 89.7% | 0.779 | 0.861 | 82.1% | 92.3% | 0.0% | – |
 | standards | 4 | 37.5% | 75.0% | 0.567 | 0.486 | 25.0% | 100.0% | 0.0% | – |
@@ -324,16 +324,16 @@ Queries: 99 (89 answerable, 10 no-answer, 58 with sectionAnchor)
 
 | group | n | Recall@5 | MustRecall@5 | nDCG@10 | MRR@10 | P@1 | hit@10 | zero-result | distractor outranks |
 |---|---|---|---|---|---|---|---|---|---|
-| en | 58 | 73.2% | 88.8% | 0.780 | 0.873 | 82.8% | 94.8% | 0.0% | 1/7 |
+| en | 58 | 73.2% | 88.8% | 0.781 | 0.873 | 82.8% | 94.8% | 0.0% | 1/7 |
 | it | 27 | 81.5% | 92.6% | 0.829 | 0.880 | 85.2% | 92.6% | 0.0% | 0/2 |
-| mixed | 4 | 79.2% | 75.0% | 0.652 | 0.800 | 75.0% | 100.0% | 0.0% | – |
+| mixed | 4 | 79.2% | 75.0% | 0.663 | 0.813 | 75.0% | 100.0% | 0.0% | – |
 
 ### By split
 
 | group | n | Recall@5 | MustRecall@5 | nDCG@10 | MRR@10 | P@1 | hit@10 | zero-result | distractor outranks |
 |---|---|---|---|---|---|---|---|---|---|
-| dev | 62 | 74.9% | 91.1% | 0.783 | 0.867 | 82.3% | 95.2% | 0.0% | 1/6 |
-| heldout | 27 | 78.5% | 85.2% | 0.801 | 0.883 | 85.2% | 92.6% | 0.0% | 0/3 |
+| dev | 62 | 74.9% | 91.1% | 0.784 | 0.867 | 82.3% | 95.2% | 0.0% | 1/6 |
+| heldout | 27 | 78.5% | 85.2% | 0.803 | 0.883 | 85.2% | 92.6% | 0.0% | 0/3 |
 
 ### No-answer queries
 
@@ -357,13 +357,13 @@ lowConfidence (mode === "any" && top1.coverage < 0.5): flagged 7/10 no-answer (r
 
 | metric | value |
 |---|---|
-| query latency p50 | 3.09 ms |
-| query latency p95 | 4.30 ms |
-| query latency mean / max | 3.21 / 4.43 ms |
-| OKF index build | 41.7 ms |
-| search index prepare | 63.1 ms |
-| warm-up pass | 371.6 ms |
-| RSS before build / after build / end | 160.6 / 169.4 / 170 MB |
+| query latency p50 | 2.00 ms |
+| query latency p95 | 2.87 ms |
+| query latency mean / max | 2.11 / 3.55 ms |
+| OKF index build | 30.9 ms |
+| search index prepare | 36.3 ms |
+| warm-up pass | 265.1 ms |
+| RSS before build / after build / end | 117.5 / 158.2 / 158.3 MB |
 
 ### Per query (answerable)
 
@@ -390,17 +390,17 @@ lowConfidence (mode === "any" && top1.coverage < 0.5): flagged 7/10 no-answer (r
 | A19 | dev | keyword | en | advisory lock | 2 | 1 | 1 | atlas/incidents/inc-2026-027-subscription-renewal-duplicate (2) | – |
 | A20 | heldout | keyword | en | TTL | 6 | 1 | 1,2 | atlas/incidents/inc-2026-018-clickhouse-disk-full (2) | – |
 | A21 | dev | keyword | en | Temporal | 3 | 1 | 2 | atlas/runbooks/refund-queue-unstick (1) | – |
-| A22 | dev | mixed-lang | mixed | runbook riconciliazione wallet | 10 | 5 | 5 | atlas/runbooks/pagopa-reconciliation (0) | – |
+| A22 | dev | mixed-lang | mixed | runbook riconciliazione wallet | 10 | 4 | 4 | atlas/runbooks/pagopa-reconciliation (0) | – |
 | A23 | dev | mixed-lang | mixed | incident timeout nodo pagoPA | 3 | 1 | 1 | atlas/incidents/inc-2026-007-pagopa-timeout (2) | – |
 | A24 | heldout | mixed-lang | mixed | SLO freschezza cruscotti operatori | 1 | 1 | miss | atlas/questions/q-007-on-call-compensation (1) | – |
 | A25 | dev | mixed-lang | mixed | ADR dismissione SBE | 4 | 1 | 1 | atlas/decisions/adr-017-retire-legacy-sbe (2) | – |
 | A26 | dev | exact | en | INC-2026-011 | 2 | 1 | 1 | atlas/incidents/inc-2026-011-kafka-partition-lag (2) | – |
 | A27 | dev | exact | en | ADR-012 | 3 | 1 | 1 | atlas/decisions/adr-012-outbox-pattern (2) | – |
-| A28 | dev | exact | en | ticketing.validations.v2 | 2 | 1 | 1 | atlas/contracts/ticket-validated-v2 (2) | – |
+| A28 | dev | exact | en | ticketing.validations.v2 | 1 | 1 | 1 | atlas/contracts/ticket-validated-v2 (2) | – |
 | A29 | heldout | exact | en | partners.tessera.it | 2 | 1 | 1,2 | atlas/incidents/inc-2026-020-api-gateway-cert-expiry (2) | – |
-| A30 | dev | exact | en | kill.notification-hub.marketing | 2 | 1 | 1 | atlas/runbooks/notification-rate-limit (2) | – |
+| A30 | dev | exact | en | kill.notification-hub.marketing | 1 | 1 | 1 | atlas/runbooks/notification-rate-limit (2) | – |
 | A31 | dev | exact | it | ORA-01653 | 1 | 1 | 1 | atlas/incidents/inc-2025-041-legacy-sbe-crash (2) | – |
-| A32 | heldout | exact | en | /v1/planner/plan | 4 | 1 | 1 | atlas/contracts/api-planner-v1 (2) | – |
+| A32 | heldout | exact | en | /v1/planner/plan | 3 | 1 | 1 | atlas/contracts/api-planner-v1 (2) | – |
 | A33 | dev | exact | en | eu-south-1 | 2 | 1 | 1 | atlas/dependencies/kubernetes-eks (2) | – |
 | A34 | dev | morph | en | rotating credentials | 4 | 1 | 1 | atlas/runbooks/rotate-psp-credentials (2) | – |
 | A35 | dev | morph | it | coda offline validatore | 3 | 1 | 1 | atlas/runbooks/validator-offline-queue-drain (2) | – |
