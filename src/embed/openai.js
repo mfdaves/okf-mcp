@@ -374,7 +374,19 @@ function createOpenAiEmbedder(options) {
             ...(dimensions ? { dimensions } : {}),
           }),
           signal: controller.signal,
+          // A redirect would carry the whole batch to another destination
+          // and could turn a local endpoint remote; it is a configuration
+          // error, never followed.
+          redirect: "manual",
         });
+        if (response.status >= 300 && response.status < 400) {
+          await response.body?.cancel?.();
+          throw new EmbedderError(
+            `Embeddings endpoint answered with a redirect (HTTP ${response.status}); configure the final base URL.`,
+            "embedder_redirect",
+            { status: response.status },
+          );
+        }
         bodyText = await readBody(response, controller);
       } catch (error) {
         if (error instanceof EmbedderError) throw error;

@@ -441,6 +441,31 @@ test("parses Retry-After in both formats and caps the wait", () => {
   assert.equal(parseRetryAfter(null, nowMs), null);
 });
 
+test("never follows a redirect, so no request reaches the redirect target", async (t) => {
+  const target = await serverFor(t, { apiKey: null });
+  const origin = await serverFor(t);
+  const { embedder, sleeps } = embedderFor(origin, { maxRetries: 3 });
+  const secretInput = "confidential catalogue text that must never surface";
+  for (const status of [301, 302, 307, 308]) {
+    origin.script({
+      status,
+      headers: { location: `${target.baseUrl}/v1/embeddings` },
+      body: "moved",
+    });
+    await assert.rejects(embedder.embed([secretInput]), (error) => {
+      assertMasked(error, [secretInput]);
+      assert.equal(error.code, "embedder_redirect");
+      assert.equal(error.details.status, status);
+      assert.equal(error.message.includes(target.baseUrl), false);
+      return true;
+    });
+  }
+  assert.equal(target.requests.length, 0);
+  assert.equal(origin.requests.length, 4);
+  assert.deepEqual(sleeps, [], "a redirect is not retried");
+  assert.equal(embedder.remote, false);
+});
+
 test("keeps server-supplied strings out of error messages and drops tainted fields", async (t) => {
   const server = await serverFor(t);
   const { embedder } = embedderFor(server, { maxRetries: 0 });
