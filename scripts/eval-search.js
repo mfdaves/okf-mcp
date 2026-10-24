@@ -8,6 +8,11 @@
 //        [--limit 10] [--as-of YYYY-MM-DD] [--bootstrap 1000] [--seed 20261024]
 //        [--label <name>] [--out <prefix>]
 //
+// Every run writes <prefix>.json and <prefix>.md. The default prefix is the git-ignored
+// test/fixtures/retrieval/reports/latest, so routine runs never touch the committed baseline;
+// a committed baseline is produced only by an explicit
+// `--out test/fixtures/retrieval/reports/baseline-{date}`.
+//
 // The OKF index is always built by src/indexer.js (project mode) so every search module sees
 // exactly the documents the runtime sees. The search module is pluggable and defaults to the
 // shipped `searchConcepts`; it must export `searchConcepts(index, options)` or
@@ -29,6 +34,8 @@ const { buildProjectIndex } = require("../src/indexer");
 
 const FIXTURES_ROOT = path.join(__dirname, "..", "test", "fixtures", "retrieval");
 const DEFAULT_SEARCH_MODULE = path.join(__dirname, "..", "src", "search.js");
+// Git-ignored (see .gitignore): committed baselines are written only with an explicit --out.
+const DEFAULT_OUT = path.join(FIXTURES_ROOT, "reports", "latest");
 const DEFAULT_LIMIT = 10;
 const DEFAULT_BOOTSTRAP = 1000;
 const DEFAULT_SEED = 20261024;
@@ -60,6 +67,9 @@ function usage() {
     "  --seed <n>                Bootstrap seed (default 20261024).",
     "  --label <name>            Run label in the report (default: the search module's name).",
     "  --out <prefix>            Write <prefix>.json and <prefix>.md; '{date}' expands to today's date.",
+    "                            Default: test/fixtures/retrieval/reports/latest (git-ignored).",
+    "                            A committed baseline is produced only with an explicit",
+    "                            --out test/fixtures/retrieval/reports/baseline-{date}.",
     "  --help                    Show this help.",
   ].join("\n");
 }
@@ -75,7 +85,7 @@ function parseArgs(argv) {
     bootstrap: DEFAULT_BOOTSTRAP,
     seed: DEFAULT_SEED,
     label: "",
-    out: "",
+    out: DEFAULT_OUT,
   };
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
@@ -747,6 +757,8 @@ function renderMarkdown(report) {
   const lines = [`# Retrieval evaluation — ${report.label}`, ""];
   lines.push(
     `Generated ${report.generatedAt} · Node ${report.node} (${report.platform}, gc exposed: ${report.exposedGc}) · search module \`${report.searchModule.path}\`${Object.keys(report.searchModule.options).length ? ` with options \`${JSON.stringify(report.searchModule.options)}\`` : ""} · limit ${report.limit} · split ${report.split} · bootstrap ${report.bootstrap.samples} samples (seed ${report.bootstrap.seed})`,
+    "",
+    "Produced by `scripts/eval-search.js`. Routine runs write to the git-ignored `test/fixtures/retrieval/reports/latest.{json,md}`; a committed baseline is produced only with an explicit `--out test/fixtures/retrieval/reports/baseline-{date}`.",
     "",
   );
   lines.push(

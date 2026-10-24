@@ -11,3 +11,4 @@ coverage/
 npm-debug.log*
 .DS_Store
 .claude/worktrees/
+test/fixtures/retrieval/reports/latest*
