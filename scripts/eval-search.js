@@ -34,7 +34,15 @@ const DEFAULT_BOOTSTRAP = 1000;
 const DEFAULT_SEED = 20261024;
 const LOW_CONFIDENCE_COVERAGE = 0.5;
 const SPLITS = new Set(["dev", "heldout", "all"]);
-const MEAN_METRICS = ["recallAt5", "mustRecallAt5", "ndcgAt10", "mrrAt10", "p1", "hitAt10", "zeroResultRate"];
+const MEAN_METRICS = [
+  "recallAt5",
+  "mustRecallAt5",
+  "ndcgAt10",
+  "mrrAt10",
+  "p1",
+  "hitAt10",
+  "zeroResultRate",
+];
 const CI_METRICS = ["recallAt5", "mustRecallAt5", "ndcgAt10", "mrrAt10", "p1", "zeroResultRate"];
 
 function usage() {
@@ -45,7 +53,7 @@ function usage() {
     "  --fixture <name|path>     Fixture under test/fixtures/retrieval or a directory with okf.project.yaml and queries.json (repeatable).",
     "  --split dev|heldout|all   Query subset (default all).",
     "  --search-module <path>    Module exporting searchConcepts(index, options) or search(index, options) (default src/search.js).",
-    "  --search-options <json>   Extra options merged into every search call (for example '{\"mode\":\"auto\"}').",
+    '  --search-options <json>   Extra options merged into every search call (for example \'{"mode":"auto"}\').',
     "  --limit <n>               Results per query (default 10).",
     "  --as-of <date>            Evaluation date passed to the search module (default: the fixture's as_of).",
     "  --bootstrap <n>           Bootstrap samples for the confidence intervals (default 1000).",
@@ -58,8 +66,16 @@ function usage() {
 
 function parseArgs(argv) {
   const options = {
-    fixtures: [], split: "all", searchModule: "", searchOptions: {}, limit: DEFAULT_LIMIT,
-    asOf: "", bootstrap: DEFAULT_BOOTSTRAP, seed: DEFAULT_SEED, label: "", out: "",
+    fixtures: [],
+    split: "all",
+    searchModule: "",
+    searchOptions: {},
+    limit: DEFAULT_LIMIT,
+    asOf: "",
+    bootstrap: DEFAULT_BOOTSTRAP,
+    seed: DEFAULT_SEED,
+    label: "",
+    out: "",
   };
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
@@ -73,17 +89,38 @@ function parseArgs(argv) {
     }
     index += 1;
     switch (argument) {
-      case "--fixture": options.fixtures.push(value); break;
-      case "--split": options.split = value; break;
-      case "--search-module": options.searchModule = value; break;
-      case "--search-options": options.searchOptions = JSON.parse(value); break;
-      case "--limit": options.limit = Number(value); break;
-      case "--as-of": options.asOf = value; break;
-      case "--bootstrap": options.bootstrap = Number(value); break;
-      case "--seed": options.seed = Number(value); break;
-      case "--label": options.label = value; break;
-      case "--out": options.out = value; break;
-      default: throw new TypeError(`Unknown option: ${argument}`);
+      case "--fixture":
+        options.fixtures.push(value);
+        break;
+      case "--split":
+        options.split = value;
+        break;
+      case "--search-module":
+        options.searchModule = value;
+        break;
+      case "--search-options":
+        options.searchOptions = JSON.parse(value);
+        break;
+      case "--limit":
+        options.limit = Number(value);
+        break;
+      case "--as-of":
+        options.asOf = value;
+        break;
+      case "--bootstrap":
+        options.bootstrap = Number(value);
+        break;
+      case "--seed":
+        options.seed = Number(value);
+        break;
+      case "--label":
+        options.label = value;
+        break;
+      case "--out":
+        options.out = value;
+        break;
+      default:
+        throw new TypeError(`Unknown option: ${argument}`);
     }
   }
   if (options.help) {
@@ -98,7 +135,11 @@ function parseArgs(argv) {
   if (!Number.isSafeInteger(options.limit) || options.limit < 1 || options.limit > 250) {
     throw new TypeError("--limit must be an integer from 1 through 250.");
   }
-  if (!Number.isSafeInteger(options.bootstrap) || options.bootstrap < 0 || options.bootstrap > 100000) {
+  if (
+    !Number.isSafeInteger(options.bootstrap) ||
+    options.bootstrap < 0 ||
+    options.bootstrap > 100000
+  ) {
     throw new TypeError("--bootstrap must be an integer from 0 through 100000.");
   }
   if (!Number.isSafeInteger(options.seed)) {
@@ -113,18 +154,24 @@ function parseArgs(argv) {
 // ------------------------------------------------------------------------------- fixtures
 function resolveFixture(nameOrPath) {
   const direct = path.resolve(nameOrPath);
-  const root = fs.existsSync(path.join(direct, "okf.project.yaml")) ? direct : path.join(FIXTURES_ROOT, nameOrPath);
+  const root = fs.existsSync(path.join(direct, "okf.project.yaml"))
+    ? direct
+    : path.join(FIXTURES_ROOT, nameOrPath);
   const project = path.join(root, "okf.project.yaml");
   const queries = path.join(root, "queries.json");
   if (!fs.existsSync(project) || !fs.existsSync(queries)) {
-    throw new TypeError(`Fixture ${nameOrPath} needs okf.project.yaml and queries.json (looked in ${root}).`);
+    throw new TypeError(
+      `Fixture ${nameOrPath} needs okf.project.yaml and queries.json (looked in ${root}).`,
+    );
   }
   return { name: path.basename(root), root, project, queries };
 }
 
 function loadQueries(fixture, split) {
   const sidecar = JSON.parse(fs.readFileSync(fixture.queries, "utf8"));
-  const queries = (sidecar.queries || []).filter((query) => split === "all" || query.split === split);
+  const queries = (sidecar.queries || []).filter(
+    (query) => split === "all" || query.split === split,
+  );
   return { sidecar, queries };
 }
 
@@ -132,35 +179,51 @@ function loadQueries(fixture, split) {
 function loadSearchModule(modulePath, searchOptions) {
   const resolved = modulePath ? path.resolve(modulePath) : DEFAULT_SEARCH_MODULE;
   const loaded = require(resolved);
-  const fn = typeof loaded.searchConcepts === "function"
-    ? loaded.searchConcepts
-    : typeof loaded.search === "function" ? loaded.search : null;
+  const fn =
+    typeof loaded.searchConcepts === "function"
+      ? loaded.searchConcepts
+      : typeof loaded.search === "function"
+        ? loaded.search
+        : null;
   if (!fn) {
-    throw new TypeError(`${resolved} exports neither searchConcepts(index, options) nor search(index, options).`);
+    throw new TypeError(
+      `${resolved} exports neither searchConcepts(index, options) nor search(index, options).`,
+    );
   }
   return {
     path: resolved,
     isDefault: resolved === DEFAULT_SEARCH_MODULE,
-    name: typeof loaded.name === "string" && loaded.name ? loaded.name : path.relative(path.join(__dirname, ".."), resolved),
+    name:
+      typeof loaded.name === "string" && loaded.name
+        ? loaded.name
+        : path.relative(path.join(__dirname, ".."), resolved),
     options: searchOptions || {},
     prepare: typeof loaded.prepare === "function" ? loaded.prepare : null,
     search(index, query, context) {
-      return fn(index, Object.assign({ query, limit: context.limit, asOf: context.asOf }, searchOptions || {}));
+      return fn(
+        index,
+        Object.assign({ query, limit: context.limit, asOf: context.asOf }, searchOptions || {}),
+      );
     },
   };
 }
 
 function normalizeResponse(raw, limit) {
-  const list = Array.isArray(raw) ? raw : (raw && Array.isArray(raw.results) ? raw.results : []);
-  const results = list.slice(0, limit).map((entry) => {
-    const uri = entry.uri || (entry.bundle && entry.conceptId ? `okf://${entry.bundle}/${entry.conceptId}` : null);
-    return {
-      uri,
-      score: typeof entry.score === "number" ? entry.score : null,
-      coverage: typeof entry.coverage === "number" ? entry.coverage : null,
-      relevance: typeof entry.relevance === "number" ? entry.relevance : null,
-    };
-  }).filter((entry) => entry.uri);
+  const list = Array.isArray(raw) ? raw : raw && Array.isArray(raw.results) ? raw.results : [];
+  const results = list
+    .slice(0, limit)
+    .map((entry) => {
+      const uri =
+        entry.uri ||
+        (entry.bundle && entry.conceptId ? `okf://${entry.bundle}/${entry.conceptId}` : null);
+      return {
+        uri,
+        score: typeof entry.score === "number" ? entry.score : null,
+        coverage: typeof entry.coverage === "number" ? entry.coverage : null,
+        relevance: typeof entry.relevance === "number" ? entry.relevance : null,
+      };
+    })
+    .filter((entry) => entry.uri);
   return {
     results,
     total: raw && typeof raw.total === "number" ? raw.total : list.length,
@@ -170,8 +233,10 @@ function normalizeResponse(raw, limit) {
 
 // --------------------------------------------------------------------------------- metrics
 const log2 = (value) => Math.log(value) / Math.LN2;
-const dcg = (grades) => grades.reduce((sum, grade, index) => sum + (grade > 0 ? grade / log2(index + 2) : 0), 0);
-const mean = (list, key) => (list.length ? list.reduce((sum, entry) => sum + entry[key], 0) / list.length : null);
+const dcg = (grades) =>
+  grades.reduce((sum, grade, index) => sum + (grade > 0 ? grade / log2(index + 2) : 0), 0);
+const mean = (list, key) =>
+  list.length ? list.reduce((sum, entry) => sum + entry[key], 0) / list.length : null;
 
 function percentile(values, fraction) {
   const sorted = values.slice().sort((left, right) => left - right);
@@ -184,7 +249,7 @@ function percentile(values, fraction) {
 function mulberry32(seed) {
   let state = seed | 0;
   return function next() {
-    state = (state + 0x6D2B79F5) | 0;
+    state = (state + 0x6d2b79f5) | 0;
     let t = Math.imul(state ^ (state >>> 15), 1 | state);
     t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
@@ -195,46 +260,81 @@ function evaluateQuery(index, module, query, context) {
   const started = performance.now();
   const response = normalizeResponse(module.search(index, query.query, context), context.limit);
   const ms = performance.now() - started;
-  const expected = (query.expected || []).map((entry) => Object.assign({ uri: `okf://${entry.bundle}/${entry.id}` }, entry));
+  const expected = (query.expected || []).map((entry) =>
+    Object.assign({ uri: `okf://${entry.bundle}/${entry.id}` }, entry),
+  );
   const gradeOf = new Map(expected.map((entry) => [entry.uri, entry.grade]));
   const ranked = response.results.map((entry, position) => ({
-    rank: position + 1, uri: entry.uri, score: entry.score, coverage: entry.coverage, relevance: entry.relevance, grade: gradeOf.get(entry.uri) || 0,
+    rank: position + 1,
+    uri: entry.uri,
+    score: entry.score,
+    coverage: entry.coverage,
+    relevance: entry.relevance,
+    grade: gradeOf.get(entry.uri) || 0,
   }));
   const top1 = ranked[0] || null;
-  const lowConfidence = response.mode === null || !top1 || top1.coverage === null
-    ? null
-    : response.mode === "any" && top1.coverage < LOW_CONFIDENCE_COVERAGE;
+  const lowConfidence =
+    response.mode === null || !top1 || top1.coverage === null
+      ? null
+      : response.mode === "any" && top1.coverage < LOW_CONFIDENCE_COVERAGE;
   // Per-query rows are kept compact (top-10 URIs and grades, rounded numbers) so a committed
   // report stays small; scores and coverage per result live in the search module's own output.
   const base = {
-    id: query.id, query: query.query, lang: query.lang, category: query.category, split: query.split || null,
-    ms: round(ms, 2), total: response.total, returned: ranked.length, mode: response.mode,
-    top1: top1 ? { uri: top1.uri, grade: top1.grade, score: round(top1.score, 3), coverage: round(top1.coverage, 3) } : null,
+    id: query.id,
+    query: query.query,
+    lang: query.lang,
+    category: query.category,
+    split: query.split || null,
+    ms: round(ms, 2),
+    total: response.total,
+    returned: ranked.length,
+    mode: response.mode,
+    top1: top1
+      ? {
+          uri: top1.uri,
+          grade: top1.grade,
+          score: round(top1.score, 3),
+          coverage: round(top1.coverage, 3),
+        }
+      : null,
     lowConfidence,
     top: ranked.map((entry) => entry.uri),
     grades: ranked.map((entry) => entry.grade),
-    missingFromIndex: expected.filter((entry) => !index.byUri.get(entry.uri)).map((entry) => entry.uri),
+    missingFromIndex: expected
+      .filter((entry) => !index.byUri.get(entry.uri))
+      .map((entry) => entry.uri),
   };
   if (query.category === "no-answer" || !expected.length) {
-    return Object.assign(base, { answerable: false, returnedAny: ranked.length > 0, zeroResults: ranked.length === 0 ? 1 : 0 });
+    return Object.assign(base, {
+      answerable: false,
+      returnedAny: ranked.length > 0,
+      zeroResults: ranked.length === 0 ? 1 : 0,
+    });
   }
   const relevant = expected.filter((entry) => entry.grade >= 1);
   const must = expected.filter((entry) => entry.grade >= 2);
-  const inTop = (list, k) => list.filter((entry) => ranked.slice(0, k).some((hit) => hit.uri === entry.uri)).length;
+  const inTop = (list, k) =>
+    list.filter((entry) => ranked.slice(0, k).some((hit) => hit.uri === entry.uri)).length;
   const firstRelevant = ranked.find((hit) => hit.grade >= 1) || null;
-  const ideal = expected.map((entry) => entry.grade).sort((left, right) => right - left).slice(0, context.limit);
+  const ideal = expected
+    .map((entry) => entry.grade)
+    .sort((left, right) => right - left)
+    .slice(0, context.limit);
   const idealDcg = dcg(ideal);
   const mustRanks = must.map((entry) => {
     const hit = ranked.find((candidate) => candidate.uri === entry.uri);
     return { uri: entry.uri, rank: hit ? hit.rank : null };
   });
-  const bestMustRank = mustRanks.reduce((best, entry) => (entry.rank && entry.rank < best ? entry.rank : best), Infinity);
+  const bestMustRank = mustRanks.reduce(
+    (best, entry) => (entry.rank && entry.rank < best ? entry.rank : best),
+    Infinity,
+  );
   const distractors = (query.distractors || []).map((entry) => `okf://${entry.bundle}/${entry.id}`);
   const distractorOutranks = distractors.length
     ? distractors.some((uri) => {
-      const hit = ranked.find((candidate) => candidate.uri === uri);
-      return Boolean(hit) && hit.rank < bestMustRank;
-    })
+        const hit = ranked.find((candidate) => candidate.uri === uri);
+        return Boolean(hit) && hit.rank < bestMustRank;
+      })
     : null;
   return Object.assign(base, {
     answerable: true,
@@ -281,7 +381,11 @@ function groupBy(list, key) {
     }
     groups.get(value).push(entry);
   });
-  return Object.fromEntries(Array.from(groups.entries()).sort(([left], [right]) => left.localeCompare(right)).map(([value, entries]) => [value, aggregate(entries)]));
+  return Object.fromEntries(
+    Array.from(groups.entries())
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([value, entries]) => [value, aggregate(entries)]),
+  );
 }
 
 // Percentile bootstrap over answerable queries: resample with replacement, seeded, 95% interval.
@@ -318,26 +422,42 @@ function bootstrap(list, samples, seed) {
 function noAnswerSummary(noAnswer, answerable) {
   const flaggedNoAnswer = noAnswer.filter((entry) => entry.lowConfidence === true).length;
   const flaggedAnswerable = answerable.filter((entry) => entry.lowConfidence === true).length;
-  const flaggedAnswerableTop1Hits = answerable.filter((entry) => entry.lowConfidence === true && entry.p1 === 1).length;
+  const flaggedAnswerableTop1Hits = answerable.filter(
+    (entry) => entry.lowConfidence === true && entry.p1 === 1,
+  ).length;
   // The rule needs `mode` on every response and `coverage` on every non-empty top result.
-  const available = noAnswer.concat(answerable).every((entry) => entry.mode !== null && (entry.returned === 0 || (entry.top1 && entry.top1.coverage !== null)));
+  const available = noAnswer
+    .concat(answerable)
+    .every(
+      (entry) =>
+        entry.mode !== null &&
+        (entry.returned === 0 || (entry.top1 && entry.top1.coverage !== null)),
+    );
   const flagged = flaggedNoAnswer + flaggedAnswerable;
   return {
     queries: noAnswer.length,
     returnedAny: noAnswer.filter((entry) => entry.returnedAny).length,
-    returnedAnyRate: noAnswer.length ? noAnswer.filter((entry) => entry.returnedAny).length / noAnswer.length : null,
-    zeroResultRate: noAnswer.length ? noAnswer.filter((entry) => entry.zeroResults === 1).length / noAnswer.length : null,
+    returnedAnyRate: noAnswer.length
+      ? noAnswer.filter((entry) => entry.returnedAny).length / noAnswer.length
+      : null,
+    zeroResultRate: noAnswer.length
+      ? noAnswer.filter((entry) => entry.zeroResults === 1).length / noAnswer.length
+      : null,
     lowConfidence: available
       ? {
-        available: true,
-        rule: `mode === "any" && top1.coverage < ${LOW_CONFIDENCE_COVERAGE}`,
-        flaggedNoAnswer,
-        flaggedAnswerable,
-        flaggedAnswerableTop1Hits,
-        precision: flagged ? flaggedNoAnswer / flagged : null,
-        recall: noAnswer.length ? flaggedNoAnswer / noAnswer.length : null,
-      }
-      : { available: false, rule: `mode === "any" && top1.coverage < ${LOW_CONFIDENCE_COVERAGE}`, note: "n/a: the search module does not return mode and per-result coverage" },
+          available: true,
+          rule: `mode === "any" && top1.coverage < ${LOW_CONFIDENCE_COVERAGE}`,
+          flaggedNoAnswer,
+          flaggedAnswerable,
+          flaggedAnswerableTop1Hits,
+          precision: flagged ? flaggedNoAnswer / flagged : null,
+          recall: noAnswer.length ? flaggedNoAnswer / noAnswer.length : null,
+        }
+      : {
+          available: false,
+          rule: `mode === "any" && top1.coverage < ${LOW_CONFIDENCE_COVERAGE}`,
+          note: "n/a: the search module does not return mode and per-result coverage",
+        },
   };
 }
 
@@ -353,7 +473,10 @@ const toMb = (bytes) => Math.round((bytes / 1048576) * 10) / 10;
 // ---------------------------------------------------------------------------- evaluation
 function evaluateFixture(fixture, module, options) {
   const { sidecar, queries } = loadQueries(fixture, options.split);
-  const context = { limit: options.limit, asOf: options.asOf || sidecar.as_of || new Date().toISOString().slice(0, 10) };
+  const context = {
+    limit: options.limit,
+    asOf: options.asOf || sidecar.as_of || new Date().toISOString().slice(0, 10),
+  };
   const rssBefore = memoryRss();
   const buildStarted = performance.now();
   const index = buildProjectIndex(fixture.project);
@@ -389,7 +512,12 @@ function evaluateFixture(fixture, module, options) {
   ["dev", "heldout"].forEach((split) => {
     const subset = answerable.filter((entry) => entry.split === split);
     if (subset.length) {
-      bySplit[split] = Object.assign(aggregate(subset), { noAnswer: noAnswerSummary(noAnswer.filter((entry) => entry.split === split), subset) });
+      bySplit[split] = Object.assign(aggregate(subset), {
+        noAnswer: noAnswerSummary(
+          noAnswer.filter((entry) => entry.split === split),
+          subset,
+        ),
+      });
     }
   });
   return {
@@ -407,10 +535,27 @@ function evaluateFixture(fixture, module, options) {
       answerable: answerable.length,
       noAnswer: noAnswer.length,
       labelled: queries.filter((query) => query.sectionAnchor).length,
-      expectedMissingFromIndex: perQuery.filter((entry) => entry.missingFromIndex.length).map((entry) => ({ id: entry.id, missing: entry.missingFromIndex })),
+      expectedMissingFromIndex: perQuery
+        .filter((entry) => entry.missingFromIndex.length)
+        .map((entry) => ({ id: entry.id, missing: entry.missingFromIndex })),
     },
-    build: { okfIndexMs, prepareMs, warmupMs, rssBeforeMb: toMb(rssBefore), rssAfterBuildMb: toMb(rssAfterBuild), rssEndMb: toMb(rssEnd) },
-    latency: { samples: timings.length, p50Ms: percentile(timings, 0.5), p95Ms: percentile(timings, 0.95), meanMs: timings.length ? timings.reduce((sum, value) => sum + value, 0) / timings.length : null, maxMs: timings.length ? Math.max.apply(null, timings) : null },
+    build: {
+      okfIndexMs,
+      prepareMs,
+      warmupMs,
+      rssBeforeMb: toMb(rssBefore),
+      rssAfterBuildMb: toMb(rssAfterBuild),
+      rssEndMb: toMb(rssEnd),
+    },
+    latency: {
+      samples: timings.length,
+      p50Ms: percentile(timings, 0.5),
+      p95Ms: percentile(timings, 0.95),
+      meanMs: timings.length
+        ? timings.reduce((sum, value) => sum + value, 0) / timings.length
+        : null,
+      maxMs: timings.length ? Math.max.apply(null, timings) : null,
+    },
     overall,
     byCategory: groupBy(answerable, "category"),
     byLang: groupBy(answerable, "lang"),
@@ -421,7 +566,20 @@ function evaluateFixture(fixture, module, options) {
 }
 
 function runEvaluation(options) {
-  const config = Object.assign({ fixtures: [], split: "all", searchModule: "", searchOptions: {}, limit: DEFAULT_LIMIT, asOf: "", bootstrap: DEFAULT_BOOTSTRAP, seed: DEFAULT_SEED, label: "" }, options || {});
+  const config = Object.assign(
+    {
+      fixtures: [],
+      split: "all",
+      searchModule: "",
+      searchOptions: {},
+      limit: DEFAULT_LIMIT,
+      asOf: "",
+      bootstrap: DEFAULT_BOOTSTRAP,
+      seed: DEFAULT_SEED,
+      label: "",
+    },
+    options || {},
+  );
   const module = loadSearchModule(config.searchModule, config.searchOptions);
   const report = {
     label: config.label || module.name,
@@ -429,7 +587,11 @@ function runEvaluation(options) {
     node: process.version,
     platform: `${process.platform} ${process.arch}`,
     exposedGc: typeof global.gc === "function",
-    searchModule: { path: path.relative(path.join(__dirname, ".."), module.path), name: module.name, options: module.options },
+    searchModule: {
+      path: path.relative(path.join(__dirname, ".."), module.path),
+      name: module.name,
+      options: module.options,
+    },
     split: config.split,
     limit: config.limit,
     bootstrap: { samples: config.bootstrap, seed: config.seed, confidence: 0.95 },
@@ -443,12 +605,17 @@ function runEvaluation(options) {
 }
 
 // ---------------------------------------------------------------------------------- markdown
-const pct = (value) => (value === null || value === undefined ? "–" : `${(value * 100).toFixed(1)}%`);
-const num = (value, digits) => (value === null || value === undefined ? "–" : value.toFixed(digits === undefined ? 3 : digits));
-const ci = (interval) => (interval && interval.low !== null ? ` [${num(interval.low)}, ${num(interval.high)}]` : "");
+const pct = (value) =>
+  value === null || value === undefined ? "–" : `${(value * 100).toFixed(1)}%`;
+const num = (value, digits) =>
+  value === null || value === undefined ? "–" : value.toFixed(digits === undefined ? 3 : digits);
+const ci = (interval) =>
+  interval && interval.low !== null ? ` [${num(interval.low)}, ${num(interval.high)}]` : "";
 
 function aggregateRow(name, summary) {
-  const distractors = summary.withDistractors ? `${summary.distractorOutranks}/${summary.withDistractors}` : "–";
+  const distractors = summary.withDistractors
+    ? `${summary.distractorOutranks}/${summary.withDistractors}`
+    : "–";
   return `| ${name} | ${summary.queries} | ${pct(summary.recallAt5)} | ${pct(summary.mustRecallAt5)} | ${num(summary.ndcgAt10)} | ${num(summary.mrrAt10)} | ${pct(summary.p1)} | ${pct(summary.hitAt10)} | ${pct(summary.zeroResultRate)} | ${distractors} |`;
 }
 
@@ -461,65 +628,138 @@ function renderFixture(result) {
   const lines = [];
   const summary = result.overall;
   lines.push(`## Fixture ${result.fixture}`, "");
-  lines.push(`Project \`${result.project}\` · bundles ${result.corpus.bundles.map((bundle) => `${bundle.id} (${bundle.documents})`).join(", ")} · ${result.corpus.concepts} concepts · valid for project: ${result.corpus.validForProject} · as-of ${result.asOf} · split ${result.split}  `);
-  lines.push(`Queries: ${result.queries.total} (${result.queries.answerable} answerable, ${result.queries.noAnswer} no-answer, ${result.queries.labelled} with sectionAnchor)`, "");
+  lines.push(
+    `Project \`${result.project}\` · bundles ${result.corpus.bundles.map((bundle) => `${bundle.id} (${bundle.documents})`).join(", ")} · ${result.corpus.concepts} concepts · valid for project: ${result.corpus.validForProject} · as-of ${result.asOf} · split ${result.split}  `,
+  );
+  lines.push(
+    `Queries: ${result.queries.total} (${result.queries.answerable} answerable, ${result.queries.noAnswer} no-answer, ${result.queries.labelled} with sectionAnchor)`,
+    "",
+  );
   if (result.queries.expectedMissingFromIndex.length) {
-    lines.push(`Expected concepts absent from the index (counted as misses): ${result.queries.expectedMissingFromIndex.map((entry) => entry.id).join(", ")}`, "");
+    lines.push(
+      `Expected concepts absent from the index (counted as misses): ${result.queries.expectedMissingFromIndex.map((entry) => entry.id).join(", ")}`,
+      "",
+    );
   }
   lines.push("### Overall (answerable queries, 95% bootstrap CI)", "");
   lines.push("| metric | value | 95% CI |", "|---|---|---|");
   lines.push(`| Recall@5 | ${num(summary.recallAt5)} |${ci(summary.ci.recallAt5) || " –"} |`);
-  lines.push(`| MustRecall@5 | ${num(summary.mustRecallAt5)} |${ci(summary.ci.mustRecallAt5) || " –"} |`);
+  lines.push(
+    `| MustRecall@5 | ${num(summary.mustRecallAt5)} |${ci(summary.ci.mustRecallAt5) || " –"} |`,
+  );
   lines.push(`| nDCG@10 | ${num(summary.ndcgAt10)} |${ci(summary.ci.ndcgAt10) || " –"} |`);
   lines.push(`| MRR@10 | ${num(summary.mrrAt10)} |${ci(summary.ci.mrrAt10) || " –"} |`);
   lines.push(`| P@1 | ${num(summary.p1)} |${ci(summary.ci.p1) || " –"} |`);
   lines.push(`| hit@10 | ${num(summary.hitAt10)} | – |`);
-  lines.push(`| zero-result rate | ${num(summary.zeroResultRate)} |${ci(summary.ci.zeroResultRate) || " –"} |`);
-  lines.push(`| distractor outranks | ${summary.distractorOutranks}/${summary.withDistractors} | – |`, "");
-  lines.push("### By category", "", ...AGGREGATE_HEADER, ...Object.entries(result.byCategory).map(([name, value]) => aggregateRow(name, value)), "");
-  lines.push("### By language", "", ...AGGREGATE_HEADER, ...Object.entries(result.byLang).map(([name, value]) => aggregateRow(name, value)), "");
+  lines.push(
+    `| zero-result rate | ${num(summary.zeroResultRate)} |${ci(summary.ci.zeroResultRate) || " –"} |`,
+  );
+  lines.push(
+    `| distractor outranks | ${summary.distractorOutranks}/${summary.withDistractors} | – |`,
+    "",
+  );
+  lines.push(
+    "### By category",
+    "",
+    ...AGGREGATE_HEADER,
+    ...Object.entries(result.byCategory).map(([name, value]) => aggregateRow(name, value)),
+    "",
+  );
+  lines.push(
+    "### By language",
+    "",
+    ...AGGREGATE_HEADER,
+    ...Object.entries(result.byLang).map(([name, value]) => aggregateRow(name, value)),
+    "",
+  );
   if (Object.keys(result.bySplit).length) {
-    lines.push("### By split", "", ...AGGREGATE_HEADER, ...Object.entries(result.bySplit).map(([name, value]) => aggregateRow(name, value)), "");
+    lines.push(
+      "### By split",
+      "",
+      ...AGGREGATE_HEADER,
+      ...Object.entries(result.bySplit).map(([name, value]) => aggregateRow(name, value)),
+      "",
+    );
   }
   const na = result.noAnswer;
   lines.push("### No-answer queries", "");
-  lines.push(`Returned at least one result: ${na.returnedAny}/${na.queries} (${pct(na.returnedAnyRate)}); zero results: ${pct(na.zeroResultRate)}.  `);
+  lines.push(
+    `Returned at least one result: ${na.returnedAny}/${na.queries} (${pct(na.returnedAnyRate)}); zero results: ${pct(na.zeroResultRate)}.  `,
+  );
   if (na.lowConfidence.available) {
     const lc = na.lowConfidence;
-    lines.push(`lowConfidence (${lc.rule}): flagged ${lc.flaggedNoAnswer}/${na.queries} no-answer (recall ${pct(lc.recall)}), ${lc.flaggedAnswerable} answerable (${lc.flaggedAnswerableTop1Hits} with a relevant top-1); precision ${pct(lc.precision)}.`, "");
+    lines.push(
+      `lowConfidence (${lc.rule}): flagged ${lc.flaggedNoAnswer}/${na.queries} no-answer (recall ${pct(lc.recall)}), ${lc.flaggedAnswerable} answerable (${lc.flaggedAnswerableTop1Hits} with a relevant top-1); precision ${pct(lc.precision)}.`,
+      "",
+    );
   } else {
     lines.push(`lowConfidence (${na.lowConfidence.rule}): n/a (${na.lowConfidence.note}).`, "");
   }
-  lines.push("| id | split | query | returned | mode | top-1 coverage | flagged |", "|---|---|---|---|---|---|---|");
-  result.perQuery.filter((entry) => !entry.answerable).forEach((entry) => {
-    lines.push(`| ${entry.id} | ${entry.split || "–"} | ${entry.query} | ${entry.returned} | ${entry.mode || "–"} | ${entry.top1 && entry.top1.coverage !== null ? num(entry.top1.coverage, 2) : "–"} | ${entry.lowConfidence === null ? "n/a" : entry.lowConfidence ? "yes" : "no"} |`);
-  });
+  lines.push(
+    "| id | split | query | returned | mode | top-1 coverage | flagged |",
+    "|---|---|---|---|---|---|---|",
+  );
+  result.perQuery
+    .filter((entry) => !entry.answerable)
+    .forEach((entry) => {
+      lines.push(
+        `| ${entry.id} | ${entry.split || "–"} | ${entry.query} | ${entry.returned} | ${entry.mode || "–"} | ${entry.top1 && entry.top1.coverage !== null ? num(entry.top1.coverage, 2) : "–"} | ${entry.lowConfidence === null ? "n/a" : entry.lowConfidence ? "yes" : "no"} |`,
+      );
+    });
   lines.push("", "### Latency, build and memory", "");
   lines.push("| metric | value |", "|---|---|");
   lines.push(`| query latency p50 | ${num(result.latency.p50Ms, 2)} ms |`);
   lines.push(`| query latency p95 | ${num(result.latency.p95Ms, 2)} ms |`);
-  lines.push(`| query latency mean / max | ${num(result.latency.meanMs, 2)} / ${num(result.latency.maxMs, 2)} ms |`);
+  lines.push(
+    `| query latency mean / max | ${num(result.latency.meanMs, 2)} / ${num(result.latency.maxMs, 2)} ms |`,
+  );
   lines.push(`| OKF index build | ${num(result.build.okfIndexMs, 1)} ms |`);
-  lines.push(`| search index prepare | ${result.build.prepareMs === null ? "n/a (built lazily; see warm-up)" : `${num(result.build.prepareMs, 1)} ms`} |`);
+  lines.push(
+    `| search index prepare | ${result.build.prepareMs === null ? "n/a (built lazily; see warm-up)" : `${num(result.build.prepareMs, 1)} ms`} |`,
+  );
   lines.push(`| warm-up pass | ${num(result.build.warmupMs, 1)} ms |`);
-  lines.push(`| RSS before build / after build / end | ${result.build.rssBeforeMb} / ${result.build.rssAfterBuildMb} / ${result.build.rssEndMb} MB |`, "");
-  lines.push("### Per query (answerable)", "", "| id | split | cat | lang | query | returned | first relevant | must ranks | top-1 (grade) | distractor first |", "|---|---|---|---|---|---|---|---|---|---|");
-  result.perQuery.filter((entry) => entry.answerable).forEach((entry) => {
-    const must = entry.mustRanks.map((rank) => (rank === null ? "miss" : rank)).join(",");
-    const top = entry.top1 ? `${entry.top1.uri.replace(/^okf:\/\//, "")} (${entry.top1.grade})` : "–";
-    lines.push(`| ${entry.id} | ${entry.split || "–"} | ${entry.category} | ${entry.lang} | ${entry.query} | ${entry.returned} | ${entry.firstRelevantRank === null ? "miss" : entry.firstRelevantRank} | ${must} | ${top} | ${entry.distractorOutranks === null ? "–" : entry.distractorOutranks ? "yes" : "no"} |`);
-  });
+  lines.push(
+    `| RSS before build / after build / end | ${result.build.rssBeforeMb} / ${result.build.rssAfterBuildMb} / ${result.build.rssEndMb} MB |`,
+    "",
+  );
+  lines.push(
+    "### Per query (answerable)",
+    "",
+    "| id | split | cat | lang | query | returned | first relevant | must ranks | top-1 (grade) | distractor first |",
+    "|---|---|---|---|---|---|---|---|---|---|",
+  );
+  result.perQuery
+    .filter((entry) => entry.answerable)
+    .forEach((entry) => {
+      const must = entry.mustRanks.map((rank) => (rank === null ? "miss" : rank)).join(",");
+      const top = entry.top1
+        ? `${entry.top1.uri.replace(/^okf:\/\//, "")} (${entry.top1.grade})`
+        : "–";
+      lines.push(
+        `| ${entry.id} | ${entry.split || "–"} | ${entry.category} | ${entry.lang} | ${entry.query} | ${entry.returned} | ${entry.firstRelevantRank === null ? "miss" : entry.firstRelevantRank} | ${must} | ${top} | ${entry.distractorOutranks === null ? "–" : entry.distractorOutranks ? "yes" : "no"} |`,
+      );
+    });
   lines.push("");
   return lines;
 }
 
 function renderMarkdown(report) {
   const lines = [`# Retrieval evaluation — ${report.label}`, ""];
-  lines.push(`Generated ${report.generatedAt} · Node ${report.node} (${report.platform}, gc exposed: ${report.exposedGc}) · search module \`${report.searchModule.path}\`${Object.keys(report.searchModule.options).length ? ` with options \`${JSON.stringify(report.searchModule.options)}\`` : ""} · limit ${report.limit} · split ${report.split} · bootstrap ${report.bootstrap.samples} samples (seed ${report.bootstrap.seed})`, "");
-  lines.push("## Summary", "", "| fixture | queries | Recall@5 (95% CI) | nDCG@10 (95% CI) | MRR@10 | P@1 | zero-result | no-answer returned any | lowConfidence P / R | p95 ms | RSS MB |", "|---|---|---|---|---|---|---|---|---|---|---|");
+  lines.push(
+    `Generated ${report.generatedAt} · Node ${report.node} (${report.platform}, gc exposed: ${report.exposedGc}) · search module \`${report.searchModule.path}\`${Object.keys(report.searchModule.options).length ? ` with options \`${JSON.stringify(report.searchModule.options)}\`` : ""} · limit ${report.limit} · split ${report.split} · bootstrap ${report.bootstrap.samples} samples (seed ${report.bootstrap.seed})`,
+    "",
+  );
+  lines.push(
+    "## Summary",
+    "",
+    "| fixture | queries | Recall@5 (95% CI) | nDCG@10 (95% CI) | MRR@10 | P@1 | zero-result | no-answer returned any | lowConfidence P / R | p95 ms | RSS MB |",
+    "|---|---|---|---|---|---|---|---|---|---|---|",
+  );
   Object.values(report.fixtures).forEach((result) => {
     const lc = result.noAnswer.lowConfidence;
-    lines.push(`| ${result.fixture} | ${result.queries.total} | ${num(result.overall.recallAt5)}${ci(result.overall.ci.recallAt5)} | ${num(result.overall.ndcgAt10)}${ci(result.overall.ci.ndcgAt10)} | ${num(result.overall.mrrAt10)} | ${num(result.overall.p1)} | ${pct(result.overall.zeroResultRate)} | ${pct(result.noAnswer.returnedAnyRate)} | ${lc.available ? `${pct(lc.precision)} / ${pct(lc.recall)}` : "n/a"} | ${num(result.latency.p95Ms, 2)} | ${result.build.rssEndMb} |`);
+    lines.push(
+      `| ${result.fixture} | ${result.queries.total} | ${num(result.overall.recallAt5)}${ci(result.overall.ci.recallAt5)} | ${num(result.overall.ndcgAt10)}${ci(result.overall.ci.ndcgAt10)} | ${num(result.overall.mrrAt10)} | ${num(result.overall.p1)} | ${pct(result.overall.zeroResultRate)} | ${pct(result.noAnswer.returnedAnyRate)} | ${lc.available ? `${pct(lc.precision)} / ${pct(lc.recall)}` : "n/a"} | ${num(result.latency.p95Ms, 2)} | ${result.build.rssEndMb} |`,
+    );
   });
   lines.push("");
   Object.values(report.fixtures).forEach((result) => {
@@ -531,20 +771,25 @@ function renderMarkdown(report) {
 function summaryOf(report) {
   return {
     label: report.label,
-    fixtures: Object.fromEntries(Object.values(report.fixtures).map((result) => [result.fixture, {
-      queries: result.queries.total,
-      recallAt5: result.overall.recallAt5,
-      recallAt5Ci: result.overall.ci.recallAt5,
-      ndcgAt10: result.overall.ndcgAt10,
-      ndcgAt10Ci: result.overall.ci.ndcgAt10,
-      mrrAt10: result.overall.mrrAt10,
-      p1: result.overall.p1,
-      zeroResultRate: result.overall.zeroResultRate,
-      noAnswerReturnedAnyRate: result.noAnswer.returnedAnyRate,
-      lowConfidence: result.noAnswer.lowConfidence,
-      latencyP95Ms: result.latency.p95Ms,
-      rssEndMb: result.build.rssEndMb,
-    }])),
+    fixtures: Object.fromEntries(
+      Object.values(report.fixtures).map((result) => [
+        result.fixture,
+        {
+          queries: result.queries.total,
+          recallAt5: result.overall.recallAt5,
+          recallAt5Ci: result.overall.ci.recallAt5,
+          ndcgAt10: result.overall.ndcgAt10,
+          ndcgAt10Ci: result.overall.ci.ndcgAt10,
+          mrrAt10: result.overall.mrrAt10,
+          p1: result.overall.p1,
+          zeroResultRate: result.overall.zeroResultRate,
+          noAnswerReturnedAnyRate: result.noAnswer.returnedAnyRate,
+          lowConfidence: result.noAnswer.lowConfidence,
+          latencyP95Ms: result.latency.p95Ms,
+          rssEndMb: result.build.rssEndMb,
+        },
+      ]),
+    ),
   };
 }
 
@@ -570,7 +815,14 @@ function stringifyReport(report) {
 
 // The query text is in the fixture's queries.json (joined by id); fields derivable from `top`,
 // `grades` and `firstRelevantRank` and empty diagnostics are dropped.
-const DERIVABLE_ROW_FIELDS = ["query", "relevantCount", "mustCount", "p1", "hitAt10", "zeroResultRate"];
+const DERIVABLE_ROW_FIELDS = [
+  "query",
+  "relevantCount",
+  "mustCount",
+  "p1",
+  "hitAt10",
+  "zeroResultRate",
+];
 
 function compactRow(entry) {
   const row = Object.assign({}, entry);

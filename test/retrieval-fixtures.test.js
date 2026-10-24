@@ -19,21 +19,26 @@ const SPLITS = new Set(["dev", "heldout"]);
 
 // Every directory under test/fixtures/retrieval that ships a generator is a retrieval fixture:
 // generated bundles, okf.project.yaml, and a graded queries.json sidecar.
-const FIXTURES = fs.readdirSync(FIXTURES_ROOT)
+const FIXTURES = fs
+  .readdirSync(FIXTURES_ROOT)
   .filter((name) => fs.existsSync(path.join(FIXTURES_ROOT, name, "generate.js")))
   .sort();
 
 function listFiles(root, relative) {
   const prefix = relative || "";
   const entries = fs.readdirSync(path.join(root, prefix), { withFileTypes: true });
-  return entries.flatMap((entry) => {
-    const next = prefix ? `${prefix}/${entry.name}` : entry.name;
-    return entry.isDirectory() ? listFiles(root, next) : [next];
-  }).sort();
+  return entries
+    .flatMap((entry) => {
+      const next = prefix ? `${prefix}/${entry.name}` : entry.name;
+      return entry.isDirectory() ? listFiles(root, next) : [next];
+    })
+    .sort();
 }
 
 function generatedFiles(root) {
-  return listFiles(root).filter((file) => file === "okf.project.yaml" || file.startsWith("bundles/"));
+  return listFiles(root).filter(
+    (file) => file === "okf.project.yaml" || file.startsWith("bundles/"),
+  );
 }
 
 function runNode(args) {
@@ -46,7 +51,11 @@ function runNode(args) {
 
 function validateWithCli(args) {
   const result = runNode([CLI].concat(args, ["validate"]));
-  assert.equal(result.status, 0, `validate ${args.join(" ")} exited ${result.status}: ${result.stderr}`);
+  assert.equal(
+    result.status,
+    0,
+    `validate ${args.join(" ")} exited ${result.status}: ${result.stderr}`,
+  );
   const report = JSON.parse(result.stdout);
   assert.equal(report.validForProject, true, JSON.stringify(report.diagnostics, null, 2));
   assert.equal(report.conformant, true);
@@ -80,7 +89,8 @@ FIXTURES.forEach((fixture) => {
   test(`${fixture}: bundles validate clean in --project and --root mode`, () => {
     const project = validateWithCli(["--project", projectPath]);
     assert.equal(project.diagnostics.length, 0);
-    const bundleDirs = fs.readdirSync(path.join(fixtureRoot, "bundles"), { withFileTypes: true })
+    const bundleDirs = fs
+      .readdirSync(path.join(fixtureRoot, "bundles"), { withFileTypes: true })
       .filter((entry) => entry.isDirectory())
       .map((entry) => path.join(fixtureRoot, "bundles", entry.name));
     assert.ok(bundleDirs.length >= 1);
@@ -101,7 +111,10 @@ FIXTURES.forEach((fixture) => {
     sidecar.queries.forEach((query) => {
       assert.equal(ids.has(query.id), false, `duplicate query id ${query.id}`);
       ids.add(query.id);
-      assert.ok(typeof query.query === "string" && query.query.trim(), `${query.id} has a query string`);
+      assert.ok(
+        typeof query.query === "string" && query.query.trim(),
+        `${query.id} has a query string`,
+      );
       assert.ok(LANGUAGES.has(query.lang), `${query.id} lang ${query.lang}`);
       assert.ok(categories.has(query.category), `${query.id} category ${query.category}`);
       const expected = query.expected || [];
@@ -109,28 +122,46 @@ FIXTURES.forEach((fixture) => {
       if (query.category === "no-answer") {
         assert.equal(expected.length, 0, `${query.id} is no-answer but lists expected concepts`);
       } else {
-        assert.ok(expected.some((entry) => entry.grade === 2), `${query.id} needs a grade-2 concept`);
+        assert.ok(
+          expected.some((entry) => entry.grade === 2),
+          `${query.id} needs a grade-2 concept`,
+        );
       }
       expected.concat(distractors).forEach((entry) => {
         const uri = `okf://${entry.bundle}/${entry.id}`;
         assert.ok(index.byUri.get(uri), `${query.id} references ${uri}, which is not indexed`);
       });
-      expected.forEach((entry) => assert.ok(GRADES.has(entry.grade), `${query.id} grade ${entry.grade}`));
+      expected.forEach((entry) => {
+        assert.ok(GRADES.has(entry.grade), `${query.id} grade ${entry.grade}`);
+      });
       if (query.added !== undefined) {
         assert.equal(query.added, "wp0", `${query.id} carries an unknown provenance marker`);
       }
     });
-    assert.ok(sidecar.queries.filter((query) => query.category === "no-answer").length >= 8, "at least 8 no-answer queries");
+    assert.ok(
+      sidecar.queries.filter((query) => query.category === "no-answer").length >= 8,
+      "at least 8 no-answer queries",
+    );
   });
 
   test(`${fixture}: the dev/heldout split is the committed seeded stratified assignment`, () => {
     const sidecar = JSON.parse(fs.readFileSync(queriesPath, "utf8"));
-    assert.ok(sidecar.split && Number.isInteger(sidecar.split.seed), "split metadata records the seed");
-    const derived = assignSplit(sidecar.queries, { seed: sidecar.split.seed, devRatio: sidecar.split.devRatio });
+    assert.ok(
+      sidecar.split && Number.isInteger(sidecar.split.seed),
+      "split metadata records the seed",
+    );
+    const derived = assignSplit(sidecar.queries, {
+      seed: sidecar.split.seed,
+      devRatio: sidecar.split.devRatio,
+    });
     const strata = new Map();
     sidecar.queries.forEach((query) => {
       assert.ok(SPLITS.has(query.split), `${query.id} split ${query.split}`);
-      assert.equal(query.split, derived.get(query.id), `${query.id} split drifted from the seeded assignment`);
+      assert.equal(
+        query.split,
+        derived.get(query.id),
+        `${query.id} split drifted from the seeded assignment`,
+      );
       const key = stratumKey(query);
       if (!strata.has(key)) {
         strata.set(key, { dev: 0, heldout: 0 });
@@ -138,10 +169,15 @@ FIXTURES.forEach((fixture) => {
       strata.get(key)[query.split] += 1;
     });
     // Every stratum keeps at least one development query, and the overall ratio stays near 70/30.
-    strata.forEach((counts, key) => assert.ok(counts.dev >= 1, `stratum ${key} has no dev query`));
+    strata.forEach((counts, key) => {
+      assert.ok(counts.dev >= 1, `stratum ${key} has no dev query`);
+    });
     const counts = splitCounts(sidecar.queries);
     const devShare = counts.dev / (counts.dev + counts.heldout);
-    assert.ok(devShare >= 0.6 && devShare <= 0.8, `dev share ${devShare.toFixed(2)} is outside 60-80%`);
+    assert.ok(
+      devShare >= 0.6 && devShare <= 0.8,
+      `dev share ${devShare.toFixed(2)} is outside 60-80%`,
+    );
   });
 
   test(`${fixture}: sectionAnchor labels point at a real H2 of a grade-2 concept (WP3a)`, () => {
@@ -155,10 +191,17 @@ FIXTURES.forEach((fixture) => {
       const { uri, heading, slug } = query.sectionAnchor;
       const doc = index.byUri.get(uri);
       assert.ok(doc, `${query.id} anchors ${uri}, which is not indexed`);
-      const anchored = (query.expected || []).some((entry) => `okf://${entry.bundle}/${entry.id}` === uri && entry.grade === 2);
+      const anchored = (query.expected || []).some(
+        (entry) => `okf://${entry.bundle}/${entry.id}` === uri && entry.grade === 2,
+      );
       assert.ok(anchored, `${query.id} anchors a concept that is not one of its grade-2 answers`);
-      const h2 = markdownHeadings(doc.body).filter(([level]) => level === 2).map(([, text]) => text);
-      assert.ok(h2.includes(heading), `${query.id}: "${heading}" is not an H2 of ${uri} (${h2.join(" | ")})`);
+      const h2 = markdownHeadings(doc.body)
+        .filter(([level]) => level === 2)
+        .map(([, text]) => text);
+      assert.ok(
+        h2.includes(heading),
+        `${query.id}: "${heading}" is not an H2 of ${uri} (${h2.join(" | ")})`,
+      );
       assert.equal(slug, headingSlug(heading), `${query.id}: slug drifted from the heading rule`);
       if (query.split === "dev") {
         devLabelled += 1;
