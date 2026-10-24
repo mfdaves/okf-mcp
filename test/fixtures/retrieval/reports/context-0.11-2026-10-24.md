@@ -1,6 +1,6 @@
 # Context evaluation — src/context/assemble.js (lexical)
 
-Generated 2026-10-24T19:39:28.294Z · Node v24.17.0 (linux x64) · budget 1200 tokens (chars/4) · provenance compact (default) · preamble weight 0.5 · concept lift 4 · bootstrap 1000 samples (seed 20261024)
+Generated 2026-10-24T19:43:05.882Z · Node v24.17.0 (linux x64) · budget 1200 tokens (chars/4) · provenance compact (default) · preamble weight 0.5 · concept lift 4 · bootstrap 1000 samples (seed 20261024)
 
 Produced by `scripts/eval-context.js` (`npm run eval:context`) over the queries with a `sectionAnchor` label. Routine runs write to the git-ignored `test/fixtures/retrieval/reports/latest-context.{json,md}`; a committed report needs an explicit `--out`.
 
@@ -8,12 +8,12 @@ Anchor hit: the labelled `uri#slug` is among the packed sections (WP3a acceptanc
 
 | fixture | split | labelled | anchor hit (95% CI) | hit@1 (95% CI) | anchor MRR (95% CI) | rank | concept R@5 (95% CI) | candidate | mean tokens (95% CI) | mean sections | max tokens | over budget | p50 ms | p95 ms |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| alpinaria | dev | 40 | 1.000 [1.000, 1.000] | 0.475 [0.325, 0.625] | 0.662 [0.554, 0.760] | 2 | 0.831 [0.760, 0.896] | 1.000 | 921 [820, 1018] | 7.3 | 1199 | 0 | 7.41 | 13.41 |
-| alpinaria | heldout | 12 | 0.750 [0.500, 1.000] | 0.583 [0.333, 0.833] | 0.618 [0.368, 0.854] | 1 | 0.688 [0.465, 0.889] | 0.750 | 956 [790, 1119] | 7.3 | 1197 | 0 | 7.63 | 10.09 |
-| alpinaria | all | 52 | 0.942 [0.865, 1.000] | 0.500 [0.365, 0.654] | 0.652 [0.554, 0.761] | 1 | 0.798 [0.721, 0.869] | 0.942 | 929 [845, 1014] | 7.3 | 1199 | 0 | 7.51 | 12.65 |
-| atlas | dev | 43 | 0.791 [0.674, 0.907] | 0.279 [0.163, 0.419] | 0.459 [0.354, 0.579] | 2 | 0.738 [0.641, 0.831] | 0.907 | 941 [855, 1015] | 7.7 | 1197 | 0 | 8.64 | 12.50 |
-| atlas | heldout | 15 | 0.733 [0.467, 0.933] | 0.333 [0.133, 0.533] | 0.511 [0.311, 0.689] | 2 | 0.801 [0.611, 0.944] | 0.867 | 868 [731, 1008] | 7.5 | 1188 | 0 | 8.09 | 10.34 |
-| atlas | all | 58 | 0.776 [0.655, 0.879] | 0.293 [0.172, 0.397] | 0.473 [0.376, 0.570] | 2 | 0.755 [0.663, 0.838] | 0.897 | 922 [847, 996] | 7.6 | 1197 | 0 | 8.45 | 12.50 |
+| alpinaria | dev | 40 | 1.000 [1.000, 1.000] | 0.475 [0.325, 0.625] | 0.662 [0.554, 0.760] | 2 | 0.831 [0.760, 0.896] | 1.000 | 921 [820, 1018] | 7.3 | 1199 | 0 | 1.89 | 3.03 |
+| alpinaria | heldout | 12 | 0.750 [0.500, 1.000] | 0.583 [0.333, 0.833] | 0.618 [0.368, 0.854] | 1 | 0.688 [0.465, 0.889] | 0.750 | 956 [790, 1119] | 7.3 | 1197 | 0 | 2.10 | 2.90 |
+| alpinaria | all | 52 | 0.942 [0.865, 1.000] | 0.500 [0.365, 0.654] | 0.652 [0.554, 0.761] | 1 | 0.798 [0.721, 0.869] | 0.942 | 929 [845, 1014] | 7.3 | 1199 | 0 | 2.10 | 3.03 |
+| atlas | dev | 43 | 0.791 [0.674, 0.907] | 0.279 [0.163, 0.419] | 0.459 [0.354, 0.579] | 2 | 0.738 [0.641, 0.831] | 0.907 | 941 [855, 1015] | 7.7 | 1197 | 0 | 2.67 | 3.83 |
+| atlas | heldout | 15 | 0.733 [0.467, 0.933] | 0.333 [0.133, 0.533] | 0.511 [0.311, 0.689] | 2 | 0.801 [0.611, 0.944] | 0.867 | 868 [731, 1008] | 7.5 | 1188 | 0 | 2.91 | 3.74 |
+| atlas | all | 58 | 0.776 [0.655, 0.879] | 0.293 [0.172, 0.397] | 0.473 [0.376, 0.570] | 2 | 0.755 [0.663, 0.838] | 0.897 | 922 [847, 996] | 7.6 | 1197 | 0 | 2.70 | 3.88 |
 
 Secondary line, the same queries at a larger budget:
 
@@ -52,7 +52,7 @@ Secondary line, the same queries at a larger budget:
 
 ## alpinaria
 
-Project `test/fixtures/retrieval/alpinaria/okf.project.yaml` · 228 concepts · as-of 2026-10-24 · index build 382 ms · concept search index 305 ms · first context call 43.5 ms
+Project `test/fixtures/retrieval/alpinaria/okf.project.yaml` · 228 concepts · as-of 2026-10-24 · index build 91 ms · concept search index 104 ms · first context call 12.5 ms
 
 | missed query | split | labelled anchor | concept was a candidate | cause |
 |---|---|---|---|---|
@@ -62,7 +62,7 @@ Project `test/fixtures/retrieval/alpinaria/okf.project.yaml` · 228 concepts · 
 
 ## atlas
 
-Project `test/fixtures/retrieval/atlas/okf.project.yaml` · 167 concepts · as-of 2026-10-24 · index build 175 ms · concept search index 202 ms · first context call 10.2 ms
+Project `test/fixtures/retrieval/atlas/okf.project.yaml` · 167 concepts · as-of 2026-10-24 · index build 38 ms · concept search index 53 ms · first context call 5.0 ms
 
 | missed query | split | labelled anchor | concept was a candidate | cause |
 |---|---|---|---|---|

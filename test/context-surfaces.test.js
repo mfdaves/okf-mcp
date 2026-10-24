@@ -8,6 +8,7 @@ const path = require("node:path");
 const test = require("node:test");
 
 const { UsageError, parseArgs, usage } = require("../src/cli");
+const { contextOptions } = require("../src/context/cli-options");
 const { buildProjectIndex } = require("../src/indexer");
 const { TOOL_ORDER } = require("../src/mcp/registry");
 const { tools } = require("../src/mcp/tools/context");
@@ -305,9 +306,11 @@ test("the CLI context command parses --budget and --limit and prints the JSON re
     "Landing Page",
   ]);
   assert.deepEqual(args.positional, ["context", "scarponi", "donna"]);
-  assert.deepEqual(args.context, { budgetTokens: 300, limit: 3 });
+  assert.deepEqual(contextOptions(args), { budgetTokens: 300, limit: 3 });
+  // Context flags never leak into the search filters the search command spreads.
+  assert.deepEqual(Object.keys(args.search).includes("context"), false);
   assert.deepEqual(args.search.types, ["Landing Page"]);
-  assert.deepEqual(parseArgs(["--root", "bundle", "search", "x"]).context, {});
+  assert.deepEqual(contextOptions(parseArgs(["--root", "bundle", "search", "x"])), {});
   ["--budget", "--limit"].forEach((flag) => {
     assert.throws(
       () => parseArgs([flag, "abc"]),
@@ -317,7 +320,7 @@ test("the CLI context command parses --budget and --limit and prints the JSON re
     assert.throws(() => parseArgs([flag, "0"]), /requires a positive integer/);
   });
   assert.match(usage(), /context <query>/);
-  assert.match(usage(), /--budget <tokens>/);
+  assert.match(usage(), /--budget, --limit, --provenance/);
 
   const run = runCli([
     "--root",
@@ -347,7 +350,10 @@ test("the CLI context command parses --budget and --limit and prints the JSON re
       "sourceCount",
     ]);
   });
-  assert.equal(parseArgs(["context", "x", "--provenance", "full"]).context.provenance, "full");
+  assert.equal(
+    contextOptions(parseArgs(["context", "x", "--provenance", "full"])).provenance,
+    "full",
+  );
   assert.throws(
     () => parseArgs(["context", "x", "--provenance", "verbose"]),
     (error) => error instanceof UsageError && /--provenance requires one of/.test(error.message),
@@ -362,7 +368,6 @@ test("the CLI context command parses --budget and --limit and prints the JSON re
   ]);
   assert.equal(none.status, 0, none.stderr);
   assert.ok(JSON.parse(none.stdout).sections.every((section) => !("provenance" in section)));
-  assert.match(usage(), /--provenance compact\|full\|none/);
   const missing = runCli(["--root", ALPINARIA_BUNDLE, "context"]);
   assert.equal(missing.status, 2);
   assert.match(missing.stderr, /context requires a query/);

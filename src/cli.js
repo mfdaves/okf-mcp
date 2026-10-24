@@ -15,11 +15,7 @@ const { conceptSummary } = require("./indexer");
 const { findOkfRoot, findProjectConfig, loadProjectConfig } = require("./project");
 const { normalizeLanguages } = require("./search/languages");
 const { loadWritePolicyFile } = require("./policy/write-policy");
-const {
-  createSearchOptions,
-  parseSearchOption,
-  withSearchLanguages,
-} = require("./search/cli-options");
+const { createSearchOptions, withSearchLanguages } = require("./search/cli-options");
 const contextCli = require("./context/cli-options");
 const { generateProject } = require("./plugins");
 const { ProducerService, producerReceipt } = require("./producers");
@@ -132,7 +128,6 @@ function parseArgs(argv) {
   let maxContentBytes = 65536;
   const generatedPaths = [];
   const search = createSearchOptions();
-  const context = contextCli.createContextOptions();
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     if (arg === "--root" || arg === "-r") {
@@ -329,14 +324,9 @@ function parseArgs(argv) {
       index += 1;
       continue;
     }
-    const consumed = parseSearchOption(arg, argv, index, search, usageError);
+    const consumed = contextCli.parseCommandOption(arg, argv, index, search, usageError);
     if (consumed >= 0) {
       index += consumed;
-      continue;
-    }
-    const contextConsumed = contextCli.parseContextOption(arg, argv, index, context, usageError);
-    if (contextConsumed >= 0) {
-      index += contextConsumed;
       continue;
     }
     if (arg === "--host") {
@@ -451,7 +441,6 @@ function parseArgs(argv) {
     writeToken,
     proposalRoot,
     search,
-    context,
   };
 }
 
@@ -475,7 +464,7 @@ function usage() {
     "  validate                    Validate project or bundles.",
     "  graph [json|dot|mermaid]    Export graph.",
     "  search <query>              Search concepts.",
-    "  context <query>             Pack a token-budgeted context from the best-matching sections.",
+    "  context <query>             Budgeted sections; search filters, --budget, --limit, --provenance.",
     "  concept <id-or-locator>     Print one concept.",
     "  neighbors <id-or-locator>   Print inbound/outbound neighbors.",
     "  paths <from> <to>           Find directed paths between concept locators.",
@@ -517,7 +506,6 @@ function usage() {
     "                  --mode auto|all|any, --min-coverage <0..1>, --min-relevance <0..1>, --freshness-prior.",
     "  Text search matches every term and falls back to any term (mode auto); it accepts at most",
     "  512 characters and 16 terms after stop words, and reports mode, coverage, and lowConfidence.",
-    "  context takes the search filters plus --budget <tokens> (default 1200), --limit <sections> (default 20), --provenance compact|full|none.",
     "  --version, -v               Print the package version.",
     "  --help, -h                  Print this help.",
     "  --debug                     Include stack traces in error output.",
@@ -820,10 +808,7 @@ async function main(argv, runtime) {
     printJson(searchConcepts(index, filters));
     return;
   }
-  if (command === "context") {
-    printJson(contextCli.runContextCommand(index, args, usageError));
-    return;
-  }
+  if (command === "context") return printJson(contextCli.runContext(index, args, usageError));
   if (command === "concept") {
     const locator = args.positional[1];
     if (!locator) {
