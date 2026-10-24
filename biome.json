@@ -1,0 +1,58 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.5.15/schema.json",
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
+  "files": {
+    "includes": [
+      "bin/**",
+      "scripts/**",
+      "src/**",
+      "test/**",
+      "biome.json",
+      "!test/fixtures",
+      "!test/snapshots"
+    ]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 100,
+    "lineEnding": "lf"
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "double",
+      "semicolons": "always",
+      "trailingCommas": "all",
+      "arrowParentheses": "always",
+      "bracketSpacing": true
+    }
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "recommended",
+      "correctness": {
+        "noUndeclaredVariables": "error",
+        "noUnusedImports": "error",
+        "noUnusedVariables": "warn"
+      },
+      "complexity": {
+        "useOptionalChain": "warn"
+      },
+      "style": {
+        "useTemplate": "warn"
+      },
+      "suspicious": {
+        "noPrototypeBuiltins": "warn",
+        "useIterableCallbackReturn": "warn",
+        "noAssignInExpressions": "warn",
+        "noControlCharactersInRegex": "warn"
+      }
+    }
+  }
+}

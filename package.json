@@ -20,6 +20,9 @@
   "scripts": {
     "test": "node --test",
     "check": "node --test",
+    "lint": "biome lint",
+    "format": "biome format --write",
+    "format:check": "biome format",
     "self:validate": "node bin/okf-mcp.js --root okf/okf-mcp validate",
     "pack:check": "npm pack --dry-run",
     "package:smoke": "node scripts/package-smoke.js",
@@ -59,6 +62,7 @@
     "minisearch": "7.2.0"
   },
   "devDependencies": {
+    "@biomejs/biome": "2.5.15",
     "@modelcontextprotocol/client": "2.0.0"
   }
 }
