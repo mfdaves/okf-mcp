@@ -225,18 +225,42 @@ function planChanges(index, record, changes) {
 
 // A full build with the same inputs as the index, the changes folded into the
 // document overrides and deletions so documents not yet on disk still count.
+// A full build with the same inputs as the index. What the index holds apart
+// from the files (documents kept as text, documents removed while their
+// files remain) and the requested changes are folded into the document
+// overrides and deletions of this one build, so the rebuilt index describes
+// the same state; the rebuilt record keeps the original options and carries
+// the overlay state on its entries and in overlayDeletions, never as pins
+// that would outlive the files.
 function rebuildIndex(record, plan, stats) {
   const overrides = new Map(record.config.documentOverrides);
   const deletions = new Set(record.config.documentDeletions);
+  const overlayDeletions = new Set(record.overlayDeletions);
+  overlayDeletions.forEach((key) => {
+    deletions.add(key);
+  });
+  record.bundles.forEach((bundleRecord) => {
+    bundleRecord.entries.forEach((entry) => {
+      if (entry.source === "text") {
+        overrides.set(documentOverrideKey(bundleRecord.bundle.id, entry.relativePath), entry.text);
+      }
+    });
+  });
   plan.bundles.forEach((state, bundleId) => {
     state.deletions.forEach((relativePath) => {
       const key = documentOverrideKey(bundleId, relativePath);
       overrides.delete(key);
       deletions.add(key);
+      if (fs.existsSync(documentAbsolutePath(state.bundleRecord.bundle, relativePath))) {
+        overlayDeletions.add(key);
+      } else {
+        overlayDeletions.delete(key);
+      }
     });
     state.upserts.forEach((upsert, relativePath) => {
       const key = documentOverrideKey(bundleId, relativePath);
       deletions.delete(key);
+      overlayDeletions.delete(key);
       if (upsert.doc) {
         overrides.set(key, upsert.doc.text);
       } else if (upsert.text !== undefined) {
@@ -256,13 +280,20 @@ function rebuildIndex(record, plan, stats) {
   if (record.project) {
     attachProject(rebuilt, record.project);
   }
-  indexRecord(rebuilt).stats = Object.assign(stats, { mode: "full" });
+  const next = indexRecord(rebuilt);
+  next.options = record.options;
+  next.config = record.config;
+  next.overlayDeletions = overlayDeletions;
+  next.stats = Object.assign(stats, { mode: "full" });
   return rebuilt;
 }
 
 function insertSorted(entries, entry) {
   let position = 0;
-  while (position < entries.length && !(entries[position].absolutePath > entry.absolutePath)) {
+  while (
+    position < entries.length &&
+    (entries[position] === null || !(entries[position].absolutePath > entry.absolutePath))
+  ) {
     position += 1;
   }
   entries.splice(position, 0, entry);
@@ -278,6 +309,7 @@ function applyBundleChanges(bundleRecord, state, config, changes) {
       if (entry.doc) {
         changes.removed.push({ relativePath: entry.relativePath, entry });
       }
+      changes.restored.add(documentOverrideKey(bundle.id, entry.relativePath));
     });
     bundleRecord.entries = [];
     bundleRecord.rootMissing = missingRootError(bundle);
@@ -293,6 +325,14 @@ function applyBundleChanges(bundleRecord, state, config, changes) {
       changes.removed.push({ relativePath, entry: old });
     }
     entries[position] = null;
+    // A document removed while its file remains is an overlay deletion that
+    // a later full rebuild has to repeat; one whose file is gone is not.
+    const key = documentOverrideKey(bundle.id, relativePath);
+    if (fs.existsSync(documentAbsolutePath(bundle, relativePath))) {
+      changes.overlayDeleted.add(key);
+    } else {
+      changes.restored.add(key);
+    }
   });
   state.upserts.forEach((upsert, relativePath) => {
     const absolutePath = documentAbsolutePath(bundle, relativePath);
@@ -304,6 +344,8 @@ function applyBundleChanges(bundleRecord, state, config, changes) {
         doc: upsert.doc,
         parseError: null,
         stat: null,
+        source: "text",
+        text: upsert.doc.text,
         derived: null,
       };
     } else {
@@ -321,6 +363,7 @@ function applyBundleChanges(bundleRecord, state, config, changes) {
       insertSorted(entries, entry);
     }
     changes.added.push({ relativePath, entry });
+    changes.restored.add(documentOverrideKey(bundle.id, relativePath));
   });
   bundleRecord.entries = entries.filter(Boolean);
 }
@@ -349,7 +392,13 @@ function assetReferencesChanged(changes) {
 }
 
 function applyIncrementally(record, plan, stats) {
-  const changes = { owned: new Set(), removed: [], added: [] };
+  const changes = {
+    owned: new Set(),
+    removed: [],
+    added: [],
+    overlayDeleted: new Set(),
+    restored: new Set(),
+  };
   const bundleRecords = record.bundles.map((bundleRecord) => {
     const copy = Object.assign({}, bundleRecord, { entries: bundleRecord.entries.slice() });
     const state = plan.bundles.get(bundleRecord.bundle.id);
@@ -382,6 +431,13 @@ function applyIncrementally(record, plan, stats) {
   }
   const changedEntries = new Set(changes.added.map(({ entry }) => entry));
   const previousDuplicates = record.registration.duplicateErrors.length > 0;
+  const overlayDeletions = new Set(record.overlayDeletions);
+  changes.restored.forEach((key) => {
+    overlayDeletions.delete(key);
+  });
+  changes.overlayDeleted.forEach((key) => {
+    overlayDeletions.add(key);
+  });
   const next = {
     bundleArgs: record.bundleArgs,
     options: record.options,
@@ -391,6 +447,7 @@ function applyIncrementally(record, plan, stats) {
     bundles: bundleRecords,
     registration: null,
     assets: null,
+    overlayDeletions,
     stats,
   };
   const selectAffected = ({ registration, assetState, located }) => {
@@ -470,6 +527,41 @@ function updateIndex(index, changes, options) {
   return applyIncrementally(record, plan, stats);
 }
 
+// Whether the file on disk is what the entry already describes. A disk-backed
+// entry is compared by size and mtime. An entry held as text is compared by
+// content; when the file carries the same text the entry becomes disk-backed
+// in place (a cache fill that changes nothing the entry describes), so later
+// refreshes need only a stat. A file that vanished mid-walk counts as changed
+// and the update records whatever it finds.
+function fileMatchesEntry(entry, filePath) {
+  let stat;
+  try {
+    stat = fs.statSync(filePath);
+  } catch {
+    return false;
+  }
+  if (entry.source === "disk") {
+    return Boolean(
+      entry.stat && entry.stat.size === stat.size && entry.stat.mtimeMs === stat.mtimeMs,
+    );
+  }
+  if (entry.source !== "text") {
+    return false;
+  }
+  let text;
+  try {
+    text = new TextDecoder("utf-8", { fatal: true }).decode(fs.readFileSync(filePath));
+  } catch {
+    return false;
+  }
+  if (text !== entry.text) {
+    return false;
+  }
+  entry.stat = { size: stat.size, mtimeMs: stat.mtimeMs };
+  entry.source = "disk";
+  return true;
+}
+
 // Brings an index up to date with its local bundle roots by comparing each
 // Markdown file's size and mtime with what the index recorded, then applying
 // the differences through updateIndex. Returns the same index object when
@@ -503,19 +595,7 @@ function refreshIndex(index, options) {
         }
         seen.add(relativePath);
         const entry = byPath.get(relativePath);
-        let stat = null;
-        try {
-          stat = fs.statSync(filePath);
-        } catch {
-          // Treat a file that vanished mid-walk as changed; the update
-          // re-reads it and records the outcome either way.
-        }
-        if (
-          !entry?.stat ||
-          !stat ||
-          entry.stat.size !== stat.size ||
-          entry.stat.mtimeMs !== stat.mtimeMs
-        ) {
+        if (!entry || !fileMatchesEntry(entry, filePath)) {
           upserts.push({ bundleId: bundle.id, relativePath });
         }
       });

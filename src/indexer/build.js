@@ -54,12 +54,17 @@ function fileStat(absolutePath) {
 // mtime so a later refresh can tell whether it changed. A parse failure keeps
 // the entry, as a parse_error, in the bundle's load order.
 function parseEntry(bundle, relativePath, absolutePath, text, config) {
+  // `source` records where the entry's bytes came from: "disk" entries carry
+  // the file's stat, "text" entries carry the text itself so a later full
+  // rebuild can fold them back in as overrides.
   const entry = {
     relativePath,
     absolutePath,
     doc: null,
     parseError: null,
     stat: null,
+    source: text === undefined ? "disk" : "text",
+    text,
     derived: null,
   };
   try {
@@ -151,15 +156,15 @@ function loadRemoteBundle(bundle, config) {
     if (!bundleAllowsPath(bundle, relativePath)) {
       return;
     }
-    bundleRecord.entries.push(
-      parseEntry(
-        bundle,
-        relativePath,
-        remoteDoc.source || relativePath,
-        String(remoteDoc.text || ""),
-        config,
-      ),
+    const entry = parseEntry(
+      bundle,
+      relativePath,
+      remoteDoc.source || relativePath,
+      String(remoteDoc.text || ""),
+      config,
     );
+    entry.source = "remote";
+    bundleRecord.entries.push(entry);
   });
   const unresolved = bundle.remoteSource?.unresolvedReferences || [];
   bundleRecord.remoteWarnings = unresolved.map((entry) =>
@@ -205,6 +210,8 @@ function buildIndex(bundleArgs, options) {
     ),
     registration: null,
     assets: null,
+    // Keys of documents removed from the index while their files remain.
+    overlayDeletions: new Set(),
     stats: { mode: "build" },
   };
   const owned = new Set();

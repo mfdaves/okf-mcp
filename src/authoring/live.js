@@ -763,7 +763,7 @@ class LiveAuthoringService {
       this.publication = {
         index: persistedIndex,
         hostOwned: Boolean(shared && this.indexCache.hostOwned),
-        changes: { upserts: plan.candidates.map((candidate) => candidateUpsert(candidate, false)) },
+        changes: { upserts: plan.candidates.map((candidate) => candidateUpsert(candidate, true)) },
       };
     }
     const status =
