@@ -1,0 +1,1111 @@
+{
+  "initialize": {
+    "capabilities": {
+      "resources": {
+        "listChanged": false
+      },
+      "tools": {
+        "listChanged": false
+      }
+    },
+    "instructions": null,
+    "serverInfo": {
+      "name": "okf-mcp"
+    }
+  },
+  "resourceTemplates": [
+    {
+      "description": "Markdown documents in the loaded Open Knowledge Format catalog.",
+      "mimeType": "text/markdown",
+      "name": "okf-documents",
+      "uriTemplate": "okf://{+locator}"
+    }
+  ],
+  "tools": [
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "description": "Check receipt field presence only; never attest, echo values, or persist the receipt.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "receipt": {
+            "additionalProperties": true,
+            "description": "Ephemeral receipt object; only its field names are returned.",
+            "type": "object"
+          },
+          "uri": {
+            "description": "Canonical or compatibility URI of the Attested Computation.",
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "uri",
+          "receipt"
+        ],
+        "type": "object"
+      },
+      "name": "check_computation_receipt"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "description": "Analyze a local or remote bundle for safe staged OKF v0.2 migration without creating proposals or writes.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "actorMappings": {
+            "additionalProperties": true,
+            "description": "Mappings keyed by URI, path, or $default; each value requires by plus confirmed: true.",
+            "type": "object"
+          },
+          "bundle": {
+            "description": "Bundle id to analyze; optional when exactly one root is loaded.",
+            "minLength": 1,
+            "type": "string"
+          },
+          "generatedPaths": {
+            "description": "Paths generated elsewhere and therefore skipped from direct proposals.",
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "name": "check_v02_migration"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "description": "Render the current OKF graph as JSON, Graphviz DOT, or Mermaid text.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "edgeKinds": {
+            "description": "Limit exported edges to these edge kinds.",
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "format": {
+            "default": "json",
+            "description": "Output format for the graph.",
+            "enum": [
+              "json",
+              "dot",
+              "mermaid"
+            ],
+            "type": "string"
+          },
+          "includeAssets": {
+            "default": false,
+            "description": "Include explicitly referenced bundle assets in the export.",
+            "type": "boolean"
+          },
+          "includeExternal": {
+            "default": false,
+            "description": "Include opaque external relation targets in the export.",
+            "type": "boolean"
+          },
+          "maxEdges": {
+            "default": 300,
+            "description": "Maximum number of graph edges to export.",
+            "maximum": 5000,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "maxNodes": {
+            "default": 100,
+            "description": "Maximum number of graph nodes to export.",
+            "maximum": 1000,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "name": "export_graph"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "description": "Find bounded relationship paths between two OKF concepts.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "edgeKinds": {
+            "description": "Limit path traversal to these edge kinds.",
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "maxPaths": {
+            "default": 3,
+            "description": "Maximum number of distinct paths to return.",
+            "maximum": 50,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "source": {
+            "description": "Canonical or path based okf URI where path search begins.",
+            "minLength": 1,
+            "type": "string"
+          },
+          "target": {
+            "description": "Canonical or path based okf URI where path search ends.",
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "target"
+        ],
+        "type": "object"
+      },
+      "name": "find_paths"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "description": "Read one valid OKF concept, including its frontmatter, Markdown body, and links.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "anyOf": [
+          {
+            "required": [
+              "id"
+            ]
+          },
+          {
+            "required": [
+              "uri"
+            ]
+          },
+          {
+            "required": [
+              "bundle",
+              "path"
+            ]
+          }
+        ],
+        "properties": {
+          "bundle": {
+            "description": "Bundle id used with path when uri is not supplied.",
+            "minLength": 1,
+            "type": "string"
+          },
+          "id": {
+            "description": "Portable extensionless Concept ID or bundle-relative Markdown path.",
+            "minLength": 1,
+            "type": "string"
+          },
+          "path": {
+            "description": "Bundle relative Markdown path used with bundle when uri is not supplied.",
+            "minLength": 1,
+            "type": "string"
+          },
+          "uri": {
+            "description": "Canonical or path based okf URI for the concept.",
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "get_concept"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "description": "Return a bounded set of OKF graph nodes and edges with optional concept filters.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "bundle": {
+            "description": "Limit graph nodes to this bundle id.",
+            "minLength": 1,
+            "type": "string"
+          },
+          "edgeKinds": {
+            "description": "Limit returned edges to these edge kinds.",
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "includeAssets": {
+            "default": false,
+            "description": "Include explicitly referenced bundle assets as graph nodes.",
+            "type": "boolean"
+          },
+          "includeExternal": {
+            "default": false,
+            "description": "Include opaque external relation targets in the graph.",
+            "type": "boolean"
+          },
+          "maxEdges": {
+            "default": 300,
+            "description": "Maximum number of graph edges to return.",
+            "maximum": 5000,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "maxNodes": {
+            "default": 100,
+            "description": "Maximum number of graph nodes to return.",
+            "maximum": 1000,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "pathPrefix": {
+            "description": "Limit graph nodes to bundle relative paths beginning with this prefix.",
+            "type": "string"
+          },
+          "tag": {
+            "description": "Limit graph nodes to concepts containing this tag.",
+            "minLength": 1,
+            "type": "string"
+          },
+          "type": {
+            "description": "Limit graph nodes to this exact concept type.",
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "get_graph"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "description": "Return the incoming and outgoing graph relationships for one OKF concept.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "edgeKinds": {
+            "description": "Limit neighbors to these edge kinds.",
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "includeAssets": {
+            "default": false,
+            "description": "Include referenced asset neighbors.",
+            "type": "boolean"
+          },
+          "includeExternal": {
+            "default": false,
+            "description": "Include opaque external neighbors without fetching them.",
+            "type": "boolean"
+          },
+          "uri": {
+            "description": "Canonical or path based okf URI of the center concept.",
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "uri"
+        ],
+        "type": "object"
+      },
+      "name": "get_neighbors"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "description": "Trace normalized source provenance through internal concepts without fetching external resources.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "includeExternal": {
+            "default": false,
+            "description": "Include URL and opaque provenance leaves without fetching them.",
+            "type": "boolean"
+          },
+          "maxDepth": {
+            "default": 3,
+            "description": "Maximum internal source depth.",
+            "maximum": 10,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxNodes": {
+            "default": 100,
+            "description": "Maximum provenance nodes.",
+            "maximum": 1000,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "uri": {
+            "description": "Canonical or compatibility OKF URI of the root concept.",
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "uri"
+        ],
+        "type": "object"
+      },
+      "name": "get_provenance"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "description": "Traverse a bounded OKF subgraph outward from one or more seed concepts.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "anyOf": [
+          {
+            "required": [
+              "uri"
+            ]
+          },
+          {
+            "required": [
+              "seeds"
+            ]
+          }
+        ],
+        "properties": {
+          "depth": {
+            "default": 1,
+            "description": "Maximum relationship depth to traverse from the seeds.",
+            "maximum": 10,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "edgeKinds": {
+            "description": "Limit traversal to these edge kinds.",
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "maxNodes": {
+            "default": 50,
+            "description": "Maximum number of graph nodes to return.",
+            "maximum": 1000,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "seeds": {
+            "description": "One or more okf URIs to use as traversal seeds.",
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "minItems": 1,
+            "type": "array"
+          },
+          "uri": {
+            "description": "Single canonical or path based okf URI to use as a seed.",
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "get_subgraph"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "description": "Summarize bundle, concept, edge, type, tag, and graph health counts.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      },
+      "name": "graph_summary"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "description": "Statically inspect an Attested Computation contract and indexed inert artifacts; never execute it.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "asOf": {
+            "description": "UTC ISO date or datetime for freshness evaluation.",
+            "minLength": 1,
+            "type": "string"
+          },
+          "includeComputation": {
+            "default": false,
+            "description": "Include bounded inline or text computation content.",
+            "type": "boolean"
+          },
+          "maxContentBytes": {
+            "default": 65536,
+            "description": "Maximum computation bytes to include.",
+            "maximum": 1048576,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "uri": {
+            "description": "Canonical or compatibility URI of the Attested Computation.",
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "uri"
+        ],
+        "type": "object"
+      },
+      "name": "inspect_attested_computation"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "description": "List the local and remote OKF bundles currently loaded by the server.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      },
+      "name": "list_bundles"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "description": "List compact OKF concept summaries with optional bundle, type, tag, and text filters.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "bundle": {
+            "description": "Limit results to this bundle id.",
+            "minLength": 1,
+            "type": "string"
+          },
+          "detail": {
+            "default": "compact",
+            "description": "Compact returns only URI, title, type, and description; full includes navigation metadata and signals.",
+            "enum": [
+              "compact",
+              "full"
+            ],
+            "type": "string"
+          },
+          "limit": {
+            "default": 25,
+            "description": "Maximum number of concepts to return.",
+            "maximum": 250,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "offset": {
+            "default": 0,
+            "description": "Number of matching concepts to skip before returning results.",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "query": {
+            "description": "Optional all-term text query matched against concept metadata and content; maximum 16 terms.",
+            "maxLength": 512,
+            "type": "string"
+          },
+          "tag": {
+            "description": "Limit results to concepts containing this tag.",
+            "minLength": 1,
+            "type": "string"
+          },
+          "type": {
+            "description": "Limit results to this exact concept type.",
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "list_concepts"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "description": "Count standard semantic and extension edge kinds in the current graph.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      },
+      "name": "list_edge_kinds"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "description": "Count the typed relations present in the current OKF graph.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      },
+      "name": "list_relation_types"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "description": "List metadata for remote bundles currently loaded into the server.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      },
+      "name": "list_remote_bundles"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "description": "Count the tags present on concepts in the current OKF index.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      },
+      "name": "list_tags"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "description": "Count the concept types present in the current OKF index.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      },
+      "name": "list_types"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "description": "Read one authoring proposal, including its candidate content and validation result.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "proposalId": {
+            "description": "Identifier returned when the proposal was created.",
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "proposalId"
+        ],
+        "type": "object"
+      },
+      "name": "okf_get_proposal"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "description": "List compact metadata for stored authoring proposals.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "bundle": {
+            "description": "Limit results to proposals for this bundle id.",
+            "minLength": 1,
+            "type": "string"
+          },
+          "status": {
+            "description": "Limit results to this proposal status.",
+            "enum": [
+              "proposed",
+              "accepted",
+              "rejected"
+            ],
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "okf_list_proposals"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "description": "Suggest a safe bundle relative Markdown path from a concept type and title.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "bundle": {
+            "description": "Writable root id; optional when exactly one local root is configured.",
+            "minLength": 1,
+            "type": "string"
+          },
+          "prefix": {
+            "description": "Optional bundle relative directory prefix.",
+            "type": "string"
+          },
+          "title": {
+            "description": "Concept title used to build the file name.",
+            "minLength": 1,
+            "type": "string"
+          },
+          "type": {
+            "description": "Concept type used to build the path.",
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "title"
+        ],
+        "type": "object"
+      },
+      "name": "okf_suggest_concept_path"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "description": "Validate a proposed new OKF concept without writing a proposal or concept file.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "body": {
+            "description": "Markdown body for the concept.",
+            "type": "string"
+          },
+          "bundle": {
+            "description": "Writable root id; optional when exactly one local root is configured.",
+            "minLength": 1,
+            "type": "string"
+          },
+          "frontmatter": {
+            "additionalProperties": true,
+            "description": "Complete YAML frontmatter represented as a JSON object.",
+            "type": "object"
+          },
+          "path": {
+            "description": "Safe bundle relative Markdown path for the concept.",
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "frontmatter"
+        ],
+        "type": "object"
+      },
+      "name": "okf_validate_concept"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "description": "Check declared parameters and produce non-executing digests without echoing parameter values.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "asOf": {
+            "description": "UTC ISO date or datetime for freshness evaluation.",
+            "minLength": 1,
+            "type": "string"
+          },
+          "parameters": {
+            "additionalProperties": true,
+            "description": "Parameter values keyed only by declared names.",
+            "type": "object"
+          },
+          "uri": {
+            "description": "Canonical or compatibility URI of the Attested Computation.",
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "uri",
+          "parameters"
+        ],
+        "type": "object"
+      },
+      "name": "prepare_attested_computation"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "description": "Read one explicitly referenced, already indexed bundle asset with digest verification and byte bounds.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "anyOf": [
+          {
+            "required": [
+              "uri"
+            ]
+          },
+          {
+            "required": [
+              "bundle",
+              "path"
+            ]
+          }
+        ],
+        "properties": {
+          "bundle": {
+            "description": "Bundle id used with path when uri is omitted.",
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxContentBytes": {
+            "default": 65536,
+            "description": "Maximum asset bytes to return.",
+            "maximum": 1048576,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "path": {
+            "description": "Bundle-relative indexed asset path used with bundle.",
+            "minLength": 1,
+            "type": "string"
+          },
+          "uri": {
+            "description": "Indexed okf-asset URI.",
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "read_bundle_asset"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "description": "Read one pinned sources[].git entry from an explicitly mapped checkout or bare repository without fetching.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "concept": {
+            "description": "Concept ID, Markdown path, custom ID, or compatibility URI declaring the source.",
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxContentBytes": {
+            "default": 65536,
+            "description": "Maximum Git blob bytes to read.",
+            "maximum": 1048576,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "sourceId": {
+            "description": "Exact sources[].id value to read.",
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "concept",
+          "sourceId"
+        ],
+        "type": "object"
+      },
+      "name": "read_git_source"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "description": "Search OKF concepts and return ranked summaries using text and structured filters.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "asOf": {
+            "description": "UTC ISO date or datetime used for deterministic freshness evaluation.",
+            "minLength": 1,
+            "type": "string"
+          },
+          "attestationReady": {
+            "description": "Require static Attested Computation readiness.",
+            "type": "boolean"
+          },
+          "bundle": {
+            "description": "Limit results to this bundle id.",
+            "minLength": 1,
+            "type": "string"
+          },
+          "detail": {
+            "default": "compact",
+            "description": "Compact returns only URI, title, type, and description; full includes ranking, navigation metadata, and signals.",
+            "enum": [
+              "compact",
+              "full"
+            ],
+            "type": "string"
+          },
+          "freshness": {
+            "description": "Limit results to unspecified, fresh, stale, or invalid freshness states.",
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "frontmatter": {
+            "additionalProperties": true,
+            "description": "Exact frontmatter filters; array fields use contains matching.",
+            "type": "object"
+          },
+          "generatedBy": {
+            "description": "Limit results to this generator actor.",
+            "minLength": 1,
+            "type": "string"
+          },
+          "hasSources": {
+            "description": "Require concepts to have or not have normalized sources.",
+            "type": "boolean"
+          },
+          "limit": {
+            "default": 25,
+            "description": "Maximum number of concepts to return.",
+            "maximum": 250,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "linkedFrom": {
+            "description": "Require an incoming edge from this concept URI.",
+            "minLength": 1,
+            "type": "string"
+          },
+          "linkedTo": {
+            "description": "Require an outgoing edge to this concept URI.",
+            "minLength": 1,
+            "type": "string"
+          },
+          "offset": {
+            "default": 0,
+            "description": "Number of matching concepts to skip before returning results.",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "orphanOnly": {
+            "default": false,
+            "description": "Return only concepts without incoming or outgoing resolved edges.",
+            "type": "boolean"
+          },
+          "pathPrefix": {
+            "description": "Limit results to bundle relative paths beginning with this prefix.",
+            "type": "string"
+          },
+          "query": {
+            "description": "All-term text query matched against concept metadata and content; maximum 16 terms.",
+            "maxLength": 512,
+            "type": "string"
+          },
+          "relationType": {
+            "description": "Limit results to concepts with an outgoing relation of this type.",
+            "minLength": 1,
+            "type": "string"
+          },
+          "runtime": {
+            "description": "Limit results to this Attested Computation runtime.",
+            "minLength": 1,
+            "type": "string"
+          },
+          "statuses": {
+            "description": "Limit results to lifecycle statuses.",
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "tagsAll": {
+            "description": "Require all of these tags.",
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "tagsAny": {
+            "description": "Require at least one of these tags.",
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "trustTiers": {
+            "description": "Limit results to unverified, machine-confirmed, or human-reviewed trust tiers.",
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "types": {
+            "description": "Limit results to any of these concept types.",
+            "items": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "verifiedBy": {
+            "description": "Limit results to concepts verified by this actor.",
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "search_concepts"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "description": "Report OKF conformance separately from project validity for one bundle or the full current index.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "bundle": {
+            "description": "Optional bundle id to validate in isolation.",
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "validate_bundle"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "description": "Report OKF conformance, project validity, and structured diagnostics for the complete configured project.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      },
+      "name": "validate_project"
+    }
+  ]
+}
