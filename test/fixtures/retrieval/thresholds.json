@@ -1,0 +1,78 @@
+{
+  "$comment": "Pre-registered retrieval thresholds (docs/plan-1.0.md section 8, WP0, WP1, WP3a). `target` values come from the plan and were written before any tuning; they are never adjusted to pass. `baseline` is the shipped 0.9.1 search (src/search.js, AND semantics) measured by `npm run eval:search` on 2026-10-24 with --split all, minus the 95% bootstrap half-width per metric (1,000 samples, seed 20261024); test/retrieval-eval.test.js asserts it as a regression floor. zeroResultRateMax is measured plus the half-width.",
+  "alpinaria": {
+    "gate": "full set (203 queries, above the 150 threshold): pre-registered targets on the full set, and a held-out drop larger than the bootstrap CI blocks a merge (section 8); tune only on split dev",
+    "target": {
+      "source": "WP1 acceptance, measured with the shipped default languages: auto",
+      "recallAt5": 0.72,
+      "ndcgAt10": 0.78,
+      "zeroResultRateMax": 0,
+      "lowConfidenceNoAnswerRecall": 0.5,
+      "lowConfidenceFlagsOnAnswerableTop1HitsMax": 0,
+      "sectionAnchorHitRate": 0.8,
+      "sectionAnchorHitRateSource": "WP3a acceptance on labelled dev queries via get_context"
+    },
+    "baseline": {
+      "measuredOn": "2026-10-24",
+      "searchModule": "src/search.js (0.9.1, MiniSearch AND)",
+      "split": "all",
+      "queries": 203,
+      "measured": {
+        "recallAt5": 0.2943,
+        "mustRecallAt5": 0.349,
+        "ndcgAt10": 0.3282,
+        "mrrAt10": 0.3831,
+        "p1": 0.3812,
+        "zeroResultRate": 0.6022,
+        "noAnswerReturnedAnyRate": 0.0455
+      },
+      "recallAt5": 0.234,
+      "mustRecallAt5": 0.283,
+      "ndcgAt10": 0.265,
+      "mrrAt10": 0.315,
+      "p1": 0.314,
+      "zeroResultRateMax": 0.672
+    }
+  },
+  "atlas": {
+    "gate": "full set (94 queries, below the 150 threshold): pre-registered target on the full set with bootstrap CI; dev/heldout reported, not gated",
+    "target": {
+      "source": "WP1 acceptance, second fixture",
+      "recallAt5": 0.7,
+      "sectionAnchorHitRate": 0.8,
+      "sectionAnchorHitRateSource": "WP3a acceptance on labelled dev queries via get_context"
+    },
+    "baseline": {
+      "measuredOn": "2026-10-24",
+      "searchModule": "src/search.js (0.9.1, MiniSearch AND)",
+      "split": "all",
+      "queries": 94,
+      "measured": {
+        "recallAt5": 0.2687,
+        "mustRecallAt5": 0.2976,
+        "ndcgAt10": 0.2837,
+        "mrrAt10": 0.3095,
+        "p1": 0.3095,
+        "zeroResultRate": 0.6786,
+        "noAnswerReturnedAnyRate": 0
+      },
+      "recallAt5": 0.179,
+      "mustRecallAt5": 0.202,
+      "ndcgAt10": 0.193,
+      "mrrAt10": 0.214,
+      "p1": 0.214,
+      "zeroResultRateMax": 0.774
+    }
+  },
+  "scale": {
+    "source": "docs/plan-1.0.md section 4.6 and WP1 acceptance; absolute numbers are trended, CI gates on ratios and 3x ceilings (WP8)",
+    "concepts": 5000,
+    "coldBuildMsMax": 2000,
+    "coldBuildMsMaxAt20k": 8000,
+    "stemmedOverUnstemmedBuildRatioMax": 2.5,
+    "searchP95MsMax": 25,
+    "searchP95MsMaxAt20k": 120,
+    "rssMbMaxWithoutEmbedder": 300,
+    "rssMbMaxWithoutEmbedderAt20k": 600
+  }
+}

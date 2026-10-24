@@ -5,7 +5,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { performance } = require("node:perf_hooks");
 
-const { buildIndex } = require("../src/indexer");
+const { buildIndex, sanitizeBundleId } = require("../src/indexer");
 const { searchConcepts } = require("../src/search");
 const { prepareSearchIndex } = require("../src/search-index");
 
@@ -14,7 +14,9 @@ function usage() {
     "Usage: node --expose-gc scripts/search-benchmark.js --root <okf-directory> [options]",
     "",
     "Options:",
-    "  --qrels <json>   JSON array of { query, expected } relevance judgments.",
+    "  --qrels <json>   Relevance judgments: [{ query, expected }] rows (expected = Concept ID or",
+    "                   graded [{ id, grade }]) or a fixture sidecar { queries: [...] } as under",
+    "                   test/fixtures/retrieval; graded rows add nDCG@10.",
     "  --rounds <n>     Measured rounds over the query set (default 100).",
     "  --help           Show this help.",
   ].join("\n");
@@ -48,21 +50,46 @@ function parseArgs(argv) {
   return options;
 }
 
-function loadQrels(file) {
+// Accepts the flat `[{ query, expected }]` shape (one expected Concept ID, grade 2), flat rows
+// with graded `expected: [{ id, grade }]`, or a fixture sidecar `{ queries: [...] }` as under
+// test/fixtures/retrieval. Sidecar entries carry a bundle id: only entries for the benchmarked
+// root's bundle are kept, and queries left without an expected concept (no-answer queries,
+// other bundles) are skipped because the benchmark measures ranking, not abstention.
+function normalizeExpected(expected, bundleId) {
+  if (typeof expected === "string") {
+    return expected.trim() ? [{ id: expected.trim(), grade: 2 }] : null;
+  }
+  if (!Array.isArray(expected)) {
+    return null;
+  }
+  const graded = expected
+    .filter((entry) => entry && typeof entry.id === "string" && entry.id.trim() && (!entry.bundle || !bundleId || entry.bundle === bundleId))
+    .map((entry) => ({ id: entry.id.trim(), grade: Number.isFinite(entry.grade) ? entry.grade : 2 }));
+  return graded;
+}
+
+function loadQrels(file, bundleId) {
   if (!file) {
     return [];
   }
   const parsed = JSON.parse(fs.readFileSync(path.resolve(file), "utf8"));
-  if (!Array.isArray(parsed) || parsed.some((entry) => (
-    !entry
-    || typeof entry.query !== "string"
-    || !entry.query.trim()
-    || typeof entry.expected !== "string"
-    || !entry.expected.trim()
-  ))) {
-    throw new TypeError("--qrels must contain a JSON array of { query, expected } strings.");
+  const rows = Array.isArray(parsed) ? parsed : (parsed && Array.isArray(parsed.queries) ? parsed.queries : null);
+  if (!rows) {
+    throw new TypeError("--qrels must contain a JSON array of { query, expected } rows or a { queries: [...] } sidecar.");
   }
-  return parsed;
+  const qrels = [];
+  rows.forEach((entry) => {
+    const expected = entry && typeof entry.query === "string" && entry.query.trim()
+      ? normalizeExpected(entry.expected, bundleId)
+      : null;
+    if (expected === null) {
+      throw new TypeError("--qrels rows need a query string and an expected Concept ID or a graded expected list.");
+    }
+    if (expected.length) {
+      qrels.push({ query: entry.query, expected, queryId: entry.id || entry.queryId || null });
+    }
+  });
+  return qrels;
 }
 
 function collectMemory() {
@@ -85,34 +112,55 @@ function matchesExpected(result, expected) {
   return [result.uri, result.pathUri, result.path, result.conceptId].includes(value);
 }
 
+function gradeOf(result, expected) {
+  const match = expected.find((entry) => matchesExpected(result, entry.id));
+  return match ? match.grade : 0;
+}
+
+const log2 = (value) => Math.log(value) / Math.LN2;
+const dcg = (grades) => grades.reduce((sum, grade, position) => sum + (grade > 0 ? grade / log2(position + 2) : 0), 0);
+
+// Graded relevance: Recall@10 counts every expected concept with grade >= 1 found in the top 10
+// (one expected concept reproduces the old all-or-nothing value), MRR and top-1 use the first
+// relevant result, nDCG@10 uses the grade as linear gain against the ideal ordering.
 function evaluate(index, qrels) {
   if (!qrels.length) {
     return null;
   }
   let reciprocalRank = 0;
-  let recalled = 0;
+  let recall = 0;
   let topOne = 0;
-  const cases = qrels.map(({ query, expected }) => {
+  let ndcg = 0;
+  const cases = qrels.map(({ query, expected, queryId }) => {
     const results = searchConcepts(index, { query, limit: 10 }).results;
-    const rank = results.findIndex((result) => matchesExpected(result, expected)) + 1;
+    const grades = results.map((result) => gradeOf(result, expected));
+    const rank = grades.findIndex((grade) => grade >= 1) + 1;
+    const relevant = expected.filter((entry) => entry.grade >= 1);
+    const found = relevant.filter((entry) => results.some((result) => matchesExpected(result, entry.id))).length;
+    const ideal = dcg(expected.map((entry) => entry.grade).sort((left, right) => right - left).slice(0, 10));
+    const queryNdcg = ideal ? dcg(grades) / ideal : 0;
+    recall += relevant.length ? found / relevant.length : 0;
+    ndcg += queryNdcg;
     if (rank > 0) {
-      recalled += 1;
       reciprocalRank += 1 / rank;
       if (rank === 1) {
         topOne += 1;
       }
     }
     return {
+      queryId,
       query,
       expected,
       rank: rank || null,
+      ndcgAt10: queryNdcg,
       top: results.slice(0, 3).map((result) => result.path),
     };
   });
   return {
     queries: qrels.length,
-    recallAt10: recalled / qrels.length,
+    recallAt10: recall / qrels.length,
     mrrAt10: reciprocalRank / qrels.length,
+    ndcgAt10: ndcg / qrels.length,
     top1: topOne / qrels.length,
     cases,
   };
@@ -125,7 +173,7 @@ function main(argv) {
     return;
   }
   const root = path.resolve(options.root);
-  const qrels = loadQrels(options.qrels);
+  const qrels = loadQrels(options.qrels, sanitizeBundleId(path.basename(root)));
   const parseStarted = performance.now();
   const index = buildIndex([root], { allowCustomRelationTypes: true });
   const parseMs = performance.now() - parseStarted;

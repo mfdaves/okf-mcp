@@ -28,7 +28,9 @@
     "package:smoke": "node scripts/package-smoke.js",
     "prepublishOnly": "npm run check && npm run self:validate",
     "inspect": "node bin/okf-mcp.js --help",
-    "start": "node bin/okf-mcp.js"
+    "start": "node bin/okf-mcp.js",
+    "eval:search": "node scripts/eval-search.js --fixture alpinaria --fixture atlas --split all --out test/fixtures/retrieval/reports/baseline-{date}",
+    "bench:search": "node --expose-gc scripts/search-benchmark.js --root test/fixtures/retrieval/alpinaria/bundles/alpinaria --qrels test/fixtures/retrieval/alpinaria/queries.json --rounds 20"
   },
   "keywords": [
     "mcp",
