@@ -196,11 +196,29 @@ async function timedAsync(fn) {
   return { ms: performance.now() - started, result };
 }
 
-// A batch of concept creates linking into the existing bundle, so each one
-// adds edges and dirties the lookup keys of the concepts it points at.
-function batchChanges(label, batch, size, targets, rand) {
+// A batch like an agent's: creates that relate and link into the bundle, and
+// updates of existing concepts whose new body links elsewhere, so each batch
+// adds edges, replaces documents and dirties the keys of what they point at.
+// `pool` lists the concepts updates may target (two per batch when it has
+// them); a concept is updated once per batch.
+function batchChanges(label, batch, size, targets, pool, rand) {
   const pick = (list) => list[Math.floor(rand() * list.length)];
+  const updates = Math.min(2, pool.length, size);
+  const updated = new Set();
   return Array.from({ length: size }, (_, position) => {
+    if (position < updates) {
+      let doc = pick(pool);
+      while (updated.has(doc.uri)) {
+        doc = pick(pool);
+      }
+      updated.add(doc.uri);
+      return {
+        op: "update",
+        uri: doc.uri,
+        title: `${doc.title} (${label} ${batch})`,
+        body: `# ${doc.title}\n\nSee [a related concept](/${pick(targets)}) and ${pick(BRANDS)}.\n`,
+      };
+    }
     const title = `${label} batch ${batch} concept ${position}`;
     return {
       op: "create",
@@ -212,6 +230,44 @@ function batchChanges(label, batch, size, targets, rand) {
       body: `# ${title}\n\nSee [a related concept](/${pick(targets)}) and ${pick(BRANDS)}.\n`,
     };
   });
+}
+
+// A concept other documents only link to, never relate to: removing it
+// re-derives its dependents' link edges (warnings) without making the bundle
+// invalid, which a broken relation would.
+function deletableConcept(index, excluded) {
+  const related = new Set();
+  const linked = new Set();
+  index.edges.forEach((edge) => {
+    (edge.kind === "relation" ? related : linked).add(edge.target);
+  });
+  return (
+    index.concepts.find(
+      (doc) =>
+        linked.has(doc.uri) &&
+        !related.has(doc.uri) &&
+        !excluded.has(doc.path) &&
+        !doc.path.startsWith("bench/"),
+    ) || null
+  );
+}
+
+// The concept most documents point at, the natural target of a linkedTo
+// filter.
+function popularTarget(index) {
+  const counts = new Map();
+  index.edges.forEach((edge) => {
+    if (!edge.broken) {
+      counts.set(edge.target, (counts.get(edge.target) || 0) + 1);
+    }
+  });
+  let best = null;
+  counts.forEach((count, uri) => {
+    if (!best || count > best.count) {
+      best = { uri, count };
+    }
+  });
+  return best ? best.uri : null;
 }
 
 // The same batch as index upserts, in the two forms the apply path uses: the
@@ -228,17 +284,25 @@ function batchUpserts(bundleId, changes, persisted) {
   });
 }
 
+// Plain queries, and the same queries through the relation and linkedTo
+// filters, which read the memoised edge views of the index object.
 function searchLatencies(index, rounds) {
-  const latencies = [];
+  const plain = [];
+  const filtered = [];
+  const linkedTo = popularTarget(index);
   // The first query pays for the lexical index of this index object; it is
   // timed separately so p95 reflects steady-state queries.
   const warm = timed(() => searchConcepts(index, { query: QUERIES[0], limit: 10 })).ms;
   for (let roundIndex = 0; roundIndex < rounds; roundIndex += 1) {
     QUERIES.forEach((query) => {
-      latencies.push(timed(() => searchConcepts(index, { query, limit: 10 })).ms);
+      plain.push(timed(() => searchConcepts(index, { query, limit: 10 })).ms);
+      filtered.push(
+        timed(() => searchConcepts(index, { query, relationType: "related_to", limit: 10 })).ms,
+      );
+      filtered.push(timed(() => searchConcepts(index, { query, linkedTo, limit: 10 })).ms);
     });
   }
-  return Object.assign(summary(latencies), { firstQueryMs: round(warm) });
+  return Object.assign(summary(plain), { firstQueryMs: round(warm), filtered: summary(filtered) });
 }
 
 // Times standalone updateIndex calls of one batch's size against a full
@@ -256,7 +320,7 @@ function measureUpdates(service, bundleId, targets, options) {
   const readBack = [];
   let current = index;
   for (let sample = 0; sample < 10; sample += 1) {
-    const changes = batchChanges("update", sample, options.batchSize, targets, rand);
+    const changes = batchChanges("update", sample, options.batchSize, targets, [], rand);
     const planned = timed(() => updateIndex(current, { upserts: batchUpserts(bundleId, changes) }));
     text.push(planned.ms);
     // The read-back form parses the files, so they have to exist; they are
@@ -291,8 +355,13 @@ function measureUpdates(service, bundleId, targets, options) {
   };
 }
 
-async function runWriteBatches(store, index, options, targets, gitCommit) {
+// Runs the batches through the service. Before each one a concept other
+// documents only link to is removed outside the service (and, with git on,
+// committed outside the timer), so every batch's refresh finds an external
+// deletion with dependents. `targets` and `pool` lose what was removed.
+async function runWriteBatches(store, index, options, targets, pool, gitCommit) {
   const label = gitCommit ? "git-on" : "git-off";
+  const root = store.getBundles()[0].root;
   const rand = prng(options.seed + (gitCommit ? 2 : 1));
   const counting = countingSpawnSync();
   const service = new LiveAuthoringService(store, {
@@ -307,8 +376,24 @@ async function runWriteBatches(store, index, options, targets, gitCommit) {
   const gitMs = [];
   const gitCalls = [];
   const statuses = {};
+  const removed = new Set();
   for (let batch = 0; batch < options.batches; batch += 1) {
-    const changes = batchChanges(label, batch, options.batchSize, targets, rand);
+    const victim = deletableConcept(service.currentIndex([]), removed);
+    if (victim) {
+      fs.rmSync(path.join(root, ...victim.path.split("/")));
+      removed.add(victim.path);
+      [targets, pool].forEach((list) => {
+        const position = list.findIndex((entry) => (entry.path || entry) === victim.path);
+        if (position >= 0) {
+          list.splice(position, 1);
+        }
+      });
+      if (gitCommit) {
+        git(root, ["add", "-A"]);
+        git(root, ["commit", "-q", "-m", `external removal ${batch}`]);
+      }
+    }
+    const changes = batchChanges(label, batch, options.batchSize, targets, pool, rand);
     const before = Object.assign({}, counting.totals);
     const { ms, result } = await timedAsync(() => service.applyChanges({ changes }));
     if (!result.applied) {
@@ -325,6 +410,7 @@ async function runWriteBatches(store, index, options, targets, gitCommit) {
   return {
     report: {
       gitCommit,
+      externalRemovals: removed.size,
       batchMs: summary(batches),
       gitMs: summary(gitMs),
       gitCallsPerBatch: median(gitCalls),
@@ -345,18 +431,23 @@ async function main() {
     const store = FileConceptStore.fromRoot(root);
     const bundleId = store.getBundles()[0].id;
     const probe = new LiveAuthoringService(store, { actor: "bench/agent" });
-    const targets = probe.buildIndex([]).concepts.map((doc) => doc.path);
+    const seeded = probe.buildIndex([]);
+    const targets = seeded.concepts.map((doc) => doc.path);
     writeIndexPage(root, targets);
     initialiseGit(root);
 
     const updates = measureUpdates(probe, bundleId, targets, options);
     const searchBefore = searchLatencies(updates.index, options.rounds);
 
-    const gitOff = await runWriteBatches(store, updates.index, options, targets, false);
+    // Concepts the batches may update: the index page's entries stay put.
+    const pool = seeded.concepts
+      .filter((doc) => !targets.slice(0, 5).includes(doc.path))
+      .map((doc) => ({ uri: doc.uri, path: doc.path, title: doc.title }));
+    const gitOff = await runWriteBatches(store, updates.index, options, targets, pool, false);
     // The git-on run needs a clean worktree to start from.
     git(root, ["add", "-A"]);
     git(root, ["commit", "-q", "-m", "git-off batches"]);
-    const gitOn = await runWriteBatches(store, gitOff.index, options, targets, true);
+    const gitOn = await runWriteBatches(store, gitOff.index, options, targets, pool, true);
 
     const after = gitOn.index;
     const searchAfter = searchLatencies(after, options.rounds);
@@ -374,6 +465,11 @@ async function main() {
       },
       batches: options.batches,
       batchSize: options.batchSize,
+      batchMix: {
+        updates: Math.min(2, options.batchSize),
+        creates: options.batchSize - Math.min(2, options.batchSize),
+        externalRemovalBefore: true,
+      },
       fullBuildMs: updates.fullBuildMs,
       incrementalUpdateMs: updates.incrementalUpdateMs,
       incrementalOverFull: updates.incrementalOverFull,
@@ -392,6 +488,7 @@ async function main() {
         writeBatchGitOnP95Under500ms: gitOn.report.batchMs.p95 <= 500,
         incrementalOverFullUnder0point3: updates.incrementalOverFull <= 0.3,
         searchP95Within25ms: searchAfter.p95 <= 25,
+        filteredSearchP95Within25ms: searchAfter.filtered.p95 <= 25,
       },
     };
     process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
