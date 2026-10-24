@@ -15,7 +15,9 @@
 //
 // The budgets (section 4.6): a batch of five concepts with git commit on in
 // 500 ms or less at 5,000 concepts, incremental over full build 0.3 or less,
-// and search p95 unchanged by the writes.
+// and search p95 unchanged by the writes. The generated bundle has no asset
+// files, so the refresh's asset watch has nothing to stat here; its cost is
+// proportional to the referenced assets of a real bundle.
 
 const { spawnSync } = require("node:child_process");
 const fs = require("node:fs");
@@ -272,14 +274,18 @@ function popularTarget(index) {
 
 // The same batch as index upserts, in the two forms the apply path uses: the
 // rendered text at planning time and a read-back of the file once written.
-function batchUpserts(bundleId, changes, persisted) {
+// An update is the replacement document at the concept's existing path.
+function batchUpserts(bundleId, changes, pool, persisted) {
   return changes.map((change) => {
-    const upsert = { bundleId, relativePath: change.path };
+    const doc = change.op === "update" ? pool.find((entry) => entry.uri === change.uri) : null;
+    const upsert = { bundleId, relativePath: doc ? doc.path : change.path };
     if (persisted) {
       return upsert;
     }
     return Object.assign(upsert, {
-      text: `---\ntype: ${change.type}\ntitle: "${change.title}"\ntags: [${change.tags.join(", ")}]\nrelations:\n  - type: ${change.relations[0].type}\n    target: ${change.relations[0].target}\n---\n\n${change.body}`,
+      text: doc
+        ? `---\ntype: ${doc.type}\ntitle: "${change.title}"\n---\n\n${change.body}`
+        : `---\ntype: ${change.type}\ntitle: "${change.title}"\ntags: [${change.tags.join(", ")}]\nrelations:\n  - type: ${change.relations[0].type}\n    target: ${change.relations[0].target}\n---\n\n${change.body}`,
     });
   });
 }
@@ -305,9 +311,11 @@ function searchLatencies(index, rounds) {
   return Object.assign(summary(plain), { firstQueryMs: round(warm), filtered: summary(filtered) });
 }
 
-// Times standalone updateIndex calls of one batch's size against a full
-// build of the same bundle, the ratio section 4.6 budgets.
-function measureUpdates(service, bundleId, targets, options) {
+// Times standalone updateIndex calls of one batch's size and mix (creates
+// and updates, as the apply path runs them) against a full build of the same
+// bundle, the ratio section 4.6 budgets.
+function measureUpdates(service, bundleId, targets, pool, options) {
+  const root = service.store.getBundles()[0].root;
   const builds = [];
   let index = null;
   for (let sample = 0; sample < 3; sample += 1) {
@@ -320,24 +328,31 @@ function measureUpdates(service, bundleId, targets, options) {
   const readBack = [];
   let current = index;
   for (let sample = 0; sample < 10; sample += 1) {
-    const changes = batchChanges("update", sample, options.batchSize, targets, [], rand);
-    const planned = timed(() => updateIndex(current, { upserts: batchUpserts(bundleId, changes) }));
+    const changes = batchChanges("update", sample, options.batchSize, targets, pool, rand);
+    const rendered = batchUpserts(bundleId, changes, pool);
+    const planned = timed(() => updateIndex(current, { upserts: rendered }));
     text.push(planned.ms);
-    // The read-back form parses the files, so they have to exist; they are
-    // removed again before the apply runs, which creates its own paths.
-    changes.forEach((change, position) => {
-      const file = path.join(service.store.getBundles()[0].root, ...change.path.split("/"));
+    // The read-back form parses the files, so they have to be on disk: the
+    // creates are written and removed again, the updates overwrite their
+    // concept and are put back, so the apply phase starts from the bundle
+    // as generated.
+    const originals = rendered.map((upsert) => {
+      const file = path.join(root, ...upsert.relativePath.split("/"));
+      const original = fs.existsSync(file) ? fs.readFileSync(file) : null;
       fs.mkdirSync(path.dirname(file), { recursive: true });
-      fs.writeFileSync(file, batchUpserts(bundleId, [change])[0].text);
-      if (position === changes.length - 1) {
-        const persisted = timed(() =>
-          updateIndex(current, { upserts: batchUpserts(bundleId, changes, true) }),
-        );
-        readBack.push(persisted.ms);
-      }
+      fs.writeFileSync(file, upsert.text);
+      return { file, original };
     });
-    changes.forEach((change) => {
-      fs.rmSync(path.join(service.store.getBundles()[0].root, ...change.path.split("/")));
+    const persisted = timed(() =>
+      updateIndex(current, { upserts: batchUpserts(bundleId, changes, pool, true) }),
+    );
+    readBack.push(persisted.ms);
+    originals.forEach(({ file, original }) => {
+      if (original === null) {
+        fs.rmSync(file);
+      } else {
+        fs.writeFileSync(file, original);
+      }
     });
     current = planned.result;
   }
@@ -436,13 +451,12 @@ async function main() {
     writeIndexPage(root, targets);
     initialiseGit(root);
 
-    const updates = measureUpdates(probe, bundleId, targets, options);
-    const searchBefore = searchLatencies(updates.index, options.rounds);
-
     // Concepts the batches may update: the index page's entries stay put.
     const pool = seeded.concepts
       .filter((doc) => !targets.slice(0, 5).includes(doc.path))
-      .map((doc) => ({ uri: doc.uri, path: doc.path, title: doc.title }));
+      .map((doc) => ({ uri: doc.uri, path: doc.path, title: doc.title, type: doc.type }));
+    const updates = measureUpdates(probe, bundleId, targets, pool, options);
+    const searchBefore = searchLatencies(updates.index, options.rounds);
     const gitOff = await runWriteBatches(store, updates.index, options, targets, pool, false);
     // The git-on run needs a clean worktree to start from.
     git(root, ["add", "-A"]);
