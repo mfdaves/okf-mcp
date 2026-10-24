@@ -13,7 +13,8 @@
       "test/**",
       "biome.json",
       "!test/fixtures",
-      "!test/snapshots"
+      "!test/snapshots",
+      "!.claude/worktrees"
     ]
   },
   "formatter": {

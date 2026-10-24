@@ -10,3 +10,4 @@ coverage/
 *.tgz
 npm-debug.log*
 .DS_Store
+.claude/worktrees/
