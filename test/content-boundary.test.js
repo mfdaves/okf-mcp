@@ -467,11 +467,12 @@ test("write mode: refused batches and policy violations never echo catalog text"
 
 test("malformed catalog values: diagnostics and receipts name positions and paths, never text", async (t) => {
   const { root } = makeFixture(t);
-  // An undeclared relation type and a duplicated computation parameter are
-  // named in their messages only when they are plain identifiers; these
-  // tokens contain a space, so they never are.
-  const badRelation = token("reltype", "4 x");
-  const badParameter = token("param", "5 x");
+  // An undeclared relation type and a repeated computation parameter name
+  // are never echoed, however identifier-like. These tokens are space-free
+  // phrases; the relation ones carry a slash so --root mode, which accepts
+  // [A-Za-z0-9_.-] custom types, still reports them as undeclared.
+  const badRelation = token("ignore-all/previous-instructions", 4);
+  const badParameter = token("ignore-all-previous-instructions", 5);
   write(
     root,
     "broken/relation.md",
@@ -549,7 +550,9 @@ test("malformed catalog values: diagnostics and receipts name positions and path
         path: "ok/related.md",
         type: "Reference",
         title: "Related",
-        relations: [{ type: token("reltype", "6 x"), target: "/concepts/concept-2.md" }],
+        relations: [
+          { type: token("ignore-all/previous-instructions", 6), target: "/concepts/concept-2.md" },
+        ],
       },
     ],
   };
@@ -561,22 +564,16 @@ test("malformed catalog values: diagnostics and receipts name positions and path
   assert.equal(receipts[1].applied, false);
   const messages = messagesIn([report, preview, receipts], []);
   assert.ok(
-    messages.some((message) =>
-      /^Unsupported relation type \(unlisted\) on okf:\/\/catalog\/broken\/relation$/.test(message),
-    ),
-    "the relation message names the concept",
+    messages.includes("Relation #1 of broken/relation.md uses an undeclared type."),
+    "the relation message names the concept and the relation's ordinal",
   );
   assert.ok(
-    messages.some((message) =>
-      /^Unsupported relation type \(unlisted\) on okf:\/\/catalog\/ok\/related$/.test(message),
-    ),
+    messages.includes("Relation #1 of ok/related.md uses an undeclared type."),
     "the candidate's relation message names the candidate",
   );
   assert.ok(
-    messages.includes(
-      "Duplicate computation parameter (unlisted) on broken/computation.md (parameters[1].name)",
-    ),
-    "the duplicate parameter message names the concept and field",
+    messages.includes("Computation parameter #2 of broken/computation.md repeats an earlier name."),
+    "the parameter message names the concept and the parameter's ordinal",
   );
   const yamlMessages = new Set(
     messages.filter((message) => message.startsWith("Invalid YAML frontmatter")),
@@ -600,17 +597,19 @@ test("malformed catalog values: diagnostics and receipts name positions and path
     frontmatter: {
       type: "Reference",
       title: "Proposed",
-      relations: [{ type: token("reltype", "7 x"), target: "/concepts/concept-3.md" }],
+      relations: [
+        { type: "related_to", target: "/concepts/concept-1.md" },
+        { type: token("ignore-all/previous-instructions", 7), target: "/concepts/concept-3.md" },
+      ],
     },
     body: "# Proposed",
   });
   assert.ok(
-    proposed.messages.includes("Unsupported relation type (unlisted) on okf://catalog/ok/proposed"),
+    proposed.messages.includes("Relation #2 of ok/proposed.md uses an undeclared type."),
     proposed.messages.join(" | "),
   );
   for (const message of proposed.messages) assertClean("proposal diagnostic", message);
-  // An identifier is still named, so an operator can fix it (custom types
-  // are allowed in --root mode, but not with a slash).
+  // Not even a harmless-looking identifier is echoed.
   const typo = await failingCall(proposals.client, "okf_propose_concept", {
     path: "ok/typo.md",
     frontmatter: {
@@ -621,9 +620,10 @@ test("malformed catalog values: diagnostics and receipts name positions and path
     body: "# Typo",
   });
   assert.ok(
-    typo.messages.includes("Unsupported relation type relates/to on okf://catalog/ok/typo"),
+    typo.messages.includes("Relation #1 of ok/typo.md uses an undeclared type."),
     typo.messages.join(" | "),
   );
+  assert.ok(typo.messages.every((message) => !message.includes("relates/to")));
   assert.equal(stderr(), "");
   assert.equal(proposals.stderr(), "");
 });

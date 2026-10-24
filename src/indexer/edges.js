@@ -3,7 +3,7 @@
 const path = require("node:path");
 const { normalizeSlashes, safeRelativePath } = require("../parser");
 const { isExternalReference, isLocalAssetReference, mimeIsText } = require("../assets");
-const { displayIdentifier } = require("../catalog-text");
+const { undeclaredRelationTypeMessage } = require("../catalog-text");
 
 function documentAtPath(documentsByPath, pathUri) {
   if (!documentsByPath || typeof documentsByPath.get !== "function") {
@@ -226,7 +226,7 @@ function documentEdges(doc, bundle, lookups, config) {
   });
   doc.relations
     .map((relation) => relationFrom(relation, doc))
-    .forEach((relation) => {
+    .forEach((relation, position) => {
       const type = String(relation.type || "related_to");
       const targetUri = String(relation.target || "").trim();
       if (!targetUri) {
@@ -246,7 +246,7 @@ function documentEdges(doc, bundle, lookups, config) {
           bundle: doc.bundle,
           path: doc.path,
           relationType: type,
-          message: `Unsupported relation type ${displayIdentifier(type)} on ${doc.uri || doc.path}`,
+          message: undeclaredRelationTypeMessage(doc.path, position),
         });
       } else if (allowCustomRelationTypes && safeCustomType) {
         customRelationTypes.push(type);

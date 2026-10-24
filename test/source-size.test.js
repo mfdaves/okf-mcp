@@ -13,7 +13,7 @@ const LINE_CAP = 800;
 // Biome format landed); they may shrink but never grow. Delete an entry once
 // its file is under the cap.
 const GRANDFATHERED = {
-  "authoring.js": 1053,
+  "authoring.js": 1010,
   "cli.js": 996,
   "migration.js": 865,
 };

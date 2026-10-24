@@ -8,6 +8,7 @@ const test = require("node:test");
 
 const { buildIndex } = require("../src/indexer");
 const {
+  UNKNOWN_ACTOR,
   compileGlobPattern,
   evaluateWritePolicy,
   globMatch,
@@ -456,15 +457,18 @@ test("evaluateWritePolicy honours defaultEffect both ways and tolerates no polic
   assert.throws(() => evaluate({ rules: [] }, "human:x", [change()]), /from parseWritePolicy/);
 });
 
-test("an unattributed write matches no rule and applyToProducers is an explicit boolean", () => {
-  // Even a catch-all rule does not match a write without an actor.
+test("an unattributed write is judged as the actor unknown and applyToProducers is a boolean", () => {
+  // "*" and "**" match the literal actor "unknown"; a rule can also name it.
+  assert.equal(UNKNOWN_ACTOR, "unknown");
   const catchAll = policyOf({ defaultEffect: "deny", rules: [{ actors: ["**"] }] });
-  assert.deepEqual(reasons(evaluate(catchAll, null, [change()])), [[null, "actor_denied", null]]);
-  assert.deepEqual(
-    evaluate(policyOf({ rules: [{ actors: ["**"], effect: "deny" }] }), null, [change()])
-      .violations,
-    [],
-  );
+  assert.deepEqual(evaluate(catchAll, null, [change()]).violations, []);
+  const denyStar = policyOf({ rules: [{ actors: ["*"], effect: "deny" }] });
+  assert.deepEqual(reasons(evaluate(denyStar, null, [change()])), [[0, "actor_denied", null]]);
+  const named = policyOf({ rules: [{ name: "legacy", actors: ["unknown"], effect: "deny" }] });
+  assert.deepEqual(reasons(evaluate(named, null, [change()])), [["legacy", "actor_denied", null]]);
+  assert.deepEqual(evaluate(named, "human:alice", [change()]).violations, []);
+  const closed = policyOf({ defaultEffect: "deny", rules: [{ actors: ["human:*"] }] });
+  assert.deepEqual(reasons(evaluate(closed, null, [change()])), [[null, "actor_denied", null]]);
   assert.throws(() => evaluate(catchAll, undefined, [change()]), /requires an actor/);
 
   assert.equal(policyOf({}).applyToProducers, false);

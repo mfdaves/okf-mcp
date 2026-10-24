@@ -586,6 +586,14 @@ function discoverProject(args, startDir) {
   return args;
 }
 
+// --policy: the --root counterpart of writePolicy, for stdio and HTTP alike.
+function writePolicyOption(args) {
+  if (args.policy && !args.root) {
+    throw usageError("--policy requires --root; declare writePolicy in okf.project.yaml instead.");
+  }
+  return args.policy ? loadWritePolicyFile(args.policy) : undefined;
+}
+
 function stdioServerOptions(args) {
   const repositoryMappings = parseRepositoryMappings(args.repositories);
   const options = {
@@ -606,18 +614,9 @@ function stdioServerOptions(args) {
       options.gitCommit = true;
     }
   }
-  if (args.strictLinks) {
-    options.strictLinks = true;
-  }
-  if (args.policy && !args.root) {
-    throw usageError("--policy requires --root; declare writePolicy in okf.project.yaml instead.");
-  }
-  if (args.policy) {
-    options.writePolicy = loadWritePolicyFile(args.policy);
-  }
-  if (args.languages) {
-    options.languages = args.languages;
-  }
+  if (args.strictLinks) options.strictLinks = true;
+  if (args.policy) options.writePolicy = writePolicyOption(args);
+  if (args.languages) options.languages = args.languages;
   if (args.proposalRoot) {
     options.proposalRoot = args.proposalRoot;
   }
@@ -731,13 +730,14 @@ async function main(argv, runtime) {
     if (!args.project && !args.root) {
       throw usageError("serve requires --root or --project.");
     }
-    const result = await runHttpServer({
+    const result = await (runtime?.runHttpServer || runHttpServer)({
       projectPath: args.project,
       rootPath: args.root,
       host: args.host,
       port: args.port,
       writeToken: args.writeToken || process.env.OKF_WRITE_TOKEN || "",
       proposalRoot: args.proposalRoot || "",
+      writePolicy: writePolicyOption(args),
     });
     process.stderr.write(`OKF HTTP server listening on ${result.url}\n`);
     return;

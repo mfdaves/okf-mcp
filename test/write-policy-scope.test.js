@@ -7,7 +7,7 @@ const path = require("node:path");
 const test = require("node:test");
 
 const { ConceptAuthoringService } = require("../src/authoring");
-const { parseArgs } = require("../src/cli");
+const { main, parseArgs } = require("../src/cli");
 const { runHttpServer } = require("../src/http-server");
 const { loadProjectConfig } = require("../src/project");
 const { ProducerService } = require("../src/producers");
@@ -385,5 +385,177 @@ test("applyToProducers judges producer output against process:<name> before publ
   const receipt = await callJson(mcp.client, "okf_run_producer", { producer: "primary-db" });
   assert.equal(receipt.payload.applied, false);
   assert.equal(receipt.payload.policyViolations.length, 1);
+  assert.deepEqual(fs.readdirSync(fixture.bundle), []);
+});
+
+// Follow-up gaps -----------------------------------------------------------
+
+async function httpPost(url, route, body) {
+  const response = await fetch(`${url}${route}`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${TOKEN}`, "content-type": "application/json" },
+    body: JSON.stringify(body || {}),
+  });
+  return response.json();
+}
+
+test("serve --root --authoring --policy applies the policy file to the HTTP routes", async (t) => {
+  const parent = tempRoot(t, "okf-policy-serve-");
+  const root = path.join(parent, "catalog");
+  write(root, "index.md", ["---", 'okf_version: "0.2"', "---", "", "# Catalog", ""].join("\n"));
+  const policyPath = path.join(parent, "policy.yaml");
+  fs.writeFileSync(
+    policyPath,
+    [
+      "rules:",
+      "  - name: no-drafts",
+      '    actors: ["*"]',
+      '    paths: ["drafts/**"]',
+      "    effect: deny",
+      "",
+    ].join("\n"),
+  );
+  const started = [];
+  await main(
+    ["--root", root, "--authoring", "--policy", policyPath, "--write-token", TOKEN, "serve"],
+    {
+      runHttpServer: async (options) => {
+        const result = await runHttpServer(Object.assign({}, options, { port: 0 }));
+        started.push(result);
+        return result;
+      },
+    },
+  );
+  assert.equal(started.length, 1);
+  t.after(() => new Promise((resolve) => started[0].server.close(resolve)));
+  const { url } = started[0];
+  const draft = { path: "drafts/one.md", frontmatter: { type: "Note", title: "Draft" } };
+  const refused = await httpPost(url, "/v1/proposals", draft);
+  assert.equal(refused.created, false);
+  assert.deepEqual(
+    refused.policyViolations.map(({ rule, reason, path: target }) => [rule, reason, target]),
+    [["no-drafts", "path_denied", "drafts/one.md"]],
+  );
+  const allowed = await httpPost(url, "/v1/proposals", {
+    path: "notes/one.md",
+    frontmatter: { type: "Note", title: "One" },
+  });
+  assert.equal(allowed.created, true);
+  assert.equal(Object.hasOwn(allowed.proposal, "proposedBy"), false);
+  assert.equal(fs.existsSync(path.join(root, "drafts")), false);
+
+  // --policy still needs --root, for serve as for mcp.
+  await assert.rejects(
+    main(["--project", "x.yaml", "--authoring", "--policy", policyPath, "serve"], {
+      runHttpServer: async () => assert.fail("must not start"),
+    }),
+    /--policy requires --root/,
+  );
+});
+
+test("a legacy proposal accepted without an actor is judged as the actor unknown", async (t) => {
+  for (const policyLines of [
+    ["rules:", "  - name: nobody-unattributed", '    actors: ["*"]', "    effect: deny"],
+    ["defaultEffect: deny", "rules:", `  - actors: ["${REVIEWER}"]`],
+  ]) {
+    const fixture = makeCatalogProject(t, policyLines);
+    const legacy = await storeProposal(fixture.projectPath, null, NEW_NOTE);
+    assert.equal(Object.hasOwn(legacy, "proposedBy"), false);
+    const service = new ConceptAuthoringService(FileConceptStore.fromProject(fixture.projectPath));
+    assert.equal(service.actor, null);
+    const refused = await service.acceptProposal({ proposalId: legacy.id });
+    assert.equal(refused.accepted, false, policyLines.join(" "));
+    assert.equal(refused.policyViolations[0].reason, "actor_denied");
+    assert.equal(fs.existsSync(path.join(fixture.bundle, "new-note.md")), false);
+  }
+});
+
+test("a v0.2 migration is judged before any of its proposals is stored", async (t) => {
+  for (const [denied, expectedPath] of [
+    ["index.md", "index.md"],
+    ["metric.md", "metric.md"],
+  ]) {
+    const projectRoot = tempRoot(t, "okf-policy-migration-");
+    const bundle = path.join(projectRoot, "bundle");
+    write(bundle, "index.md", "# Legacy\n\n- [Metric](metric.md)\n");
+    write(
+      bundle,
+      "metric.md",
+      ["---", "type: Metric", "timestamp: 2026-05-28T22:53:05Z", "---", "", "# Metric", ""].join(
+        "\n",
+      ),
+    );
+    const store = new FileConceptStore({
+      bundles: [{ id: "legacy", root: bundle }],
+      relationTypes: [],
+      proposalRoot: path.join(projectRoot, ".okf-proposals"),
+    });
+    const service = new ConceptAuthoringService(store, {
+      actor: REVIEWER,
+      writePolicy: { rules: [{ actors: ["**"], paths: [denied], effect: "deny" }] },
+    });
+    const result = await service.proposeV02Migration({
+      bundle: "legacy",
+      actorMappings: { "okf://legacy/metric": { by: "human:catalog-owner", confirmed: true } },
+    });
+    assert.equal(result.created, false);
+    assert.deepEqual(
+      result.policyViolations.map(({ rule, reason, path: target }) => [rule, reason, target]),
+      [[0, "path_denied", expectedPath]],
+    );
+    assert.equal(result.errors[0].layer, "policy");
+    assert.deepEqual(await store.listProposals({}), []);
+    const migrations = path.join(store.proposalRoot, "migrations");
+    assert.deepEqual(fs.existsSync(migrations) ? fs.readdirSync(migrations) : [], []);
+  }
+});
+
+test("acceptance publishes the default status the policy judged a create with", async (t) => {
+  const fixture = makeCatalogProject(t, [
+    "defaultEffect: deny",
+    "rules:",
+    "  - name: reviewers",
+    `    actors: ["${REVIEWER}"]`,
+    '    requiredFields: ["status"]',
+    "    defaultStatus: draft",
+  ]);
+  // Stored before the policy applied, without a status.
+  const pending = await storeProposal(fixture.projectPath, REVIEWER, NEW_NOTE);
+  assert.equal(Object.hasOwn(pending.frontmatter, "status"), false);
+  const reviewer = await connectMcp(t, [], {
+    projectPath: fixture.projectPath,
+    allowAuthoring: true,
+    actor: REVIEWER,
+  });
+  const accepted = await callJson(reviewer.client, "okf_accept_proposal", {
+    proposalId: pending.id,
+  });
+  assert.equal(accepted.payload.accepted, true, JSON.stringify(accepted.payload));
+  const published = fs.readFileSync(path.join(fixture.bundle, "new-note.md"), "utf8");
+  assert.match(published, /\nstatus: draft\n/);
+});
+
+test("producers never get a virtual default status: a required status must be produced", async (t) => {
+  const fixture = makeProducerProject(t, [
+    "applyToProducers: true",
+    "rules:",
+    "  - name: database-producer",
+    '    actors: ["process:primary-db"]',
+    '    requiredFields: ["status"]',
+    "    defaultStatus: draft",
+  ]);
+  const preview = await producerService(fixture).preview("primary-db");
+  assert.equal(preview.readyToApply, false);
+  assert.deepEqual(
+    preview.policyViolations.map(({ rule, reason, field, path: target }) => [
+      rule,
+      reason,
+      field,
+      target,
+    ]),
+    [["database-producer", "missing_required_field", "status", "database.md"]],
+  );
+  const run = await producerService(fixture).run("primary-db");
+  assert.equal(run.applied, false);
   assert.deepEqual(fs.readdirSync(fixture.bundle), []);
 });

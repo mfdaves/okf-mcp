@@ -1,17 +1,19 @@
 "use strict";
 
-// Catalog text is data, never instructions (plan B-6, S-3): diagnostic and
-// error messages name paths and URIs, not frontmatter values. A few messages
-// name a value an operator must look up, such as an undeclared relation type
-// or a duplicated computation parameter. Those echo it only when it is a
-// plain identifier, the shape a declared vocabulary entry has; anything else
-// is written as "(unlisted)" and stays in the structured fields beside the
-// message.
-const IDENTIFIER = /^[A-Za-z][A-Za-z0-9_./-]{0,63}$/;
+// Catalog text is data, never instructions (plan B-6, S-3). Diagnostic and
+// error messages never echo vocabulary a concept used but nobody declared
+// (an undeclared relation type, a repeated computation parameter name): any
+// such value, however identifier-like, could carry text meant for an agent.
+// The messages are constant apart from the concept path and an ordinal, so
+// an operator can find the entry; the value itself stays in the structured
+// fields beside the message (relationType, field).
 
-function displayIdentifier(value) {
-  const text = typeof value === "string" ? value : String(value ?? "");
-  return IDENTIFIER.test(text) ? text : "(unlisted)";
+function undeclaredRelationTypeMessage(conceptPath, position) {
+  return `Relation #${position + 1} of ${conceptPath} uses an undeclared type.`;
 }
 
-module.exports = { displayIdentifier };
+function repeatedParameterMessage(conceptPath, position) {
+  return `Computation parameter #${position + 1} of ${conceptPath || "this concept"} repeats an earlier name.`;
+}
+
+module.exports = { repeatedParameterMessage, undeclaredRelationTypeMessage };

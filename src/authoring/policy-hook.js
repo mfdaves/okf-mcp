@@ -128,8 +128,9 @@ function withPolicyViolations(validation, policy) {
 // Proposals are writes too (plan W-1): a proposal is judged when it is
 // created, against the proposing actor, and again when it is accepted,
 // against the actor recorded on it (else the accepting one). Without any
-// actor the write is unattributed and the default effect decides. Returns
-// null without a policy, else { violations, defaultStatus }.
+// actor the write is judged as the actor "unknown" (UNKNOWN_ACTOR), which
+// is how proposals stored before a policy or an actor existed are accepted.
+// Returns null without a policy, else { violations, defaultStatus }.
 function evaluateProposal(policy, actor, proposal) {
   if (!policy) {
     return null;
@@ -199,8 +200,14 @@ function evaluateProducerFiles(policy, instance, files, changes) {
         uri: `okf://${instance.bundle}/${relative.replace(/\.md$/i, "")}`,
       };
     });
-  return evaluateWritePolicy(policy, { actor: `process:${instance.name}`, changes: described })
-    .violations;
+  // Producer bytes are digest-tracked by the publication manifest, so the
+  // host never stamps a default status into them: a rule's defaultStatus
+  // does not apply and a required status must be in the produced file.
+  return evaluateWritePolicy(policy, {
+    actor: `process:${instance.name}`,
+    changes: described,
+    applyDefaultStatus: false,
+  }).violations;
 }
 
 module.exports = {

@@ -1,6 +1,6 @@
 "use strict";
 
-const { displayIdentifier } = require("./catalog-text");
+const { repeatedParameterMessage } = require("./catalog-text");
 const { itemLiteral, markdownStructure, sectionNodes } = require("./markdown");
 
 function isPlainObject(value) {
@@ -478,7 +478,7 @@ function normalizeParameters(value, diagnostics, location) {
         diagnostic(
           "duplicate_computation_parameter",
           `${field}.name`,
-          `Duplicate computation parameter ${displayIdentifier(name)} on ${location || "this concept"} (${field}.name)`,
+          repeatedParameterMessage(location, index),
         ),
       );
       valid = false;

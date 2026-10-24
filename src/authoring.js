@@ -12,15 +12,16 @@ const {
   semanticReferences,
 } = require("./indexer");
 const { deriveConceptPathSuggestion, normalizeConceptPath, slug } = require("./authoring/paths");
+const { resolveWritePolicy } = require("./authoring/policy-hook");
 const {
-  evaluateProposal,
-  policyDiagnostics,
-  refusedProposal,
-  resolveWritePolicy,
-} = require("./authoring/policy-hook");
+  checkProposal,
+  prepareAcceptance,
+  refuseMigration,
+  refuseUpdate,
+} = require("./authoring/proposal-policy");
 const { renderConceptMarkdown, renderFrontmatter } = require("./authoring/render");
 const { isExternalReference, isLocalAssetReference, resolveBundleAssetPath } = require("./assets");
-const { displayIdentifier } = require("./catalog-text");
+const { undeclaredRelationTypeMessage } = require("./catalog-text");
 const { buildV02MigrationPlan, checkV02Migration } = require("./migration");
 const { validateIndex } = require("./validation");
 
@@ -88,37 +89,6 @@ class ConceptAuthoringService {
 
   attribution() {
     return this.actor ? { proposedBy: this.actor } : {};
-  }
-
-  // Validates a proposal about to be stored and applies the write policy to
-  // it (plan W-1): { refused } when invalid or denied; otherwise the request
-  // and its validation, re-validated once with the default status a matching
-  // rule stamps on a create that set none.
-  checkProposal(op, input, validate) {
-    const validation = validate(input);
-    if (!validation.valid) {
-      return { refused: { created: false, validation } };
-    }
-    const policy = evaluateProposal(this.writePolicy, this.actor, {
-      op,
-      bundle: validation.bundle,
-      path: validation.path,
-      uri: validation.uri,
-      frontmatter: input.frontmatter,
-    });
-    if (policy?.violations.length) {
-      return { refused: refusedProposal({ created: false }, validation, policy.violations) };
-    }
-    if (!policy?.defaultStatus) {
-      return { request: input, validation };
-    }
-    const request = Object.assign({}, input, {
-      frontmatter: Object.assign({}, input.frontmatter, { status: policy.defaultStatus }),
-    });
-    const stamped = validate(request);
-    return stamped.valid
-      ? { request, validation: stamped }
-      : { refused: { created: false, validation: stamped } };
   }
 
   getBundle(id) {
@@ -371,7 +341,7 @@ class ConceptAuthoringService {
     const relationTypes = new Set(this.store.getRelationTypes().map(String));
     doc.relations
       .map((relation) => relationFrom(relation, doc))
-      .forEach((relation) => {
+      .forEach((relation, position) => {
         const type = String(relation.type || "related_to");
         const targetUri = String(relation.target || "").trim();
         if (!targetUri) {
@@ -391,7 +361,7 @@ class ConceptAuthoringService {
             bundle: bundleId,
             path: doc.path,
             relationType: type,
-            message: `Unsupported relation type ${displayIdentifier(type)} on ${doc.uri || doc.path}`,
+            message: undeclaredRelationTypeMessage(doc.path, position),
           });
         }
         let target = index.byUri.get(targetUri);
@@ -452,7 +422,7 @@ class ConceptAuthoringService {
   }
 
   async proposeConcept(input) {
-    const checked = this.checkProposal("create", input || {}, (candidate) =>
+    const checked = checkProposal(this, "create", input || {}, (candidate) =>
       this.validateConcept(candidate),
     );
     if (checked.refused) {
@@ -592,15 +562,9 @@ class ConceptAuthoringService {
     if (!validation.valid) {
       return { created: false, op: "update", validation };
     }
-    const policy = evaluateProposal(this.writePolicy, this.actor, {
-      op: "update",
-      bundle: validation.bundle,
-      path: validation.path,
-      uri: existing.uri,
-      frontmatter,
-    });
-    if (policy?.violations.length) {
-      return refusedProposal({ created: false, op: "update" }, validation, policy.violations);
+    const refusedUpdate = refuseUpdate(this, validation, existing, frontmatter);
+    if (refusedUpdate) {
+      return refusedUpdate;
     }
     const proposal = await this.store.saveProposal({
       op: "update",
@@ -830,7 +794,7 @@ class ConceptAuthoringService {
     const assetFiles = input?.computationPath
       ? [{ path: input.computationPath, content: String(input.computationContent || "") }]
       : [];
-    const checked = this.checkProposal("create_computation", input || {}, (candidate) =>
+    const checked = checkProposal(this, "create_computation", input || {}, (candidate) =>
       this.validateAttestedComputation(candidate, { assetFiles }),
     );
     if (checked.refused) {
@@ -929,6 +893,10 @@ class ConceptAuthoringService {
     if (childValidations.some((validation) => !validation.valid)) {
       return { created: false, plan: Object.assign({}, plan, { childValidations }) };
     }
+    const refusedMigration = refuseMigration(this, bundleId, plan);
+    if (refusedMigration) {
+      return refusedMigration;
+    }
     let manifest;
     const children = [];
     try {
@@ -1017,22 +985,11 @@ class ConceptAuthoringService {
   // A stored proposal is judged again before acceptance writes anything,
   // against the actor recorded on it, else the accepting one (plan W-1).
   async acceptProposal(input) {
-    if (this.writePolicy) {
-      const proposal = await this.store.getProposal(input?.proposalId);
-      const policy =
-        proposal.status === "proposed"
-          ? evaluateProposal(this.writePolicy, proposal.proposedBy || this.actor, proposal)
-          : null;
-      if (policy?.violations.length) {
-        return {
-          accepted: false,
-          proposal,
-          policyViolations: policy.violations,
-          errors: policyDiagnostics(policy.violations),
-        };
-      }
+    const { refused, acceptor } = await prepareAcceptance(this, input?.proposalId);
+    if (refused) {
+      return refused;
     }
-    return this.store.acceptProposal(input && input.proposalId, this, {
+    return this.store.acceptProposal(input && input.proposalId, acceptor, {
       allowComputation: Boolean(input && input.allowComputation),
     });
   }

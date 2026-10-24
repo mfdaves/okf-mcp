@@ -28,6 +28,7 @@ const RULE_KEYS = new Set([
 ]);
 const ALLOW_ONLY_KEYS = ["requiredFields", "defaultStatus", "maxConceptsPerBatch"];
 const MAX_RULES = 200;
+const UNKNOWN_ACTOR = "unknown";
 const MAX_PATTERN_LENGTH = 256;
 const MAX_POLICY_FILE_BYTES = 256 * 1024;
 const PARSED = Symbol.for("okf-mcp.write-policy.parsed");
@@ -477,14 +478,12 @@ function appliesDefaultStatus(rule, change) {
 // First rule whose actors match and whose other selectors (when present)
 // match decides. Without a match the default effect applies; a default deny
 // names the first actor-matching allow rule and the selector it failed, so
-// the caller learns which rule nearly allowed the write. An unattributed
-// write (actor null: a proposal stored without an actor, an HTTP call)
-// matches no rule, so the default effect decides it.
-function decide(policy, actor, change) {
+// the caller learns which rule nearly allowed the write.
+function decide(policy, actor, change, input) {
   let nearest = null;
   let nearestFailure = null;
   for (const rule of policy.rules) {
-    if (actor === null || !matchesAny(rule.actors, actor)) continue;
+    if (!matchesAny(rule.actors, actor)) continue;
     const failure = failingSelector(rule, change);
     if (failure) {
       if (!nearest && rule.effect === "allow") {
@@ -501,7 +500,10 @@ function decide(policy, actor, change) {
       id: rule.id,
       effect: "allow",
       reason: null,
-      defaultStatus: appliesDefaultStatus(rule, change) ? rule.defaultStatus : null,
+      defaultStatus:
+        input?.applyDefaultStatus !== false && appliesDefaultStatus(rule, change)
+          ? rule.defaultStatus
+          : null,
     };
   }
   if (policy.defaultEffect === "allow") {
@@ -532,10 +534,17 @@ function violation(ruleId, reason, change, extra) {
 // uri } descriptors (a planned candidate's fields; see describeChange for raw
 // updates). Returns { violations, decisions }: decisions[i] is { rule, effect,
 // defaultStatus } for changes[i], defaultStatus being the status the caller
-// should stamp on a created concept that set none.
+// should stamp on a created concept that set none. A caller that cannot
+// stamp it (a producer, whose bytes are digest-tracked) passes
+// applyDefaultStatus: false, and a required status must then be present.
+//
+// actor null is a write nobody is attributed to (an HTTP call, a proposal
+// stored before an actor was configured). It is judged as the literal actor
+// "unknown", so "*" and "**" match it and a rule can name it explicitly;
+// no real actor has that shape (human:, process:, or provider/model).
 function evaluateWritePolicy(policy, input) {
-  const actor = input?.actor;
-  if (actor !== null && (typeof actor !== "string" || !actor.trim())) {
+  const actor = input?.actor === null ? UNKNOWN_ACTOR : input?.actor;
+  if (typeof actor !== "string" || !actor.trim()) {
     throw new TypeError("evaluateWritePolicy requires an actor string, or null when unattributed.");
   }
   if (!input || !Array.isArray(input.changes)) {
@@ -550,7 +559,7 @@ function evaluateWritePolicy(policy, input) {
   if (!isWritePolicy(policy)) {
     throw new TypeError("evaluateWritePolicy requires a policy from parseWritePolicy.");
   }
-  const decisions = described.map((change) => decide(policy, actor, change));
+  const decisions = described.map((change) => decide(policy, actor, change, input));
   const violations = [];
   decisions.forEach((decision, position) => {
     const change = described[position];
@@ -692,6 +701,7 @@ function loadWritePolicyFile(filePath) {
 }
 
 module.exports = {
+  UNKNOWN_ACTOR,
   evaluateWritePolicy,
   isWritePolicy,
   loadWritePolicyFile,
