@@ -452,6 +452,34 @@ The server writes nothing unless every candidate is valid, revision checks still
 
 Add `--git-commit` as server policy to create one commit per successful batch. A detected Git worktree must be completely clean and have a configured identity before publication. Active Git filter attributes and `assume-unchanged`/`skip-worktree` index flags block the operation so validation cannot execute configured filters or overlook hidden user changes; replace-object resolution is disabled so hidden replacement history cannot alter the parent tree. The server builds an isolated index from the validated Markdown bytes, creates that exact tree with `commit-tree`, publishes it with a compare-and-swap ref update, synchronizes only the affected ordinary-index paths afterward, and never pushes. Concurrent unrelated staged entries cannot enter the commit. A determinate commit failure leaves matching valid files as working-tree-only; an ambiguous ref-update timeout is reported as unknown unless the resulting commit tree can be proven. Non-Git catalogs are written normally. Every response makes the repository root, commit state, index state, target-byte state, and persistence boundary explicit.
 
+### Write policy
+
+A write policy narrows what each actor may write through `okf_validate_changes` and `okf_apply_changes`. It is trusted configuration: declare it as `writePolicy` in `okf.project.yaml`, or pass `--policy <file>` (the same mapping as a YAML file) with `--root` and `--write`. Tool arguments cannot name, replace, or relax it.
+
+```yaml
+writePolicy:
+  defaultEffect: deny          # allow (default) or deny when no rule decides
+  rules:
+    - name: humans
+      actors: ["human:*"]
+    - name: nightly-seo
+      actors: ["process:nightly-*", "openai/*"]
+      bundles: ["customers-*"]
+      paths: ["findings/**"]
+      types: ["SEO Finding"]
+      requiredFields: ["sources", "stale_after"]
+      defaultStatus: draft     # stamped on creates that set no status
+      maxConceptsPerBatch: 20
+    - name: no-drafts
+      actors: ["**"]
+      paths: ["drafts/**"]
+      effect: deny
+```
+
+For each concept in a batch, the first rule whose `actors` match the configured `--actor` and whose other selectors (when present) match decides. `effect` is `allow` by default; `requiredFields`, `defaultStatus`, and `maxConceptsPerBatch` apply to allow rules. Patterns use a fixed glob subset: `*` within one segment, `**` as a whole segment for any depth, and literal segments. They are never compiled to regular expressions, and absolute, empty, `.` and `..` segments are rejected when the policy loads. A malformed policy is a project error, so no writable server starts on it. The policy judges only the concepts a batch creates or updates; existing content is never retro-validated.
+
+Violations are structured: `{ code: "policy_violation", rule, reason, field?, path?, bundleId?, uri?, limit?, count? }`, where `rule` is the rule's `name`, else its index, and `null` when `defaultEffect` decided. `reason` is one of `actor_denied`, `bundle_denied`, `path_denied`, `type_denied`, `missing_required_field`, or `batch_too_large`. `okf_validate_changes` reports them read-only in `policyViolations` and as `layer: "policy"` diagnostics; `okf_apply_changes` refuses such a batch with status `rejected` before staging or touching any file. Receipts carry `policyViolations` only when a policy is configured; messages name rules, paths, and URIs, never catalog text.
+
 ## Authoring Concepts
 
 The reviewable proposal workflow remains available through MCP tools started with `--authoring` and through the HTTP API. Clients never need direct local file access.
