@@ -72,6 +72,7 @@ function usage() {
     "                            A committed baseline is produced only with an explicit",
     "                            --out test/fixtures/retrieval/reports/baseline-{date}.",
     "  --help                    Show this help.",
+    "  --embedder <file>         Hybrid run (WP3c): see scripts/eval-hybrid.js for --alpha, --alpha-sweep, --units.",
   ].join("\n");
 }
 
@@ -885,7 +886,10 @@ function main(argv) {
   process.stdout.write(`${JSON.stringify(summary, null, 2)}\n`);
 }
 
-if (require.main === module) {
+if (require.main === module && process.argv.includes("--embedder")) {
+  // Hybrid runs are asynchronous (embedding requests): scripts/eval-hybrid.js drives them.
+  require("./eval-hybrid").cli(process.argv.slice(2));
+} else if (require.main === module) {
   try {
     main(process.argv.slice(2));
   } catch (error) {
@@ -899,9 +903,11 @@ module.exports = {
   DEFAULT_SEARCH_MODULE,
   LOW_CONFIDENCE_COVERAGE,
   NDCG_CUTOFF,
+  bootstrap,
   evaluateFixture,
   evaluateQuery,
   loadSearchModule,
+  noAnswerSummary,
   parseArgs,
   renderMarkdown,
   resolveFixture,

@@ -124,7 +124,11 @@ class EmbeddingRuntime {
         if (typeof documents.probe === "function") await documents.probe();
       }
       validateEmbedder(documents);
-      const dir = resolveCacheDir({ root: this.context.root, cacheDir: config.cacheDir });
+      const dir = resolveCacheDir({
+        root: this.context.root,
+        cacheDir: config.cacheDir,
+        env: this.context.env,
+      });
       this.cache = openVectorCache(dir, {
         embedderId: documents.id,
         dimension: documents.dimension,
