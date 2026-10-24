@@ -26,22 +26,66 @@ function validOkfConceptUri(value) {
 }
 
 // js-yaml's message ends with a code frame of the offending source lines,
-// and a few reasons quote tag names or handles taken from them. Frontmatter
-// is catalog text, which never reaches an error message (B-6, S-3): keep the
-// reason without its quoted parts, plus the position, which is enough to
-// find the problem; a reason that still carries source text is dropped.
-function yamlErrorDetail(error) {
-  const reason = (typeof error?.reason === "string" ? error.reason : "")
-    .replace(/\s*!<[^>]*>/g, "")
-    .replace(/\s*"[^"]*"/g, "")
-    .replace(/:\s.*$/s, "")
-    .trim();
-  const fixedWords = reason && !/[!"`<>:$\\]/.test(reason.replace(/'.'/g, ""));
-  const detail = fixedWords ? reason : "malformed YAML";
+// and several reasons quote anchors, aliases, tags or handles taken from
+// them. Frontmatter is catalog text, which never reaches an error message
+// (B-6, S-3), so the message carries a constant category chosen by matching
+// the reason's leading words against this table, plus the position. Only
+// the table's own strings are ever emitted.
+const YAML_ERROR_CATEGORIES = [
+  ["duplicated mapping key", "duplicated mapping key"],
+  ["bad indentation", "bad indentation"],
+  ["deficient indentation", "bad indentation"],
+  ["bad explicit indentation", "bad indentation"],
+  ["tab characters must not be used", "bad indentation"],
+  ["unidentified alias", "unidentified alias"],
+  ["alias node", "unidentified alias"],
+  ["name of an alias", "unidentified alias"],
+  ["name of an anchor", "invalid anchor"],
+  ["duplication of an anchor", "invalid anchor"],
+  ["unknown tag", "unknown tag"],
+  ["unknown scalar tag", "unknown scalar tag"],
+  ["unacceptable node kind", "unknown tag"],
+  ["undeclared tag handle", "unknown tag"],
+  ["tag name", "unknown tag"],
+  ["tag suffix", "unknown tag"],
+  ["named tag handle", "unknown tag"],
+  ["duplication of a tag", "unknown tag"],
+  ["unexpected end", "unexpected end"],
+  ["incomplete explicit mapping", "incomplete explicit mapping"],
+  ["end of the stream or a document separator", "unexpected content"],
+  ["missed comma", "flow collection"],
+  ["expected the node content", "flow collection"],
+  ["expected ':'", "mapping entry"],
+  ["can not read a block mapping", "mapping entry"],
+  ["a whitespace character is expected", "mapping entry"],
+  ["unknown escape sequence", "invalid escape"],
+  ["expected hexadecimal", "invalid escape"],
+  ["the stream contains non-printable", "non-printable characters"],
+  ["nesting exceeded", "nesting too deep"],
+  ["expected a document, but the input is empty", "empty document"],
+];
+const MAX_YAML_REASON = 120;
+
+function yamlFrontmatterError(error) {
+  const reason = typeof error?.reason === "string" ? error.reason : "";
+  const match = YAML_ERROR_CATEGORIES.find(([prefix]) => reason.startsWith(prefix));
+  const category = match ? match[1] : "malformed";
   const mark = error?.mark;
-  return mark && Number.isInteger(mark.line) && Number.isInteger(mark.column)
-    ? `${detail} (${mark.line + 1}:${mark.column + 1})`
-    : detail;
+  const position =
+    mark && Number.isInteger(mark.line) && Number.isInteger(mark.column)
+      ? ` at ${mark.line + 1}:${mark.column + 1}`
+      : "";
+  const wrapped = new Error(`Invalid YAML frontmatter (${category})${position}`);
+  wrapped.code = "invalid_yaml";
+  wrapped.category = category;
+  // The raw reason may quote catalog text. It stays off the enumerable
+  // surface, and out of `details`, which tool errors forward to MCP
+  // clients: truncated, for a local debugger only.
+  Object.defineProperty(wrapped, "yamlReason", {
+    value: reason.slice(0, MAX_YAML_REASON),
+    enumerable: false,
+  });
+  return wrapped;
 }
 
 function parseFrontmatterYaml(source) {
@@ -52,7 +96,7 @@ function parseFrontmatterYaml(source) {
       json: false,
     });
   } catch (error) {
-    throw new Error(`Invalid YAML mapping: ${yamlErrorDetail(error)}`);
+    throw yamlFrontmatterError(error);
   }
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
     throw new Error("YAML document root must be a mapping.");

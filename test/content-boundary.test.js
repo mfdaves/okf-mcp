@@ -8,6 +8,8 @@ const test = require("node:test");
 const { Client } = require("@modelcontextprotocol/client");
 const { StdioClientTransport } = require("@modelcontextprotocol/client/stdio");
 
+const { parseFrontmatterYaml } = require("../src/parser");
+
 const repositoryRoot = path.resolve(__dirname, "..");
 const binary = path.join(repositoryRoot, "bin", "okf-mcp.js");
 const ACTOR = "human:test";
@@ -479,6 +481,13 @@ test("malformed frontmatter: diagnostics name the position, never the source tex
     "broken/tag.md",
     ["---", "type: Reference", `title: !${token("yamltag", 2)} x`, "---", "", "# y", ""].join("\n"),
   );
+  write(
+    root,
+    "broken/alias.md",
+    ["---", "type: Reference", `title: *a"${token("yamlalias", 3)}"`, "---", "", "# z", ""].join(
+      "\n",
+    ),
+  );
   const { client, stderr } = await connectBinary(t, ["--root", root, "--write", "--actor", ACTOR]);
   const report = JSON.parse(
     (await client.callTool({ name: "validate_bundle", arguments: {} })).content[0].text,
@@ -494,11 +503,56 @@ test("malformed frontmatter: diagnostics name the position, never the source tex
     ).content[0].text,
   );
   const messages = messagesIn([report, preview], []);
-  const yamlMessages = messages.filter((message) => message.startsWith("Invalid YAML mapping"));
-  assert.ok(
-    yamlMessages.some((message) => /^Invalid YAML mapping: .* \(2:\d+\)$/.test(message)),
-    `the diagnostic keeps the position: ${yamlMessages.join(" | ")}`,
+  const yamlMessages = new Set(
+    messages.filter((message) => message.startsWith("Invalid YAML frontmatter")),
   );
+  for (const expected of [
+    /^Invalid YAML frontmatter \(bad indentation\) at 2:\d+$/,
+    /^Invalid YAML frontmatter \(unknown scalar tag\) at 2:\d+$/,
+    /^Invalid YAML frontmatter \(unidentified alias\) at 2:\d+$/,
+  ]) {
+    assert.ok(
+      [...yamlMessages].some((message) => expected.test(message)),
+      `${expected} among ${[...yamlMessages].join(" | ")}`,
+    );
+  }
   for (const message of messages) assertClean("malformed frontmatter diagnostic", message);
   assert.equal(stderr(), "");
+});
+
+test("YAML errors name a fixed category and the position, never the source", () => {
+  const cases = [
+    // The reviewer's case: the alias reason used to quote what follows `*`.
+    [`title: *a"${token("leak", 1)}"`, "unidentified alias", "1:"],
+    [`title: ${token("leak", 2)}: [open`, "bad indentation", "1:"],
+    [`title: !${token("leak", 3)} x`, "unknown scalar tag", "1:"],
+    [`title: !<!${token("leak", 4)}> x`, "unknown scalar tag", "1:"],
+    [`%TAG !s! tag:${token("leak", 5)}\n---\ntitle: !q!x 1`, "unknown tag", "3:"],
+    [`title: x\ntitle: ${token("leak", 6)}`, "duplicated mapping key", "2:"],
+    [`title: "${token("leak", 7)}`, "unexpected end", "1:"],
+    [`title: [${token("leak", 8)}`, "unexpected end", "1:"],
+    // A reason outside the table falls back to the default category.
+    [`%YAML 1.2\n%YAML 1.2\n---\ntitle: ${token("leak", 9)}`, "malformed", ""],
+    [`title: "\\q${token("leak", 10)}"`, "invalid escape", "1:"],
+    [`title: &${token("leak", 11)} &b x`, "invalid anchor", "1:"],
+  ];
+  for (const [source, category, position] of cases) {
+    let caught;
+    try {
+      parseFrontmatterYaml(source);
+    } catch (error) {
+      caught = error;
+    }
+    assert.ok(caught, `${JSON.stringify(source)} should fail to parse`);
+    assert.equal(caught.code, "invalid_yaml");
+    assert.ok(
+      caught.message.startsWith(`Invalid YAML frontmatter (${category})`),
+      `${JSON.stringify(source)} -> ${caught.message}`,
+    );
+    if (position) assert.match(caught.message, new RegExp(` at ${position}\\d+$`));
+    assertClean("YAML error message", caught.message);
+    assertClean("YAML error enumerable fields", JSON.stringify(caught));
+    assert.equal(Object.hasOwn(caught, "details"), false);
+    assert.ok(caught.yamlReason.length <= 120);
+  }
 });
