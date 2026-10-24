@@ -38,8 +38,8 @@ const SEARCH_DESCRIPTION =
   "with filters. Each result carries coverage (share of query terms it matched) and relevance " +
   "(score relative to the top result). When the server has an embedder configured, ranking is " +
   "hybrid by default: lexical and semantic similarity are fused, so concepts that use other " +
-  "words for the same idea are found too; relevance is then fused, mode, coverage and " +
-  "lowConfidence keep their lexical meaning, and each result adds lexicalScore, denseScore and " +
+  "words for the same idea are found too; relevance is then fused, mode and coverage keep " +
+  "their lexical meaning (lowConfidence reads the top result shown), and each result adds lexicalScore, denseScore and " +
   "fusedScore. The response then reports hybrid (whether fusion ran) and embedder, whose " +
   "degraded flag says the semantic side could not run and the results are lexical only.";
 
