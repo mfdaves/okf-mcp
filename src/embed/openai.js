@@ -334,6 +334,8 @@ function createOpenAiEmbedder(options) {
   // One HTTP attempt. Returns { ok: true, vectors } or { ok: false, error,
   // retryable, retryAfterMs }; throws only for conditions no retry can fix.
   async function attempt(batch, signal) {
+    // An abort listener never fires for a signal that is already aborted.
+    if (signal.aborted) throw abortError(signal.reason);
     const controller = new AbortController();
     let timedOut = false;
     const timer = setTimeout(() => {
