@@ -81,6 +81,32 @@ function indexUpdateStats(index) {
   return record ? Object.assign({}, record.stats) : null;
 }
 
+// Every input that shaped an index, for a host deciding whether an index
+// built elsewhere can stand in for a build of its own: the bundles (id,
+// root, remote, include and exclude patterns), the relation types and flags,
+// the date (null when it floats with the calendar) and the languages set on
+// the index. Null for an object that did not come out of buildIndex.
+function indexInputs(index) {
+  const record = indexRecord(index);
+  if (!record) {
+    return null;
+  }
+  return {
+    bundles: record.bundles.map(({ bundle }) => ({
+      id: bundle.id,
+      root: bundle.root,
+      remote: Boolean(bundle.remote),
+      include: (bundle.include || []).map(String),
+      exclude: (bundle.exclude || []).map(String),
+    })),
+    relationTypes: Array.from(record.config.edgeConfig.allowedRelationTypes),
+    allowCustomRelationTypes: record.config.edgeConfig.allowCustomRelationTypes,
+    strictLinks: record.config.strictLinks,
+    asOf: record.config.floatingDate ? null : record.config.asOf,
+    languages: index.languages === undefined ? null : index.languages,
+  };
+}
+
 function normalizeRelativePath(value) {
   const relativePath = normalizeSlashes(String(value || "").trim());
   const parts = relativePath.split("/");
@@ -540,7 +566,9 @@ function carryIndexSettings(from, to) {
 // recomputed in full. Above `maxChangeRatio` (changed documents over
 // documents in the index, default 0.2) the index is rebuilt instead, and so
 // is an index built without an asOf when `options.asOf` (default: now) falls
-// on another UTC day than the one its documents were stamped with.
+// on another UTC day than the one its documents were stamped with: one full
+// build per day per process, which in the live service runs under the
+// writer lock, so the first batch of a day pays a build's latency.
 function updateIndex(index, changes, options) {
   const record = indexRecord(index);
   if (!record) {
@@ -582,6 +610,14 @@ function updateIndex(index, changes, options) {
 // disk-backed in place (a cache fill that changes nothing the entry
 // describes), so later refreshes need only a stat. A file that vanished
 // mid-walk counts as changed and the update records whatever it finds.
+//
+// Limit: a rewrite that keeps a file's size and mtime is invisible here, for
+// documents and (in assetsChangedOnDisk) for assets alike. The write path
+// covers the documents a batch targets by comparing content hashes and
+// re-reading on a mismatch (live.js, updateCandidate); the dependencies of a
+// batch are not re-read. Before the incremental index, the write path built
+// from disk every time, so every file was read; now a file whose stat is
+// unchanged is trusted.
 function fileMatchesEntry(entry, filePath) {
   const stat = fileStat(filePath);
   if (!stat) {
@@ -676,6 +712,7 @@ function refreshIndex(index, options) {
 module.exports = {
   DEFAULT_MAX_CHANGE_RATIO,
   edgesBySource,
+  indexInputs,
   indexUpdateStats,
   linkSets,
   refreshIndex,

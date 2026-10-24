@@ -2,9 +2,11 @@
 
 const { McpServer, ResourceTemplate, fromJsonSchema } = require("@modelcontextprotocol/server");
 const { StdioServerTransport, serveStdio } = require("@modelcontextprotocol/server/stdio");
+const { isDeepStrictEqual } = require("node:util");
 const {
   attachProject,
   buildIndex,
+  indexInputs,
   indexUpdateStats,
   loadProjectBundles,
   parseBundleArg,
@@ -15,7 +17,7 @@ const { fetchRemoteBundles } = require("../remote");
 const { ConceptAuthoringService } = require("../authoring");
 const { LiveAuthoringService } = require("../live-authoring");
 const { FileConceptStore } = require("../store");
-const { loadProjectConfig } = require("../project");
+const { DEFAULT_RELATION_TYPES, loadProjectConfig } = require("../project");
 const { ProducerService } = require("../producers");
 const packageMetadata = require("../../package.json");
 const { ToolExecutionError, composeRegistry, jsonContent, toolEnabled } = require("./registry");
@@ -39,26 +41,44 @@ const registry = composeRegistry([
   require("./tools/producers"),
 ]);
 
-// Whether the live authoring service builds indexes from the same bundles and
-// options as the server, so the two can share one index object instead of
-// each keeping a copy.
+// Whether the server's index was built from exactly what the live authoring
+// service would build its own from (the service's bundles with their include
+// and exclude patterns plus the server's remote snapshots, its relation
+// types and flags, a floating date, the project's languages), so the two can
+// share one index object instead of each keeping a copy. The check reads the
+// index's own build record, so an index a host built from other arguments
+// is never shared.
 function liveIndexCompatible(state) {
   const service = state.liveAuthoringService;
   const store = service?.store;
   if (!store || typeof service.adoptIndex !== "function" || store.project !== state.project) {
     return false;
   }
-  const describe = (bundles) =>
-    JSON.stringify(
-      (bundles || []).map(parseBundleArg).map((bundle) => [bundle.id, bundle.root, bundle.remote]),
-    );
-  return (
-    Boolean(store.strictLinks) === state.strictLinks &&
-    Boolean(store.allowCustomRelationTypes) === state.allowCustomRelationTypes &&
-    JSON.stringify((state.relationTypes || []).map(String)) ===
-      JSON.stringify((store.getRelationTypes() || []).map(String)) &&
-    describe(state.localBundleArgs) === describe(store.getBundles())
-  );
+  const built = indexInputs(state.index);
+  if (!built) {
+    return false;
+  }
+  const expected = {
+    bundles: store
+      .getBundles()
+      .concat(state.remoteBundles || [])
+      .map(parseBundleArg)
+      .map((bundle) => ({
+        id: bundle.id,
+        root: bundle.root,
+        remote: Boolean(bundle.remote),
+        include: (bundle.include || []).map(String),
+        exclude: (bundle.exclude || []).map(String),
+      })),
+    relationTypes: Array.from(
+      new Set((store.getRelationTypes() || DEFAULT_RELATION_TYPES).map(String)),
+    ),
+    allowCustomRelationTypes: Boolean(store.allowCustomRelationTypes),
+    strictLinks: Boolean(store.strictLinks),
+    asOf: null,
+    languages: store.project?.languages === undefined ? null : store.project.languages,
+  };
+  return isDeepStrictEqual(built, expected);
 }
 
 function shareIndexWithLiveAuthoring(state) {

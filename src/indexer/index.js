@@ -27,6 +27,7 @@ module.exports = {
   bundleExcludesPath: build.bundleExcludesPath,
   edgesBySource: update.edgesBySource,
   findConceptMatches: resolve.findConceptMatches,
+  indexInputs: update.indexInputs,
   indexUpdateStats: update.indexUpdateStats,
   linkSets: update.linkSets,
   loadProjectBundles: build.loadProjectBundles,

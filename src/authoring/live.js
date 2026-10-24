@@ -106,8 +106,7 @@ class LiveAuthoringService {
     this.now = config.now || (() => new Date());
     this.git = new GitPublisher({ gitCommit: this.gitCommit, spawnSync: this.spawnSync });
     // One index kept between batches and refreshed before each (W-6); a host
-    // holding one built with the same parameters hands it over through
-    // adoptIndex and takes the published one back through takePublication.
+    // hands one over through adoptIndex and takes it back via takePublication.
     this.indexCache = new IndexCache({ now: this.now });
     this.publication = null;
   }
@@ -122,6 +121,8 @@ class LiveAuthoringService {
     return publication;
   }
 
+  // Under the writer lock like the rest of a batch; the once-a-day rebuild
+  // for a new calendar day (updateIndex) lands here: one build's latency.
   currentIndex(additionalBundles) {
     return this.indexCache.current(additionalBundles, () => this.buildIndex(additionalBundles));
   }

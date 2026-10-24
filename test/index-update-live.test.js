@@ -240,6 +240,53 @@ test("a server with its own index sees external changes with each live batch", a
   assert.deepEqual(state.index, freshStateIndex(state));
 });
 
+// Regression: the server shared its index with a service whose bundles had
+// other include/exclude patterns (the check compared ids and roots only), so
+// the service adopted documents its own build would leave out. The check now
+// reads every input of the index's build record, in both directions.
+test("an index built from other bundle patterns than the service's is not shared", async (t) => {
+  const root = seedRoot("okf-index-patterns-", 6);
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  writeConcept(root, "teams/team-a.md", "Team A");
+  const excluded = ["teams/**"];
+  const scenarios = [
+    // The service excludes teams/; the server's index was built without the
+    // exclusion, from a bare root argument.
+    (store) => {
+      store.getBundles()[0].exclude.push(...excluded);
+      return root;
+    },
+    // The server's index excludes teams/; the service's bundles do not.
+    (store) => Object.assign({}, store.getBundles()[0], { exclude: excluded }),
+  ];
+  for (const arrange of scenarios) {
+    const store = FileConceptStore.fromRoot(root);
+    const bundleArg = arrange(store);
+    const service = new LiveAuthoringService(store, { actor: "test/wp2" });
+    const state = await createStateAsync([bundleArg], {
+      authoringService: { store },
+      liveAuthoringService: service,
+      allowWrite: true,
+      actor: "test/wp2",
+    });
+    assert.equal(state.shareLiveIndex, false);
+    const bundle = store.getBundles()[0].id;
+    writeConcept(root, "teams/team-b.md", "Team B");
+    const result = await callTool(state, "okf_apply_changes", BATCH(bundle, `patterns-${bundle}`));
+    assert.equal(JSON.parse(result.content[0].text).applied, true);
+    const serverExcludes = bundleArg !== root;
+    const serverFresh = buildIndex([bundleArg], { allowCustomRelationTypes: true });
+    assert.deepEqual(state.index, serverFresh);
+    assert.equal(state.index.byPathUri.has(`okf://${bundle}/teams/team-b.md`), !serverExcludes);
+    const serviceIndex = service.currentIndex([]);
+    assert.deepEqual(serviceIndex, service.buildIndex([]));
+    assert.equal(serviceIndex.byPathUri.has(`okf://${bundle}/teams/team-b.md`), serverExcludes);
+    fs.rmSync(path.join(root, "teams/team-b.md"));
+    fs.rmSync(path.join(root, `reference/linked-patterns-${bundle}.md`));
+    fs.rmSync(path.join(root, `reference/later-patterns-${bundle}.md`));
+  }
+});
+
 // Regression: persisted validation re-read only the batch targets, so a
 // dependency removed between planning and publication went unnoticed.
 test("persisted validation sees a dependency removed after planning and rolls back", async (t) => {
