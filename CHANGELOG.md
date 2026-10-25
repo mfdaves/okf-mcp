@@ -2,7 +2,7 @@
 
 All notable changes to `@mfdaves/okf-mcp`. The format follows Keep a Changelog; versions follow SemVer. Until 1.0, minor versions may change defaults where this file says so.
 
-## 0.12.0-rc.1 — unreleased
+## 0.12.0-rc.1 — 2026-10-25
 
 Retrieval level-up (WP3c-2): an adaptive fusion weight, contextual embedding units and a confidence block with opt-in abstention, each measured against pre-registered targets on both fixtures and on a real 560-concept catalog (`test/fixtures/retrieval/reports/hybrid-0.12-2026-10-25.md`, `context-0.12-2026-10-25.md`). No default ranking changes: the fixed fusion weight 0.4 and concept units stay the defaults because the new options did not meet their conditions for becoming defaults.
 
