@@ -89,10 +89,12 @@ test("alpha 0 reproduces the lexical run and alpha 1 the dense ranking", async (
   const rows = (report) => report.fixtures.atlas.perQuery.map((row) => row.top);
   assert.deepEqual(rows(zero), rows(lexical));
   assert.equal(zero.fixtures.atlas.overall.recallAt5, lexical.fixtures.atlas.overall.recallAt5);
-  assert.deepEqual(
-    zero.fixtures.atlas.noAnswer.lowConfidence,
-    lexical.fixtures.atlas.noAnswer.lowConfidence,
-  );
+  // Hybrid rows carry the v2 flag (WP3c-2), named in the summary; the counts agree here.
+  const { rule, ...hybridFlags } = zero.fixtures.atlas.noAnswer.lowConfidence;
+  const { rule: lexicalRule, ...lexicalFlags } = lexical.fixtures.atlas.noAnswer.lowConfidence;
+  assert.deepEqual(hybridFlags, lexicalFlags);
+  assert.match(rule, /topSimilarity < minSimilarity/);
+  assert.equal(lexicalRule, 'mode === "any" && top1.coverage < 0.5');
 
   const one = await run(["--alpha", "1"]);
   // The dense ranking straight from the cache the harness filled.

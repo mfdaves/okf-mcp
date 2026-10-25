@@ -61,6 +61,9 @@ const HYBRID_FLAGS = new Set([
   "--adaptive-grid",
   "--baseline",
 ]);
+// The flag hybrid responses carry (src/search/confidence.js).
+const CONFIDENCE_RULE =
+  '(mode === "any" && top1.coverage < 0.5) || (topSimilarity < minSimilarity && top1.coverage < 0.5)';
 // Ties in the adaptive grid: within this much of the best mean dev Recall@5.
 const GRID_TIE = 0.005;
 
@@ -279,14 +282,28 @@ function applyResponseFlags(result, responses) {
       row.alphaUsed = response.alphaUsed;
       row.alphaReason = response.alphaReason;
     }
+    // Abstention v2: the similarity signal and the clauses that fired.
+    if (response?.confidence) {
+      row.topSimilarity =
+        response.confidence.topSimilarity === null
+          ? null
+          : Math.round(response.confidence.topSimilarity * 10000) / 10000;
+      row.confidenceReasons = response.confidence.reasons;
+    }
   });
   const answerable = result.perQuery.filter((row) => row.answerable);
   const noAnswer = result.perQuery.filter((row) => !row.answerable);
-  result.noAnswer = evalSearch.noAnswerSummary(noAnswer, answerable);
+  const relabel = (summary) => {
+    if (summary.lowConfidence.available) summary.lowConfidence.rule = CONFIDENCE_RULE;
+    return summary;
+  };
+  result.noAnswer = relabel(evalSearch.noAnswerSummary(noAnswer, answerable));
   Object.keys(result.bySplit).forEach((split) => {
-    result.bySplit[split].noAnswer = evalSearch.noAnswerSummary(
-      noAnswer.filter((row) => row.split === split),
-      answerable.filter((row) => row.split === split),
+    result.bySplit[split].noAnswer = relabel(
+      evalSearch.noAnswerSummary(
+        noAnswer.filter((row) => row.split === split),
+        answerable.filter((row) => row.split === split),
+      ),
     );
   });
 }

@@ -94,8 +94,10 @@ async function smokeMcp(okfMcp, installedRoot, mode) {
     const searchPayload = JSON.parse(search.content[0].text);
     // The 0.10 response shape (R-4): mode and confidence fields at the top level, compact
     // results carrying coverage and relevance. Kept strict so drift is caught here.
+    // 0.12 adds the confidence block (WP3c-2).
     assert.deepEqual(Object.keys(searchPayload).sort(), [
       "allTermsTotal",
+      "confidence",
       "droppedTerms",
       "limit",
       "lowConfidence",
@@ -109,6 +111,12 @@ async function smokeMcp(okfMcp, installedRoot, mode) {
     assert.equal(searchPayload.lowConfidence, false);
     assert.deepEqual(searchPayload.queryTerms, ["server", "stdio"]);
     assert.equal(searchPayload.allTermsTotal, searchPayload.total);
+    assert.deepEqual(searchPayload.confidence, {
+      coverage: 1,
+      topSimilarity: null,
+      lowConfidence: false,
+      reasons: [],
+    });
     assert.equal(searchPayload.results[0].uri, "okf://okf-mcp/runtime/mcp-server");
     assert.deepEqual(Object.keys(searchPayload.results[0]).sort(), [
       "coverage",
@@ -299,7 +307,7 @@ async function main() {
     await smokeLiveValidation(okfMcp, installedRoot, { pin: "2026-07-28" });
 
     process.stdout.write(
-      JSON.stringify(
+      `${JSON.stringify(
         {
           package: `${packageMetadata.name}@${packageMetadata.version}`,
           entries: packed.entryCount,
@@ -309,7 +317,7 @@ async function main() {
         },
         null,
         2,
-      ) + "\n",
+      )}\n`,
     );
   } finally {
     fs.rmSync(temporaryRoot, { recursive: true, force: true });

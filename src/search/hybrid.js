@@ -23,6 +23,7 @@ const {
   fusionNormalization,
 } = require("./fusion");
 const { searchConcepts } = require("./query");
+const { minSimilarityOption } = require("./confidence");
 
 const QUERY_CACHE_SIZE = 256;
 // A search must not hang on a slow endpoint: query encoding gets its own
@@ -156,6 +157,7 @@ class EmbeddingRuntime {
     this.context = context || {};
     this.alpha = fusionAlphaSetting(config.fusion?.alpha);
     this.adaptive = adaptiveWeights(config.fusion?.adaptive);
+    this.minSimilarity = minSimilarityOption(config.confidence?.minSimilarity);
     this.normalization = fusionNormalization(config.fusion?.normalization);
     this.embedUnits =
       typeof config.embedUnits === "string" ? config.embedUnits : DEFAULT_EMBED_UNITS;
@@ -321,6 +323,7 @@ class EmbeddingRuntime {
         embedUnits: this.units,
         alpha: config.alpha === undefined ? this.alpha : config.alpha,
         adaptiveAlpha: config.adaptiveAlpha || this.adaptive,
+        minSimilarity: config.minSimilarity ?? this.minSimilarity,
         fusionNormalization: config.fusionNormalization || this.normalization,
       });
       try {
@@ -485,6 +488,7 @@ class EmbeddingRuntime {
       ...(this.alpha === ADAPTIVE_ALPHA ? { adaptive: this.adaptive } : {}),
       normalization: this.normalization,
       embedUnits: this.embedUnits,
+      minSimilarity: this.minSimilarity,
       embedder: this.describe(failure),
       cache: this.cacheReceipt(),
       // Units the provider rejected in the last preparation (count, first ids).

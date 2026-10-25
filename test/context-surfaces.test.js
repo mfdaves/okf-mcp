@@ -322,13 +322,14 @@ test("the CLI context command parses --budget and --limit and prints the JSON re
   assert.match(usage(), /context <query>/);
   assert.match(usage(), /--budget, --limit, --provenance/);
 
+  // 320 tokens: since 0.12 the confidence block takes about 18 of them.
   const run = runCli([
     "--root",
     ALPINARIA_BUNDLE,
     "context",
     "scarponi trekking donna",
     "--budget",
-    "300",
+    "320",
     "--limit",
     "3",
     "--type",
@@ -336,9 +337,9 @@ test("the CLI context command parses --budget and --limit and prints the JSON re
   ]);
   assert.equal(run.status, 0, run.stderr);
   const result = JSON.parse(run.stdout);
-  assert.equal(result.budgetTokens, 300);
+  assert.equal(result.budgetTokens, 320);
   assert.equal(result.estimator, "chars/4");
-  assert.ok(result.usedTokens <= 300);
+  assert.ok(result.usedTokens <= 320);
   assert.ok(result.sections.length >= 1 && result.sections.length <= 3);
   const index = buildProjectIndex(path.join(ALPINARIA, "okf.project.yaml"));
   result.sections.forEach((section) => {

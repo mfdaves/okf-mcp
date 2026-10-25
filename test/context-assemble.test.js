@@ -217,6 +217,7 @@ test("assembly is deterministic and ordered by concept rank, own text first, wit
     "lowConfidence",
     "queryTerms",
     "droppedTerms",
+    "confidence",
     "concepts",
     "sections",
     "totalSections",

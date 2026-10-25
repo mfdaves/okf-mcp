@@ -47,7 +47,12 @@ const SEARCH_DESCRIPTION =
   "and alphaReason: fixed, or under the adaptive weight literal_terms (quoted or " +
   "identifier-like terms and a concept matching every term), all_terms (several concepts " +
   "match every term), weak_lexical " +
-  "(nothing matches even half of the terms) or interpolated (in between).";
+  "(nothing matches even half of the terms) or interpolated (in between). Every response to a " +
+  "query also carries confidence: { coverage (of the top result), topSimilarity (the best " +
+  "semantic similarity when the embedder ran, else null), lowConfidence, reasons }; with an " +
+  "embedder lowConfidence is also true when the top result matched fewer than half of the " +
+  "terms and no concept reaches the server's similarity threshold (reasons " +
+  "weak_lexical_match, low_similarity).";
 
 const HYBRID_DESCRIPTION =
   "Fuse lexical and semantic ranking when the server has an embedder configured (the default " +
@@ -61,6 +66,7 @@ const RUNTIME_OPTIONS = [
   "embedUnits",
   "alpha",
   "adaptiveAlpha",
+  "minSimilarity",
   "fusionNormalization",
 ];
 

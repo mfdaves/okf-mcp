@@ -509,6 +509,7 @@ function loadProjectConfig(configPath) {
   const writePolicy = normalizeWritePolicyConfig(config, errors);
   // Hybrid search (WP3c): embedder, cacheDir, fusion.alpha, embedUnits; null when off.
   // WP3c-2: fusion.alpha may be "adaptive", with fusion.adaptive { low, mid, high }.
+  // WP3c-2: confidence.minSimilarity, the abstention similarity threshold.
   const embedding = normalizeEmbeddingConfig(config, errors);
   return {
     path: resolvedPath,

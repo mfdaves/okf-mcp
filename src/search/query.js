@@ -7,6 +7,7 @@ const { foldDiacritics } = require("./languages");
 const { analyzeQuery, prepareSearchIndex, runQuery, searchLanguages } = require("./lexical");
 const { denseSearch } = require("./dense");
 const { fuseRankings, fusionNormalization, resolveAlpha } = require("./fusion");
+const { LOW_CONFIDENCE_COVERAGE, assessConfidence } = require("./confidence");
 
 const MAX_COMPACT_TEXT = 500;
 // `auto` runs the all-term query first; when it yields fewer than `autoFill`
@@ -21,8 +22,8 @@ const SEARCH_MODES = Object.freeze(["auto", "all", "any"]);
 const DEFAULT_AUTO_FILL = 3;
 const MAX_AUTO_FILL = 250;
 // R-4: a response is flagged when the any-term fallback produced it and its
-// top result matched strictly fewer than half of the query terms.
-const LOW_CONFIDENCE_COVERAGE = 0.5;
+// top result matched strictly fewer than half of the query terms; with the
+// semantic side, also when no candidate is similar enough (./confidence.js).
 // R-6: optional score multipliers, off by default, applied only when the
 // signal is present on the document.
 const FRESHNESS_PRIOR = Object.freeze({ deprecated: 0.5, stale: 0.7, draft: 0.85 });
@@ -403,13 +404,16 @@ function hybridRank(index, config, ranking, filteredDocs, analysis) {
   const candidates = config.mode === "all" ? lexical.map((entry) => entry.doc) : filteredDocs;
   const prior = config.freshnessPrior ? (doc) => priorFactor(doc, config.asOf) : null;
   const docs = new Map(candidates.map((doc) => [doc.uri, doc]));
-  const dense = denseSearch(index, {
+  const nearest = denseSearch(index, {
     queryVector: config.queryVector,
     cache: config.vectorCache,
     units: config.embedUnits,
     candidates,
     limit: DENSE_DEPTH,
-  }).map((entry) => {
+  });
+  // The best raw cosine over the candidates, before any prior (abstention, WP3c-2).
+  const topSimilarity = nearest.length ? nearest[0].score : null;
+  const dense = nearest.map((entry) => {
     // R-6 multiplies scores; a negative cosine is divided so it still drops.
     const factor = prior ? prior(docs.get(entry.id)) : 1;
     const score = entry.score >= 0 ? entry.score * factor : entry.score / factor;
@@ -478,7 +482,12 @@ function hybridRank(index, config, ranking, filteredDocs, analysis) {
       unit: units.get(entry.id),
     });
   });
-  return { results: applyFloors(results, config), alpha, alphaReason: choice.reason };
+  return {
+    results: applyFloors(results, config),
+    alpha,
+    alphaReason: choice.reason,
+    topSimilarity,
+  };
 }
 
 function hybridFields(entry) {
@@ -568,16 +577,23 @@ function searchConcepts(index, options) {
   const response = { total: results.length, limit, offset };
   if (ranking) {
     // lowConfidence reads the displayed top result's coverage (lexical
-    // evidence is computed for every candidate, dense ones included).
+    // evidence is computed for every candidate, dense ones included) and,
+    // when the semantic side ran, the best similarity (WP3c-2).
+    const confidence = assessConfidence(
+      {
+        mode: ranking.mode,
+        coverage: results.length ? results[0].coverage : null,
+        topSimilarity: hybrid ? fusion.topSimilarity : null,
+      },
+      config.minSimilarity,
+    );
     Object.assign(response, {
       mode: ranking.mode,
       allTermsTotal: ranking.allTermsTotal,
-      lowConfidence:
-        ranking.mode === "any" &&
-        results.length > 0 &&
-        results[0].coverage < LOW_CONFIDENCE_COVERAGE,
+      lowConfidence: confidence.lowConfidence,
       queryTerms: analysis.terms,
       droppedTerms: analysis.dropped,
+      confidence,
     });
     if (hybrid) {
       Object.assign(response, {

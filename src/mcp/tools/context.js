@@ -37,7 +37,10 @@ const CONTEXT_DESCRIPTION =
   "anchor (the concept URI for the text before the first heading, uri#heading-slug otherwise; " +
   "an okf-mcp extension: body and whitespace edits leave it unchanged, renaming the heading or " +
   "adding a same-named heading before it changes it), heading, title, text, tokens, score, " +
-  "relevance, coverage, matchedTerms and the concept's provenance. For the query, " +
+  "relevance, coverage, matchedTerms and the concept's provenance. The response also carries " +
+  "confidence: { coverage, topSimilarity, lowConfidence, reasons } from the candidate search " +
+  "(as in search_concepts); with abstainOnLowConfidence a low-confidence query returns no " +
+  "sections and abstained true. For the query, " +
   `${QUERY_GUIDANCE.charAt(0).toLowerCase()}${QUERY_GUIDANCE.slice(1)}`;
 
 // Filters shared with search_concepts, taken with their descriptions so the
@@ -106,6 +109,12 @@ const tools = {
             "compact (default): status, freshness, verified (boolean) and sourceCount; full: status, staleAfter, freshness, trustTier, verified, generated, sources; none: no provenance.",
             { enum: PROVENANCE_MODES.slice(), default: "compact" },
           ),
+          abstainOnLowConfidence: {
+            type: "boolean",
+            description:
+              "Return no sections when the candidate search is low-confidence (lowConfidence true); the response keeps the confidence block, the candidate concepts and abstained true. Off by default.",
+            default: false,
+          },
         },
         sharedParameters(),
       ),

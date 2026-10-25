@@ -13,6 +13,7 @@ const path = require("node:path");
 const { createOpenAiEmbedder } = require("../embed/openai");
 const { parseFrontmatterYaml } = require("../parser");
 const { DEFAULT_EMBED_UNITS, EMBED_UNITS } = require("./dense");
+const { minSimilarityOption } = require("./confidence");
 const {
   FUSION_NORMALIZATIONS,
   adaptiveWeights,
@@ -33,7 +34,13 @@ const EMBEDDER_FIELDS = Object.freeze([
   "concurrency",
   "maxInputChars",
 ]);
-const SETTINGS_FIELDS = Object.freeze(["embedder", "cacheDir", "fusion", "embedUnits"]);
+const SETTINGS_FIELDS = Object.freeze([
+  "embedder",
+  "cacheDir",
+  "fusion",
+  "embedUnits",
+  "confidence",
+]);
 const FUSION_FIELDS = Object.freeze(["alpha", "normalization", "adaptive"]);
 
 function isObject(value) {
@@ -144,10 +151,30 @@ function normalizeEmbeddingConfig(config, errors) {
       embedUnits = source.embedUnits;
     }
   }
+  // WP3c-2: `confidence.minSimilarity`, the similarity under which a weakly matched top result
+  // is flagged lowConfidence (model-specific; src/search/confidence.js).
+  let confidence = null;
+  if (source.confidence !== undefined) {
+    try {
+      const unknown = isObject(source.confidence)
+        ? Object.keys(source.confidence).filter((key) => key !== "minSimilarity")
+        : ["confidence"];
+      if (unknown.length) throw new TypeError("confidence");
+      confidence = { minSimilarity: minSimilarityOption(source.confidence.minSimilarity) };
+    } catch {
+      errors.push({
+        code: "invalid_confidence",
+        field: "confidence",
+        message: "confidence must be { minSimilarity } with minSimilarity between -1 and 1.",
+      });
+    }
+  }
   if (!embedder) return null;
   const fusion = { alpha, normalization };
   if (adaptive) fusion.adaptive = Object.assign({}, adaptive);
-  return { embedder, cacheDir, fusion, embedUnits };
+  const settings = { embedder, cacheDir, fusion, embedUnits };
+  if (confidence) settings.confidence = confidence;
+  return settings;
 }
 
 // The --embedder-config file (JSON, or YAML for any other extension): either

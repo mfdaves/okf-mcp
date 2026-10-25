@@ -10,7 +10,11 @@
       "lowConfidenceNoAnswerRecall": 0.5,
       "lowConfidenceAnswerableTop1HitShareMax": 0.03,
       "sectionAnchorHitRate": 0.8,
-      "sectionAnchorHitRateSource": "WP3a acceptance on labelled dev queries via get_context"
+      "sectionAnchorHitRateSource": "WP3a acceptance on labelled dev queries via get_context",
+      "hybridSource": "WP3c-2 pre-registration (docs/plan-1.0.md section 7), measured with text-embedding-3-small at 512 dimensions on the full set; test/search-acceptance.test.js reads the committed hybrid-0.12 report",
+      "hybridSynonymRecallAt5": 0.7,
+      "hybridNoAnswerRecall": 0.7,
+      "hybridAnswerableTop1HitShareMax": 0.03
     },
     "baseline": {
       "measuredOn": "2026-10-24",
@@ -64,7 +68,10 @@
       "source": "WP1 acceptance, second fixture",
       "recallAt5": 0.7,
       "sectionAnchorHitRate": 0.8,
-      "sectionAnchorHitRateSource": "WP3a acceptance on labelled dev queries via get_context"
+      "sectionAnchorHitRateSource": "WP3a acceptance on labelled dev queries via get_context",
+      "hybridSource": "WP3c-2 pre-registration (docs/plan-1.0.md section 7), measured with text-embedding-3-small at 512 dimensions on the full set; test/search-acceptance.test.js reads the committed hybrid-0.12 report",
+      "hybridNoAnswerRecall": 0.7,
+      "hybridAnswerableTop1HitShareMax": 0.03
     },
     "baseline": {
       "measuredOn": "2026-10-24",

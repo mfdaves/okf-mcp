@@ -78,6 +78,7 @@ const CONTEXT_OPTIONS = [
   "conceptLimit",
   "conceptLift",
   "preambleWeight",
+  "abstainOnLowConfidence",
 ];
 const SOURCE_FIELDS = ["id", "resource", "author"];
 const PROVENANCE_MODES = Object.freeze(["compact", "full", "none"]);
@@ -466,6 +467,12 @@ function assembleContext(index, options) {
   const preambleWeight = weightOption(config.preambleWeight);
   const conceptLift = liftOption(config.conceptLift);
   const provenanceMode = provenanceOption(config);
+  if (
+    config.abstainOnLowConfidence !== undefined &&
+    typeof config.abstainOnLowConfidence !== "boolean"
+  ) {
+    throw new TypeError("abstainOnLowConfidence must be a boolean.");
+  }
   const searchOptions = Object.assign({}, config, {
     query,
     limit: conceptLimit,
@@ -491,8 +498,11 @@ function assembleContext(index, options) {
     }
     return signalsCache.get(doc.uri);
   };
+  // WP3c-2: with abstainOnLowConfidence, a low-confidence candidate step yields no sections;
+  // the response still carries the confidence block and the candidate concepts.
+  const abstained = config.abstainOnLowConfidence === true && Boolean(response.lowConfidence);
   const ranked =
-    analysis.tokens.length && candidates.length
+    analysis.tokens.length && candidates.length && !abstained
       ? rankSections(index, searchOptions, analysis, candidates, {
           preambleWeight,
           conceptLift,
@@ -508,7 +518,9 @@ function assembleContext(index, options) {
     lowConfidence: Boolean(response.lowConfidence),
     queryTerms: response.queryTerms || [],
     droppedTerms: response.droppedTerms || [],
+    confidence: response.confidence || null,
   };
+  if (config.abstainOnLowConfidence !== undefined) fields.abstained = abstained;
   const frame = responseFrame(fields, candidates, budgetTokens, ranked.length);
   const packing = packSections(ranked, frame.availableChars, limit, (candidate, text, truncated) =>
     sectionResult(candidate, text, truncated, analysis, provenanceMode, signalsOf),

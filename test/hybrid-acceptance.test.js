@@ -8,10 +8,14 @@ const test = require("node:test");
 
 const { buildProjectIndex } = require("../src/indexer");
 const {
+  DEFAULT_ADAPTIVE_WEIGHTS,
+  DEFAULT_ALPHA_SETTING,
   DEFAULT_FUSION_ALPHA,
   DEFAULT_FUSION_NORMALIZATION,
   FUSION_NORMALIZATIONS,
 } = require("../src/search/fusion");
+const { DEFAULT_MIN_SIMILARITY } = require("../src/search/confidence");
+const { DEFAULT_EMBED_UNITS } = require("../src/search/dense");
 const { openEmbeddingRuntime } = require("../src/search/hybrid");
 const { searchConcepts } = require("../src/search/query");
 const { startFakeEmbeddingsServer } = require("./fake-embeddings-server");
@@ -136,4 +140,47 @@ test("the committed hybrid report records its model, alpha and usage, and no sec
   assert.equal(choice.alpha, DEFAULT_FUSION_ALPHA);
   assert.equal(choice.normalization, DEFAULT_FUSION_NORMALIZATION);
   assert.equal(report.hybrid.normalization, DEFAULT_FUSION_NORMALIZATION);
+});
+
+test("the committed hybrid-0.12 report records the WP3c-2 choices the code ships", () => {
+  const prefix = path.join(RETRIEVAL, "reports", "hybrid-0.12-2026-10-25");
+  const json = fs.readFileSync(`${prefix}.json`, "utf8");
+  const markdown = fs.readFileSync(`${prefix}.md`, "utf8");
+  for (const text of [json, markdown]) {
+    assert.ok(!/sk-[A-Za-z0-9_-]{8,}/.test(text), "no API key");
+    assert.ok(!/https?:\/\/[^\s/"]*@/.test(text), "no URL with credentials");
+    assert.ok(!text.includes(os.tmpdir()), "no temporary cache path");
+  }
+  const report = JSON.parse(json);
+  const { measurement } = report;
+  for (const name of ["alpinaria", "atlas"]) {
+    assert.match(
+      report.hybrid.fixtures[name].embedder.id,
+      /^openai:https:\/\/api\.openai\.com\/v1\/embeddings:text-embedding-3-small:512:24000$/,
+    );
+    assert.equal(report.hybrid.fixtures[name].embedder.degraded, false);
+  }
+  assert.ok(measurement.preregistration.length >= 5);
+  // Step 1: the adaptive defaults are the dev grid's choice; the fixed weight stays the default
+  // exactly when a pre-registered condition failed.
+  const { low, mid, high } = measurement.adaptive.grid.choice;
+  assert.deepEqual({ low, mid, high }, Object.assign({}, DEFAULT_ADAPTIVE_WEIGHTS));
+  assert.equal(
+    measurement.adaptive.defaultAdaptive,
+    measurement.adaptive.gates.every((g) => g.pass),
+  );
+  assert.equal(DEFAULT_ALPHA_SETTING, measurement.adaptive.defaultAdaptive ? "adaptive" : 0.4);
+  assert.equal(report.hybrid.alpha, DEFAULT_ALPHA_SETTING);
+  assert.ok(measurement.adaptive.overheadP95Ms <= 1);
+  // Step 2: the unit default is the WP3c rule's choice and never loses to concepts beyond its CI.
+  assert.equal(measurement.units.choice, DEFAULT_EMBED_UNITS);
+  assert.equal(report.hybrid.embedUnits, DEFAULT_EMBED_UNITS);
+  const best = Math.max(...measurement.units.rows.map((row) => row.meanDevRecallAt5));
+  const [choice] = measurement.units.rows
+    .filter((row) => row.meanDevRecallAt5 >= best - 0.005)
+    .sort((a, b) => b.meanDevNdcgAt10 - a.meanDevNdcgAt10);
+  assert.equal(choice.units, DEFAULT_EMBED_UNITS);
+  // Step 3: the shipped threshold is the pre-registered choice.
+  assert.equal(measurement.abstention.tauChoice, DEFAULT_MIN_SIMILARITY);
+  assert.ok(measurement.promptTokensFixtureRuns > 0);
 });
