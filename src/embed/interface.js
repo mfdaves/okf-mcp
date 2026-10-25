@@ -33,6 +33,11 @@
 //                           predictable: a host that runs several calls at
 //                           once passes concurrency: 1, so the requests in
 //                           flight equal the host's bound, never the product.
+//                           options.skipRejected: true lets an implementation
+//                           return null in place of the vector of an input
+//                           the provider refuses (after any recovery of its
+//                           own); a host that passes it records the unit as
+//                           skipped. Without it, a refused input fails the call.
 //
 // Optional members:
 //

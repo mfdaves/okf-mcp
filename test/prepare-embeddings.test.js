@@ -400,13 +400,13 @@ test("keeps the requests in flight at the prepare concurrency when calls split i
     dimensions: 4,
     batchSize: 8,
     concurrency: 2,
-    maxInputChars: 400,
+    maxInputChars: 300,
     maxRequestTokens: 200,
   });
-  // 100 tokens per unit and a 200-token budget: every call of 8 units splits
-  // into 4 requests, and two calls run at once.
+  // 100 tokens per unit (ceil(chars / 3)) and a 200-token budget: every call
+  // of 8 units splits into 4 requests, and two calls run at once.
   const units = Array.from({ length: 40 }, (_, position) => {
-    const text = `${position}`.padEnd(400, "x");
+    const text = `${position}`.padEnd(300, "x");
     return { id: `okf://b/${position}`, text, hash: hashUnitText(text) };
   });
   const cache = openVectorCache(path.join(work, "cache"), {
@@ -487,4 +487,102 @@ test("unit hashes are stable for identical text and change with any character", 
     { id: "okf://b/a", text: "A\nD\nB", hash: hashUnitText("A\nD\nB") },
     { id: "okf://b/c", text: "C\n\n", hash: hashUnitText("C\n\n") },
   ]);
+});
+
+test("a unit the provider rejects is skipped and every other unit persists", async (t) => {
+  const work = tempDir(t, "okf-embed-prepare-");
+  const server = await startFakeEmbeddingsServer({
+    apiKey: KEY,
+    dimension: 4,
+    rejectInputsAbove: 5000,
+  });
+  t.after(() => server.close());
+  const embedder = createOpenAiEmbedder({
+    baseUrl: server.baseUrl,
+    model: "fake-embed",
+    apiKeyEnv: "OKF_TEST_EMBED_KEY",
+    env: { OKF_TEST_EMBED_KEY: KEY },
+    dimensions: 4,
+    batchSize: 16,
+    concurrency: 2,
+  });
+  const unit = (id, text) => ({ id, text, hash: hashUnitText(text) });
+  const units = Array.from({ length: 20 }, (_, position) =>
+    unit(`okf://b/u${String(position).padStart(2, "0")}`, `ordinary text ${position}`),
+  );
+  // Rejected whole and halved (12,000 then 6,000 characters).
+  units.splice(7, 0, unit("okf://b/huge-contract", "col_".repeat(5000)));
+  // Rejected whole, accepted at half its length.
+  units.splice(15, 0, unit("okf://b/long-guide", "g".repeat(8000)));
+  const cache = openVectorCache(path.join(work, "cache"), {
+    embedderId: embedder.id,
+    dimension: 4,
+  });
+  const receipt = await prepareEmbeddings({}, embedder, cache, { units: () => units });
+  assert.deepEqual(receipt.skipped, [{ id: "okf://b/huge-contract", reason: "input_rejected" }]);
+  assert.equal(receipt.units, 22);
+  assert.equal(receipt.embedded, 21);
+  assert.equal(receipt.deduplicated, 0);
+  assert.equal(cache.has(units[7].hash), false);
+  units
+    .filter((entry) => entry.id !== "okf://b/huge-contract")
+    .forEach((entry) => {
+      assert.equal(cache.has(entry.hash), true, entry.id);
+    });
+  assert.deepEqual(
+    Array.from(cache.get(units[15].hash)),
+    Array.from(vectorFor("g".repeat(4000), 4)),
+  );
+  assert.equal(embedder.usage().halved, 1);
+  assert.equal(embedder.usage().rejected, 1);
+  // The next run retries only the skipped unit and reports it again.
+  const before = server.requests.length;
+  const again = await prepareEmbeddings({}, embedder, cache, { units: () => units });
+  assert.equal(again.embedded, 0);
+  assert.equal(again.reused, 21);
+  assert.deepEqual(again.skipped, receipt.skipped);
+  assert.ok(server.requests.slice(before).every((request) => request.body.input.length === 1));
+});
+
+test("embedding status and the startup receipt report skipped units", async (t) => {
+  const { hybridWorld, writeConcept } = require("./helpers/hybrid-world");
+  const { openEmbeddingRuntime } = require("../src/search/hybrid");
+  const world = hybridWorld(t);
+  writeConcept(
+    world.root,
+    "generated-contract.md",
+    { type: "Contract", title: "Generated contract" },
+    `# Generated contract\n\n${"column_identifier_long_name ".repeat(1200)}`,
+  );
+  const index = world.reindex();
+  const server = await startFakeEmbeddingsServer({
+    apiKey: KEY,
+    dimension: 4,
+    rejectInputsAbove: 6000,
+  });
+  t.after(() => server.close());
+  const runtime = await openEmbeddingRuntime(
+    {
+      embedder: {
+        type: "openai",
+        baseUrl: server.baseUrl,
+        model: "fake-embed",
+        apiKeyEnv: "OKF_TEST_EMBED_KEY",
+        dimensions: 4,
+      },
+      cacheDir: path.join(tempDir(t, "okf-embed-status-"), "cache"),
+      embedUnits: "concepts",
+    },
+    { root: world.root, env: { OKF_TEST_EMBED_KEY: KEY } },
+  );
+  await runtime.sync(index);
+  const status = runtime.status();
+  const expected = { count: 1, ids: ["okf://shop/generated-contract"] };
+  assert.deepEqual(status.skipped, expected);
+  assert.deepEqual(status.startup.skipped, expected);
+  assert.deepEqual(status.sync.last.skipped, expected);
+  assert.equal(status.startup.embedded, 6);
+  assert.equal(status.embedder.degraded, false);
+  const found = await runtime.search(index, { query: "courier delivery" });
+  assert.equal(found.hybrid, true, "one rejected document does not degrade the catalog");
 });

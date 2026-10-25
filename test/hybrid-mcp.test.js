@@ -191,7 +191,7 @@ test("an MCP server with an embedder prepares vectors, fuses searches and report
   assert.equal(TOOL_ORDER.at(-1), "embedding_status");
 
   const status = parse(await callTool(state, "embedding_status", {}));
-  assert.equal(status.embedder.id, `openai:${server.baseUrl}/v1/embeddings:fake-embed:16:32000`);
+  assert.equal(status.embedder.id, `openai:${server.baseUrl}/v1/embeddings:fake-embed:16:24000`);
   assert.equal(status.embedder.remote, false, "loopback endpoint");
   assert.equal(status.embedder.degraded, false);
   assert.equal(status.alpha, 0.4);

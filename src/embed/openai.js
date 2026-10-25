@@ -15,11 +15,17 @@ const { version: PACKAGE_VERSION } = require("../../package.json");
 
 // Published limits of the OpenAI embeddings endpoint; compatible servers are
 // usually looser, never stricter in a way the configuration cannot express.
+// charsPerToken (4) is the reporting estimate; request budgets and the
+// default truncation use conservativeCharsPerToken (3), because
+// identifier-dense text (generated contracts, column lists) runs at about
+// 2.6 characters per token and overflowed the 8,192-token input limit at
+// 32,000 characters.
 const OPENAI_EMBEDDING_LIMITS = Object.freeze({
   maxBatch: 2048,
   maxRequestTokens: 300000,
   maxInputTokens: 8192,
   charsPerToken: 4,
+  conservativeCharsPerToken: 3,
 });
 
 const OPENAI_EMBEDDER_DEFAULTS = Object.freeze({
@@ -27,7 +33,7 @@ const OPENAI_EMBEDDER_DEFAULTS = Object.freeze({
   timeoutMs: 60000,
   maxRetries: 5,
   concurrency: 2,
-  maxInputChars: 32000,
+  maxInputChars: 24000,
   maxRequestTokens: OPENAI_EMBEDDING_LIMITS.maxRequestTokens,
 });
 
@@ -37,6 +43,16 @@ const BACKOFF_CAP_MS = 30000;
 const RETRY_AFTER_CAP_MS = 60000;
 const MAX_RESPONSE_BYTES = 256 * 1024 * 1024;
 const PROBE_TEXT = "okf-mcp";
+// An input the provider rejects (invalid_request) is retried once at half its
+// length, never below this many characters.
+const REJECTED_INPUT_FLOOR_CHARS = 2000;
+// Extra requests one rejected request may spend isolating its bad inputs by
+// bisection: 16 per halving level, enough for several rejected inputs in a
+// full batch. A request whose every input is rejected (a configuration
+// problem, not a document) exhausts it and fails as before.
+function isolationBudget(inputs) {
+  return 16 * Math.ceil(Math.log2(inputs + 1)) + 8;
+}
 // The only server-derived value an error may carry: one of these constants,
 // chosen from the HTTP status and the OpenAI-style error code or type.
 const OPENAI_SERVER_CODES = Object.freeze([
@@ -119,8 +135,20 @@ function backoffDelay(attempt, random) {
   return Math.floor(base / 2 + random() * (base / 2));
 }
 
+// Conservative estimate for request budgets: ceil(chars / 3).
 function estimateTokens(text) {
-  return Math.max(1, Math.ceil(text.length / OPENAI_EMBEDDING_LIMITS.charsPerToken));
+  return Math.max(1, Math.ceil(text.length / OPENAI_EMBEDDING_LIMITS.conservativeCharsPerToken));
+}
+
+// The provider refused the request's content (an HTTP 4xx that is not about
+// the key, quota, model or rate): with several inputs, one of them may be the
+// cause. Decided from our own enumerated code, never from server text.
+function isInputRejection(error) {
+  return (
+    error instanceof EmbedderError &&
+    error.code === "embedder_http_error" &&
+    error.details?.serverCode === "invalid_request"
+  );
 }
 
 // Contiguous batches in input order, closed by the input count or the token
@@ -292,6 +320,9 @@ function createOpenAiEmbedder(options) {
   const timeoutMs = integerOption(config, "timeoutMs", 1, 3600000);
   const maxRetries = integerOption(config, "maxRetries", 0, 20);
   const concurrency = integerOption(config, "concurrency", 1, 64);
+  // The ceiling stays at the 0.11.0-rc.1 value (8,192 x 4) so existing
+  // configurations keep loading; an input the provider still rejects is
+  // halved and retried (embedBatch below).
   const maxInputChars = integerOption(
     config,
     "maxInputChars",
@@ -304,7 +335,9 @@ function createOpenAiEmbedder(options) {
     1,
     OPENAI_EMBEDDING_LIMITS.maxRequestTokens,
   );
-  if (Math.ceil(maxInputChars / OPENAI_EMBEDDING_LIMITS.charsPerToken) > maxRequestTokens) {
+  if (
+    Math.ceil(maxInputChars / OPENAI_EMBEDDING_LIMITS.conservativeCharsPerToken) > maxRequestTokens
+  ) {
     throw new EmbedderError(
       "Embedder option maxRequestTokens must admit one input of maxInputChars characters.",
       "invalid_embedder_config",
@@ -352,6 +385,8 @@ function createOpenAiEmbedder(options) {
     totalTokens: 0,
     inputs: 0,
     truncated: 0,
+    halved: 0,
+    rejected: 0,
   };
 
   function recordDimension(dimension) {
@@ -521,6 +556,62 @@ function createOpenAiEmbedder(options) {
     }
   }
 
+  // One planned batch, isolating rejected inputs: a multi-input request the
+  // provider refuses as invalid_request is split in halves (bisection) until
+  // the refused inputs stand alone; a lone refused input is retried once at
+  // half its length (floor REJECTED_INPUT_FLOOR_CHARS). An input refused even
+  // then yields null and its error is kept in `rejections`. Any other error,
+  // or an exhausted isolation budget, throws the error at hand.
+  async function embedBatch(batch, signal, budget, rejections) {
+    let failure;
+    try {
+      return await requestBatch(batch, signal);
+    } catch (error) {
+      if (!isInputRejection(error)) throw error;
+      failure = error;
+    }
+    const count = batch.texts.length;
+    if (count > 1) {
+      if (budget.remaining < 2) throw failure;
+      budget.remaining -= 2;
+      const middle = Math.ceil(count / 2);
+      const halves = [
+        { offset: batch.offset, texts: batch.texts.slice(0, middle) },
+        { offset: batch.offset + middle, texts: batch.texts.slice(middle) },
+      ];
+      const out = [];
+      for (const half of halves) {
+        out.push(...(await embedBatch(half, signal, budget, rejections)));
+      }
+      return out;
+    }
+    const text = batch.texts[0];
+    const shorter = Math.max(REJECTED_INPUT_FLOOR_CHARS, Math.floor(text.length / 2));
+    if (shorter < text.length) {
+      if (budget.remaining < 1) throw failure;
+      budget.remaining -= 1;
+      try {
+        const vectors = await requestBatch(
+          { offset: batch.offset, texts: [text.slice(0, shorter)] },
+          signal,
+        );
+        counters.halved += 1;
+        return vectors;
+      } catch (error) {
+        if (!isInputRejection(error)) throw error;
+        failure = error;
+      }
+    }
+    counters.rejected += 1;
+    rejections.push({ index: batch.offset, error: failure });
+    return [null];
+  }
+
+  // options.skipRejected: true returns null in place of the vector of an
+  // input the provider rejects even after the halving retry (the host records
+  // it as skipped); without it, such an input fails the call as before. A
+  // call whose every input (more than one) is rejected always fails: that is
+  // a configuration problem, not a document.
   async function embed(texts, embedOptions) {
     if (!Array.isArray(texts)) {
       throw new EmbedderError("Embedder input must be an array of strings.", "invalid_input");
@@ -549,6 +640,7 @@ function createOpenAiEmbedder(options) {
         : concurrency;
     const batches = planBatches(inputs, batchSize, maxRequestTokens);
     const out = new Array(inputs.length);
+    const rejections = [];
     let next = 0;
     let failure = null;
     const worker = async () => {
@@ -556,7 +648,8 @@ function createOpenAiEmbedder(options) {
         const batch = batches[next];
         next += 1;
         try {
-          const vectors = await requestBatch(batch, signal);
+          const budget = { remaining: isolationBudget(batch.texts.length) };
+          const vectors = await embedBatch(batch, signal, budget, rejections);
           vectors.forEach((vector, position) => {
             out[batch.offset + position] = vector;
           });
@@ -568,6 +661,13 @@ function createOpenAiEmbedder(options) {
     };
     await Promise.all(Array.from({ length: Math.min(parallel, batches.length) }, worker));
     if (failure) throw failure;
+    if (rejections.length) {
+      const everyInput = inputs.length > 1 && rejections.length === inputs.length;
+      if (embedOptions?.skipRejected !== true || everyInput) {
+        rejections.sort((left, right) => left.index - right.index);
+        throw rejections[0].error;
+      }
+    }
     return out;
   }
 
@@ -606,6 +706,7 @@ module.exports = {
   OPENAI_EMBEDDER_DEFAULTS,
   OPENAI_EMBEDDING_LIMITS,
   OPENAI_SERVER_CODES,
+  REJECTED_INPUT_FLOOR_CHARS,
   classifyServerError,
   createOpenAiEmbedder,
   isLoopbackHost,

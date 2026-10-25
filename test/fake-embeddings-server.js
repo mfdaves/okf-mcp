@@ -6,6 +6,10 @@
 // client's batching is verified end to end; and a script of per-request
 // behaviours lets tests provoke 429/5xx answers, Retry-After headers, slow or
 // malformed responses, reordered data entries, and bodies that echo the input.
+// `rejectInputsAbove` (an option, or settable on the returned handle) makes
+// the server refuse, with HTTP 400 context_length_exceeded, any request that
+// holds an input longer than that many characters, as a provider does for an
+// input over its token limit.
 
 const crypto = require("node:crypto");
 const http = require("node:http");
@@ -61,6 +65,9 @@ async function startFakeEmbeddingsServer(options) {
   const defaultDimension = config.dimension || 8;
   const supportsDimensions = config.supportsDimensions !== false;
   const defaultDelayMs = config.delayMs || 0;
+  const rejection = {
+    above: Number.isSafeInteger(config.rejectInputsAbove) ? config.rejectInputsAbove : null,
+  };
   const script = [];
   const requests = [];
   const sockets = new Set();
@@ -150,7 +157,10 @@ async function startFakeEmbeddingsServer(options) {
       return;
     }
     const tokens = input.map(estimateTokens);
-    if (tokens.some((count) => count > LIMITS.maxInputTokens)) {
+    if (
+      tokens.some((count) => count > LIMITS.maxInputTokens) ||
+      (rejection.above !== null && input.some((text) => text.length > rejection.above))
+    ) {
       send(
         response,
         400,
@@ -230,6 +240,12 @@ async function startFakeEmbeddingsServer(options) {
     baseUrl: `http://127.0.0.1:${port}`,
     requests,
     stats,
+    get rejectInputsAbove() {
+      return rejection.above;
+    },
+    set rejectInputsAbove(value) {
+      rejection.above = Number.isSafeInteger(value) ? value : null;
+    },
     // Queue behaviours consumed one per request, in order; an exhausted script
     // answers normally.
     script(...behaviours) {

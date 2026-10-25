@@ -4,7 +4,10 @@
 // embed only the hashes the cache does not hold, store them as each chunk
 // arrives so an interrupted run keeps its progress, and drop rows whose text
 // no longer exists. The receipt says what left the machine (O-2) and what it
-// cost, never what the text was.
+// cost, never what the text was. A unit the provider rejects even after the
+// embedder's own recovery (skipRejected, src/embed/interface.js) is listed
+// under `skipped` and the run continues: one bad document never costs the
+// rest of the catalog its vectors. It is retried by the next preparation.
 
 const { performance } = require("node:perf_hooks");
 
@@ -110,6 +113,7 @@ async function prepareEmbeddings(index, embedder, cache, options) {
   const usageBefore = usageSnapshot(embedder);
   let embedded = 0;
   let calls = 0;
+  const skipped = [];
   let next = 0;
   let failure = null;
   const worker = async () => {
@@ -122,7 +126,7 @@ async function prepareEmbeddings(index, embedder, cache, options) {
         // so each call runs its own requests one at a time.
         const vectors = await embedder.embed(
           batch.map((unit) => unit.text),
-          { concurrency: 1 },
+          { concurrency: 1, skipRejected: true },
         );
         if (!Array.isArray(vectors) || vectors.length !== batch.length) {
           throw new EmbedderError(
@@ -130,14 +134,16 @@ async function prepareEmbeddings(index, embedder, cache, options) {
             "embedder_bad_output",
           );
         }
-        await cache.putMany(
-          batch.map((unit, position) => ({
-            id: unit.id,
-            hash: unit.hash,
-            vector: vectors[position],
-          })),
-        );
-        embedded += batch.length;
+        const rows = [];
+        batch.forEach((unit, position) => {
+          if (vectors[position] === null) {
+            skipped.push({ id: unit.id, reason: "input_rejected" });
+          } else {
+            rows.push({ id: unit.id, hash: unit.hash, vector: vectors[position] });
+          }
+        });
+        if (rows.length) await cache.putMany(rows);
+        embedded += rows.length;
         if (typeof config.onProgress === "function") {
           config.onProgress({ embedded, total: queue.length, units: units.length });
         }
@@ -155,7 +161,8 @@ async function prepareEmbeddings(index, embedder, cache, options) {
     units: units.length,
     embedded,
     reused,
-    deduplicated: units.length - reused - embedded,
+    deduplicated: units.length - reused - embedded - skipped.length,
+    skipped: skipped.sort((left, right) => (left.id < right.id ? -1 : left.id > right.id ? 1 : 0)),
     pruned,
     requests: usage ? usage.requests : calls,
     usage,

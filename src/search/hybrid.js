@@ -28,6 +28,8 @@ const QUERY_MAX_RETRIES = 1;
 const PROBE_TIMEOUT_MS = 15000;
 const FAILURE_COOLDOWN_MS = 30000;
 const SYNC_RETRY_MS = 60000;
+// Receipts list this many skipped unit ids; the count is always complete.
+const SKIPPED_IDS_SHOWN = 5;
 const CODE_PATTERN = /^[a-z][a-z0-9_]{0,63}$/;
 // Options a caller of search() may not smuggle in: the runtime supplies them.
 const RUNTIME_OPTIONS = ["queryVector", "vectorCache", "embedUnits"];
@@ -94,6 +96,13 @@ function checkQueryVector(vector, dimension) {
     );
   }
   return vector;
+}
+
+// { count, ids }: how many units the provider rejected (prepareEmbeddings
+// `skipped`) and the first few of their ids, in id order.
+function skippedSummary(skipped) {
+  const list = Array.isArray(skipped) ? skipped : [];
+  return { count: list.length, ids: list.slice(0, SKIPPED_IDS_SHOWN).map((entry) => entry.id) };
 }
 
 function usageOf(embedder) {
@@ -416,21 +425,24 @@ class EmbeddingRuntime {
     const queue = Array.from(pending.values());
     let embedded = 0;
     let failure = null;
+    const skipped = [];
     try {
       for (let offset = 0; offset < queue.length; offset += writes.maxBatch) {
         const batch = queue.slice(offset, offset + writes.maxBatch);
         const vectors = await writes.embed(
           batch.map((unit) => unit.text),
-          { concurrency: 1 },
+          { concurrency: 1, skipRejected: true },
         );
-        await this.cache.putMany(
-          batch.map((unit, position) => ({
-            id: unit.id,
-            hash: unit.hash,
-            vector: vectors[position],
-          })),
-        );
-        embedded += batch.length;
+        const rows = [];
+        batch.forEach((unit, position) => {
+          if (vectors[position] === null) {
+            skipped.push({ id: unit.id, reason: "input_rejected" });
+          } else {
+            rows.push({ id: unit.id, hash: unit.hash, vector: vectors[position] });
+          }
+        });
+        if (rows.length) await this.cache.putMany(rows);
+        embedded += rows.length;
       }
     } catch (error) {
       failure = failureOf(error, "embedding_write_failed");
@@ -438,6 +450,7 @@ class EmbeddingRuntime {
     return {
       units: queue.length,
       embedded,
+      skipped: skippedSummary(skipped),
       embedder: this.describe(failure),
       cache: this.cacheReceipt(),
       usage: usageDelta(before, usageOf(writes)),
@@ -446,7 +459,10 @@ class EmbeddingRuntime {
   }
 
   sanitize(receipt) {
-    const copy = Object.assign({}, receipt, { cache: Object.assign({}, receipt.cache) });
+    const copy = Object.assign({}, receipt, {
+      cache: Object.assign({}, receipt.cache),
+      skipped: skippedSummary(receipt.skipped),
+    });
     if (!this.context.write) delete copy.cache.dir;
     return copy;
   }
@@ -461,6 +477,8 @@ class EmbeddingRuntime {
       embedUnits: this.embedUnits,
       embedder: this.describe(failure),
       cache: this.cacheReceipt(),
+      // Units the provider rejected in the last preparation (count, first ids).
+      skipped: this.lastSync?.skipped || skippedSummary([]),
       startup: this.startup,
       sync: {
         state: this.syncingIndex ? "running" : this.syncError ? "failed" : "idle",

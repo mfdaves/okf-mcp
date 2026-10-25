@@ -7,6 +7,7 @@ const test = require("node:test");
 
 const { EmbedderError, validateEmbedder } = require("../src/embed/interface");
 const {
+  OPENAI_EMBEDDER_DEFAULTS,
   OPENAI_EMBEDDING_LIMITS,
   classifyServerError,
   createOpenAiEmbedder,
@@ -47,7 +48,7 @@ function embedderFor(server, overrides) {
 }
 
 function idFor(server, model, dimension, maxInputChars) {
-  return `openai:${server.baseUrl}/v1/embeddings:${model}:${dimension}:${maxInputChars || 32000}`;
+  return `openai:${server.baseUrl}/v1/embeddings:${model}:${dimension}:${maxInputChars || 24000}`;
 }
 
 function assertClose(actual, expected) {
@@ -79,7 +80,7 @@ test("embeds in input order across batches and workers, and reports usage", asyn
   assert.equal(embedder.remote, false);
   assert.equal(embedder.dimension, 8);
   assert.equal(embedder.maxBatch, 3);
-  assert.equal(embedder.maxInputChars, 32000);
+  assert.equal(embedder.maxInputChars, 24000);
 
   const texts = Array.from({ length: 8 }, (_, index) => `alpine boot guide number ${index}`);
   const vectors = await embedder.embed(texts);
@@ -106,6 +107,8 @@ test("embeds in input order across batches and workers, and reports usage", asyn
     totalTokens: promptTokens,
     inputs: 8,
     truncated: 0,
+    halved: 0,
+    rejected: 0,
   });
   assert.deepEqual(await embedder.embed([]), []);
   assert.equal(server.requests.length, 3);
@@ -122,7 +125,8 @@ test("batches close at the input limit and at the token budget", async (t) => {
     many.map((batch) => batch.offset),
     [0, 2048, 4096],
   );
-  const heavy = "y".repeat(4000);
+  // Budgets use the conservative ceil(chars / 3): 3,000 characters are 1,000 tokens.
+  const heavy = "y".repeat(3000);
   const byTokens = planBatches([heavy, heavy, heavy, heavy, short], 2048, 2500);
   assert.deepEqual(
     byTokens.map((batch) => batch.texts.length),
@@ -154,7 +158,7 @@ test("truncates inputs at maxInputChars and counts the truncations", async (t) =
   await embedder.embed(["a".repeat(40000), "short"]);
   assert.deepEqual(
     server.requests[0].body.input.map((text) => text.length),
-    [32000, 5],
+    [24000, 5],
   );
   assert.equal(embedder.usage().truncated, 1);
   const { embedder: narrow } = embedderFor(server, { maxInputChars: 100 });
@@ -531,7 +535,7 @@ test("derives id, endpoint and remote from the base URL and discovers the dimens
   });
   assert.equal(
     hosted.id,
-    "openai:https://api.openai.com/v1/embeddings:text-embedding-3-small:512:32000",
+    "openai:https://api.openai.com/v1/embeddings:text-embedding-3-small:512:24000",
   );
   assert.equal(hosted.endpoint, "https://api.openai.com/v1/embeddings");
   assert.equal(hosted.remote, true);
@@ -545,7 +549,7 @@ test("derives id, endpoint and remote from the base URL and discovers the dimens
   assert.equal(local.endpoint, "http://localhost:11434/v1/embeddings");
   assert.equal(local.remote, false);
   assert.deepEqual(local.languages, ["en", "it"]);
-  assert.equal(local.id, "openai:http://localhost:11434/v1/embeddings:nomic-embed-text:?:32000");
+  assert.equal(local.id, "openai:http://localhost:11434/v1/embeddings:nomic-embed-text:?:24000");
   assert.equal(local.dimension, null);
   assert.throws(
     () => validateEmbedder(local),
@@ -559,7 +563,7 @@ test("derives id, endpoint and remote from the base URL and discovers the dimens
   });
   assert.equal(gateway.endpoint, "http://[::1]:8000/openai/v1/embeddings");
   assert.equal(gateway.remote, false);
-  assert.equal(gateway.id, "openai:http://[::1]:8000/openai/v1/embeddings:m:4:32000");
+  assert.equal(gateway.id, "openai:http://[::1]:8000/openai/v1/embeddings:m:4:24000");
   // Gateways that differ only by path key different caches.
   const otherPath = createOpenAiEmbedder({
     baseUrl: "http://[::1]:8000/other",
@@ -674,7 +678,7 @@ test("keeps every input within the request token budget", async (t) => {
       error.code === "invalid_embedder_config" && error.details.field === "maxRequestTokens",
   );
   const { embedder } = embedderFor(server, {
-    maxInputChars: 4000,
+    maxInputChars: 3000,
     maxRequestTokens: 1000,
     concurrency: 1,
   });
@@ -685,9 +689,9 @@ test("keeps every input within the request token budget", async (t) => {
   );
   assert.deepEqual(
     server.requests.map((request) => request.body.input[0].length),
-    [4000, 1, 4000],
+    [3000, 1, 3000],
   );
-  const oversized = "x".repeat(8000);
+  const oversized = "x".repeat(6000);
   assert.deepEqual(
     planBatches(["a", oversized, "b"], 2048, 1000).map((batch) => batch.texts.length),
     [1, 1, 1],
@@ -768,4 +772,99 @@ test("sends at most 2,048 inputs per request through embed()", async (t) => {
     server.requests.map((request) => request.body.input.length),
     [2048, 1],
   );
+});
+
+test("budgets tokens at ceil(chars / 3) and truncates at 24,000 characters by default", () => {
+  assert.equal(OPENAI_EMBEDDING_LIMITS.conservativeCharsPerToken, 3);
+  assert.equal(OPENAI_EMBEDDING_LIMITS.charsPerToken, 4, "reporting estimate unchanged");
+  assert.equal(OPENAI_EMBEDDER_DEFAULTS.maxInputChars, 24000);
+  assert.ok(
+    Math.ceil(OPENAI_EMBEDDER_DEFAULTS.maxInputChars / 3) <= OPENAI_EMBEDDING_LIMITS.maxInputTokens,
+  );
+  assert.deepEqual(
+    planBatches(["a".repeat(3000), "b".repeat(3)], 2048, 1000).map((batch) => batch.tokens),
+    [1000, 1],
+  );
+});
+
+test("a lone input over the provider's limit is retried once at half its length", async (t) => {
+  const server = await serverFor(t, { rejectInputsAbove: 5000 });
+  const { embedder, sleeps } = embedderFor(server);
+  const long = "contract_column_identifier ".repeat(300).slice(0, 8000);
+  const [vector] = await embedder.embed([long]);
+  assertClose(vector, vectorFor(long.slice(0, 4000), 8));
+  assert.deepEqual(
+    server.requests.map((request) => request.body.input[0].length),
+    [8000, 4000],
+  );
+  assert.equal(embedder.usage().halved, 1);
+  assert.equal(embedder.usage().rejected, 0);
+  assert.deepEqual(sleeps, [], "a rejection is not a retryable failure");
+  // Never below the floor: a 3,000-character input is retried at 2,000.
+  server.rejectInputsAbove = 2500;
+  const [short] = await embedder.embed(["y".repeat(3000)]);
+  assertClose(short, vectorFor("y".repeat(2000), 8));
+  assert.equal(server.requests.at(-1).body.input[0].length, 2000);
+});
+
+test("bisection isolates one rejected input in the middle of a batch", async (t) => {
+  const server = await serverFor(t, { rejectInputsAbove: 5000 });
+  const { embedder } = embedderFor(server, { concurrency: 1 });
+  const texts = Array.from({ length: 9 }, (_, index) => `ordinary unit number ${index}`);
+  // Still above the limit once halved, so it stays rejected.
+  const bad = "x".repeat(12000);
+  texts.splice(4, 0, bad);
+  const vectors = await embedder.embed(texts, { skipRejected: true });
+  assert.equal(vectors.length, 10);
+  assert.equal(vectors[4], null);
+  texts.forEach((text, index) => {
+    if (index !== 4) assertClose(vectors[index], vectorFor(text, 8));
+  });
+  const usage = embedder.usage();
+  assert.equal(usage.rejected, 1);
+  assert.equal(usage.halved, 0);
+  // The rejected request, two per halving level, and one halving retry.
+  assert.ok(server.requests.length <= 1 + 2 * Math.ceil(Math.log2(10)) + 1);
+  const sent = server.requests.flatMap((request) => request.body.input);
+  assert.ok(sent.includes(bad.slice(0, 6000)), "the halving retry ran");
+  // Each good input reached a successful request exactly once.
+  const accepted = server.requests
+    .filter((request) => !request.body.input.some((text) => text.length > 5000))
+    .flatMap((request) => request.body.input);
+  assert.deepEqual(accepted.slice().sort(), texts.filter((_, index) => index !== 4).sort());
+});
+
+test("without skipRejected a rejected input still fails the call, masked", async (t) => {
+  const server = await serverFor(t, { rejectInputsAbove: 5000 });
+  const { embedder } = embedderFor(server);
+  const bad = "secret column list ".repeat(700);
+  await assert.rejects(embedder.embed(["fine", bad, "also fine"]), (error) => {
+    assertMasked(error, [bad.slice(0, 200)]);
+    assert.equal(error.code, "embedder_http_error");
+    assert.equal(error.details.serverCode, "invalid_request");
+    return true;
+  });
+  assert.equal(embedder.usage().rejected, 1);
+});
+
+test("a request whose every input is rejected fails within the isolation budget", async (t) => {
+  const server = await serverFor(t);
+  const { embedder } = embedderFor(server, { concurrency: 1 });
+  const texts = Array.from({ length: 64 }, (_, index) => `unit ${index}`);
+  // A configuration problem: every request answers 400 invalid_request.
+  server.script(...Array.from({ length: 1000 }, () => ({ status: 400 })));
+  await assert.rejects(
+    embedder.embed(texts, { skipRejected: true }),
+    (error) => error.details.serverCode === "invalid_request",
+  );
+  const budget = 16 * Math.ceil(Math.log2(65)) + 8;
+  assert.ok(server.requests.length <= 1 + budget, `${server.requests.length} requests`);
+  const few = await serverFor(t);
+  const { embedder: small } = embedderFor(few);
+  few.script({ status: 400 }, { status: 400 }, { status: 400 });
+  await assert.rejects(
+    small.embed(["one", "two"], { skipRejected: true }),
+    (error) => error.details.serverCode === "invalid_request",
+  );
+  assert.equal(few.requests.length, 3);
 });
