@@ -35,7 +35,7 @@
 // share one cache row (R-9). Section units cover valid concepts only, the set
 // search ranks (`index.concepts`); concept units also embed invalid ones.
 
-const { hashUnitText } = require("../embed/units");
+const { contextPrefix, hashUnitText } = require("../embed/units");
 const { markdownStructure, sectionNodes } = require("../markdown");
 
 // Parsed document -> its sections. Documents are shared unchanged across
@@ -250,8 +250,25 @@ function sectionUnits(index) {
   );
 }
 
+// Contextual section units (WP3c-2): each section's text after a bounded `title · type · path`
+// prefix of its concept (src/embed/units.js `contextPrefix`, at most 160 characters), then the
+// heading and the section text as `sectionUnits` has them. Anchors are unchanged; the hash is
+// that of the prefixed text, so plain section units keep their hashes and a body edit re-embeds
+// only its section (a title, type or path change re-embeds every section of the concept).
+function contextualSectionUnits(index) {
+  const concepts = index?.concepts || [];
+  return concepts.flatMap((doc) => {
+    const prefix = contextPrefix([doc.title, doc.type, doc.path]);
+    return conceptSections(doc).map((section) => {
+      const text = prefix ? `${prefix}\n${section.text}` : section.text;
+      return { id: section.anchor, text, hash: hashUnitText(text) };
+    });
+  });
+}
+
 module.exports = {
   conceptSections,
+  contextualSectionUnits,
   headingSlug,
   sectionUnits,
 };

@@ -13,12 +13,19 @@
 // best unit, which is reported so section-level callers can cite it.
 
 const { EmbedderError } = require("../embed/interface");
-const { conceptUnits } = require("../embed/units");
+const { conceptUnits, contextualConceptUnits } = require("../embed/units");
 
 // `embedUnits` names: whole concepts (default, chosen on the dev split) or sections
 // (src/context/sections.js, one unit per section anchored `uri#slug`, the lead as `uri`;
 // better on synonym queries, worse on keyword ones in the WP3c measurement).
-const EMBED_UNITS = Object.freeze(["concepts", "sections"]);
+// WP3c-2 adds the contextual variants: sections and concepts after a bounded prefix naming the
+// concept's title, type and path (src/embed/units.js `contextPrefix`), each with its own hashes.
+const EMBED_UNITS = Object.freeze([
+  "concepts",
+  "sections",
+  "contextual-sections",
+  "contextual-concepts",
+]);
 const DEFAULT_EMBED_UNITS = "concepts";
 
 // index -> Map(units function -> memo)
@@ -131,9 +138,11 @@ function resolveUnits(value) {
     );
   }
   if (name === "concepts") return conceptUnits;
+  if (name === "contextual-concepts") return contextualConceptUnits;
   let sections = null;
   try {
-    sections = require("../context/sections").sectionUnits;
+    const module = require("../context/sections");
+    sections = name === "contextual-sections" ? module.contextualSectionUnits : module.sectionUnits;
   } catch {
     sections = null;
   }

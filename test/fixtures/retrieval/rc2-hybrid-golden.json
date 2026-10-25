@@ -629,5 +629,16 @@
     "A99": "bf89c0b8b08aeed2"
    }
   }
+ },
+ "plainUnitDigests": {
+  "$comment": "sha256 (first 32 hex) of the id<TAB>hash lines of conceptUnits and sectionUnits per fixture, computed by the rc.2 tree: plain unit hashes must not change when contextual units are added.",
+  "alpinaria": {
+   "concepts": "8cbfb1b1382e73bbd703239c8b7f37cd",
+   "sections": "711d24dc1184a4b61e3bb6062869e8b2"
+  },
+  "atlas": {
+   "concepts": "d968c08787098cbedd5396bbd7a44ab3",
+   "sections": "5ee8fb0119177d515eea6708c85d0471"
+  }
  }
 }

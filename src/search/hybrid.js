@@ -379,7 +379,9 @@ class EmbeddingRuntime {
         this.syncedIndex = target;
         this.syncError = null;
         this.syncFailedAt = 0;
-        this.lastSync = this.sanitize(receipt);
+        // WP3c-2: which unit set was prepared; after a switch of embedUnits the first
+        // preparation embeds the new units once and prunes the old ones (embedded, pruned).
+        this.lastSync = Object.assign(this.sanitize(receipt), { embedUnits: this.embedUnits });
         if (!this.startup) this.startup = this.lastSync;
         return this.lastSync;
       } catch (error) {

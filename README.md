@@ -796,6 +796,8 @@ fusion:
   adaptive: { low: 0.1, mid: 0.5, high: 0.9 }
 ```
 
+Contextual units (0.12): `embedUnits: contextual-sections` embeds each section after a one-line prefix naming its concept, `title · type · path` (at most 160 characters; a long title is shortened first), so a bare "Limits" or "Steps" section carries the system it belongs to; `contextual-concepts` puts `type · path` before the concept text. Anchors are those of `sections`. The prefixed texts have their own hashes, so switching unit sets re-embeds every unit once (the preparation receipt, the startup receipt and `embedding_status` name the unit set; `embedded` and `pruned` count the switch), and afterwards a body edit re-embeds only its section (a title, type or path edit re-embeds every section of that concept). `concepts` stays the default: on the development queries no other unit set beat it by the pre-registered rule (mean dev Recall@5 0.844 for concepts, 0.843 contextual-concepts, 0.841 contextual-sections, 0.834 sections), and on the fixtures' short sections the prefix costs 56% more prompt tokens (6.6% for contextual-concepts).
+
 ## Graph Behavior
 
 As an okf-mcp graph projection, Markdown links become `markdown_link` edges, extension `relations` become typed `relation` edges, and standard v0.2 path-valued fields become `resource`, `source`, `computation`, `executor`, and `attester` edges. Internal concept references resolve to canonical nodes; explicitly referenced non-Markdown files resolve to okf-mcp `okf-asset://` nodes; URLs and scope descriptors remain unfetched external or opaque leaves.
