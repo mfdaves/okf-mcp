@@ -631,4 +631,21 @@ Gate (full sets): alpinaria no-answer recall 0.545 (target 0.70, not met), atlas
 
 Proposal evidence (not shipped): without the shared coverage bound, `(mode any && coverage < 0.5) || (mode any && topSimilarity < tau)` chooses tau 0.4 on dev and flags 19 of 24 no-answer queries (alpinaria 11/16, atlas 8/8) with 3/129 and 1/62 relevant top-1 results flagged; held-out 4/8 (alpinaria 2/6, atlas 2/2) with 1/52 and 0/27; full alpinaria 13/22, atlas 10/10 with 4/181 and 1/89. Alpinaria stays below 0.70.
 
-Prompt tokens over every live fixture run behind this report: 299777 (about 0.0060 USD at 0.02 USD per million).
+### Real catalog (private)
+
+A private production catalog (560 concepts, read-only; 45 agent-labelled queries, 7 no-answer, 8 exact); the rc.2 comparison harness with NEW pointed at this branch, hybrid on, vectors reused (550 query tokens per run). The opt-in adaptive column is informative only; nothing was chosen on this catalog.
+
+| Recall@5 | lexical rc.2 -> 0.12 | hybrid rc.2 -> 0.12 | hybrid, adaptive opt-in |
+|---|---|---|---|
+| overall | 0.590 -> 0.590 | 0.664 -> 0.664 | 0.686 |
+| Ingestion | 0.608 -> 0.608 | 0.742 -> 0.742 | 0.742 |
+| Pipeline | 0.506 -> 0.506 | 0.521 -> 0.521 | 0.551 |
+| other | 0.667 -> 0.667 | 0.667 -> 0.667 | 0.738 |
+| task | 0.629 -> 0.629 | 0.703 -> 0.703 | 0.689 |
+| exact | 0.833 -> 0.833 | 0.896 -> 0.896 | 0.938 |
+| paraphrase | 0.000 -> 0.000 | 0.100 -> 0.100 | 0.267 |
+| MRR@10 | 0.689 -> 0.689 | 0.761 -> 0.761 | 0.775 |
+
+Abstention on the private catalog (hybrid): 4 -> 4 of 7 unanswerable flagged (target 5, not met: the three unflagged ones have a top coverage of 0.60-0.67, which the coverage bound of both clauses excludes), 0 of 8 exact lookups flagged (target 0, met). get_context must-have concepts delivered: 26 -> 26 of 38 at 1,200 tokens, 27 -> 28 at 2,000. tools/list in the default read-only mode: 32111 -> 33351 bytes.
+
+Prompt tokens over every live fixture run behind this report: 299777, plus 1100 for the two private-catalog runs (about 0.0060 USD at 0.02 USD per million).

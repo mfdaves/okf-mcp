@@ -2,6 +2,29 @@
 
 All notable changes to `@mfdaves/okf-mcp`. The format follows Keep a Changelog; versions follow SemVer. Until 1.0, minor versions may change defaults where this file says so.
 
+## 0.12.0-rc.1 — unreleased
+
+Retrieval level-up (WP3c-2): an adaptive fusion weight, contextual embedding units and a confidence block with opt-in abstention, each measured against pre-registered targets on both fixtures and on a real 560-concept catalog (`test/fixtures/retrieval/reports/hybrid-0.12-2026-10-25.md`, `context-0.12-2026-10-25.md`). No default ranking changes: the fixed fusion weight 0.4 and concept units stay the defaults because the new options did not meet their conditions for becoming defaults.
+
+### Added
+
+- `fusion.alpha: adaptive`: the weight of the semantic side is decided once per query from the lexical pass, `fusion.adaptive.low` when quoted or identifier-like terms are matched by every-term hits, `mid` when at least `autoFill` concepts match every term, `high` when nothing matches every term and no concept matches half of them, linear in between. The weights default to the development-split choice `{ low: 0.1, mid: 0.5, high: 0.9 }`. Hybrid responses report `alphaUsed` and `alphaReason`; `embedding_status` reports the setting. Opt-in: on the fixtures it raised alpinaria Recall@5 0.830 → 0.838 (synonyms 0.542 → 0.604, target 0.70) but lowered atlas 0.882 → 0.870; overhead 0.3 ms p95 at 20,000 vectors. On the real catalog it lifted paraphrase queries from 0.10 to 0.27 (informative only).
+- `embedUnits: contextual-sections` and `contextual-concepts`: each section, or each concept, is embedded after a one-line prefix naming its concept (`title · type · path`, at most 160 characters; `type · path` for concepts). Plain unit hashes are unchanged; switching unit sets re-embeds once and the receipts name the unit set (`embedUnits`). On the fixtures neither beat concept units (mean dev Recall@5 0.841 and 0.843 against 0.844) and the prefix costs 56% more prompt tokens for sections (6.6% for concepts).
+- `confidence: { coverage, topSimilarity, lowConfidence, reasons }` on every `search_concepts` and `get_context` response to a query. With an embedder, `lowConfidence` is also true when the top result matched fewer than half of the terms and no candidate reaches `confidence.minSimilarity` (project or `--embedder-config` key; default 0). Lexical-only responses keep the 0.10 rule.
+- `get_context` `abstainOnLowConfidence`: a low-confidence query returns no sections, with the confidence block, the candidate concepts and `abstained: true`.
+- Evaluation harness: `--alpha adaptive`, `--adaptive`, the dev-only `--adaptive-grid` with its pre-registered choice rule, and `--baseline <report>` for a per-category paired bootstrap of the Recall@5 difference; hybrid per-query rows carry `alphaUsed`, `alphaReason` and `topSimilarity`.
+
+### Changed
+
+- With an embedder, the top-level `lowConfidence` of a search follows the confidence rule above; at the default threshold it flags the same queries as before.
+- The confidence block counts against a `get_context` budget (about 18 tokens). Atlas section-anchor hit at 1,200 tokens: 0.721 → 0.698 (one query); alpinaria unchanged.
+
+### Known issues
+
+- Synonym Recall@5 on the SEO fixture stays at 0.542 by default (0.604 with the adaptive weight; target 0.70).
+- Abstention: the similarity clause shares the coverage bound of the lexical one, so on the fixtures no threshold flags an extra unanswerable query; no-answer recall is 0.545 on alpinaria (target 0.70) and 0.70 on atlas, and 4 of 7 on the real catalog (target 5), whose unflagged questions have a top coverage of 0.60–0.67.
+- `get_context` candidates are lexical; contextual embeddings do not reach it yet.
+
 ## 0.11.0-rc.2 — 2026-10-25
 
 Three defects found by running 0.11.0-rc.1 against a real 560-concept catalog, fixed.

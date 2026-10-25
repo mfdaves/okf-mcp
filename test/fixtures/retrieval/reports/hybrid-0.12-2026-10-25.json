@@ -3778,6 +3778,106 @@
         "all": "alpinaria 13/22, atlas 10/10 with 4/181 and 1/89"
       }
     },
+    "privateCatalog": {
+      "catalog": "private production catalog (560 concepts, read-only; 45 agent-labelled queries, 7 no-answer, 8 exact)",
+      "before": {
+        "lexical": {
+          "recallAt5": 0.5895,
+          "mrrAt10": 0.6893,
+          "byArea": {
+            "ingestion": 0.6083,
+            "pipeline": 0.5061,
+            "other": 0.6667
+          },
+          "byCategory": {
+            "task": 0.6293,
+            "exact": 0.8333,
+            "paraphrase": 0
+          },
+          "noAnswerFlagged": 4,
+          "exactFlagged": 0
+        },
+        "hybrid": {
+          "recallAt5": 0.664,
+          "mrrAt10": 0.7607,
+          "byArea": {
+            "ingestion": 0.7417,
+            "pipeline": 0.5212,
+            "other": 0.6667
+          },
+          "byCategory": {
+            "task": 0.7027,
+            "exact": 0.8958,
+            "paraphrase": 0.1
+          },
+          "noAnswerFlagged": 4,
+          "exactFlagged": 0
+        }
+      },
+      "after": {
+        "lexical": {
+          "recallAt5": 0.5895,
+          "mrrAt10": 0.6893,
+          "byArea": {
+            "ingestion": 0.6083,
+            "pipeline": 0.5061,
+            "other": 0.6667
+          },
+          "byCategory": {
+            "task": 0.6293,
+            "exact": 0.8333,
+            "paraphrase": 0
+          },
+          "noAnswerFlagged": 4,
+          "exactFlagged": 0
+        },
+        "hybrid": {
+          "recallAt5": 0.664,
+          "mrrAt10": 0.7607,
+          "byArea": {
+            "ingestion": 0.7417,
+            "pipeline": 0.5212,
+            "other": 0.6667
+          },
+          "byCategory": {
+            "task": 0.7027,
+            "exact": 0.8958,
+            "paraphrase": 0.1
+          },
+          "noAnswerFlagged": 4,
+          "exactFlagged": 0
+        }
+      },
+      "adaptiveOptIn": {
+        "recallAt5": 0.686,
+        "mrrAt10": 0.775,
+        "byArea": {
+          "ingestion": 0.7417,
+          "pipeline": 0.5515,
+          "other": 0.7381
+        },
+        "byCategory": {
+          "task": 0.6893,
+          "exact": 0.9375,
+          "paraphrase": 0.2667
+        },
+        "noAnswerFlagged": 4,
+        "exactFlagged": 0
+      },
+      "getContext1200MustDelivered": {
+        "before": 26,
+        "after": 26
+      },
+      "getContext2000MustDelivered": {
+        "before": 27,
+        "after": 28
+      },
+      "toolsListBytes": {
+        "before": 32111,
+        "after": 33351
+      },
+      "promptTokens": 1100
+    },
     "promptTokensFixtureRuns": 299777
   }
 }
