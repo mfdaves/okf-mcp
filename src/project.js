@@ -1,7 +1,7 @@
 "use strict";
 
-const fs = require("fs");
-const path = require("path");
+const fs = require("node:fs");
+const path = require("node:path");
 const { parseFrontmatterYaml, splitFrontmatter } = require("./parser");
 const { normalizeLanguages } = require("./search/languages");
 const { parseWritePolicy } = require("./policy/write-policy");
@@ -109,10 +109,7 @@ function findOkfRoot(startDir) {
     if (fs.existsSync(indexPath) && fs.statSync(indexPath).isFile()) {
       try {
         const split = splitFrontmatter(fs.readFileSync(indexPath, "utf8"));
-        if (
-          split.frontmatter &&
-          Object.prototype.hasOwnProperty.call(split.frontmatter, "okf_version")
-        ) {
+        if (split.frontmatter && Object.hasOwn(split.frontmatter, "okf_version")) {
           return current;
         }
       } catch {
@@ -161,7 +158,7 @@ function normalizeBundles(config, configPath, errors) {
           exclude: [],
         };
       }
-      const id = configId(bundle && bundle.id, `bundle-${index + 1}`);
+      const id = configId(bundle?.id, `bundle-${index + 1}`);
       if (seen.has(id)) {
         errors.push({ code: "duplicate_bundle_id", bundle: id, message: "Duplicate bundle id." });
       }
@@ -394,6 +391,26 @@ function normalizeLanguagesConfig(config, errors) {
   }
 }
 
+// `autoFill` (R-1, 0.11.0-rc.2): under search mode auto, the any-term
+// results follow the all-term hits when there are fewer than this many of
+// them. An integer from 0 (fall back only when nothing matches every term)
+// to 250; unset keeps the search default (3).
+function normalizeAutoFillConfig(config, errors) {
+  if (config.autoFill === undefined || config.autoFill === null) {
+    return undefined;
+  }
+  const value = config.autoFill;
+  if (!Number.isSafeInteger(value) || value < 0 || value > 250) {
+    errors.push({
+      code: "invalid_auto_fill",
+      field: "autoFill",
+      message: "autoFill must be an integer between 0 and 250.",
+    });
+    return undefined;
+  }
+  return value;
+}
+
 function normalizeRemoteBundles(config, errors) {
   const remotes = Array.isArray(config.remoteBundles) ? config.remoteBundles : [];
   if (config.remoteBundles !== undefined && !Array.isArray(config.remoteBundles)) {
@@ -402,7 +419,7 @@ function normalizeRemoteBundles(config, errors) {
   }
   const seen = new Set();
   return remotes.map((remote, index) => {
-    const id = configId(remote && remote.id, `remote-${index + 1}`);
+    const id = configId(remote?.id, `remote-${index + 1}`);
     if (seen.has(id)) {
       errors.push({
         code: "duplicate_remote_bundle_id",
@@ -411,7 +428,7 @@ function normalizeRemoteBundles(config, errors) {
       });
     }
     seen.add(id);
-    const provider = String((remote && remote.provider) || "github");
+    const provider = String(remote?.provider || "github");
     if (provider !== "github") {
       errors.push({
         code: "unsupported_remote_provider",
@@ -420,7 +437,7 @@ function normalizeRemoteBundles(config, errors) {
         message: "Only github remote bundles are supported.",
       });
     }
-    if (!remote || !remote.url) {
+    if (!remote?.url) {
       errors.push({
         code: "missing_remote_url",
         bundle: id,
@@ -430,9 +447,9 @@ function normalizeRemoteBundles(config, errors) {
     return {
       id,
       provider,
-      url: remote && remote.url ? String(remote.url) : "",
-      include: Array.isArray(remote && remote.include) ? remote.include : [],
-      exclude: Array.isArray(remote && remote.exclude) ? remote.exclude : [],
+      url: remote?.url ? String(remote.url) : "",
+      include: Array.isArray(remote?.include) ? remote.include : [],
+      exclude: Array.isArray(remote?.exclude) ? remote.exclude : [],
     };
   });
 }
@@ -488,6 +505,7 @@ function loadProjectConfig(configPath) {
   validatePlugins(config, path.dirname(resolvedPath), allBundleIds, errors);
   const producers = normalizeProducers(config, localBundleIds, errors);
   const languages = normalizeLanguagesConfig(config, errors);
+  const autoFill = normalizeAutoFillConfig(config, errors);
   const writePolicy = normalizeWritePolicyConfig(config, errors);
   // Hybrid search (WP3c): embedder, cacheDir, fusion.alpha, embedUnits; null when off.
   const embedding = normalizeEmbeddingConfig(config, errors);
@@ -502,6 +520,7 @@ function loadProjectConfig(configPath) {
     producers,
     strictLinks: Boolean(config.strictLinks),
     languages,
+    autoFill,
     writePolicy,
     embedding,
     errors,

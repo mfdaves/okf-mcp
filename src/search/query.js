@@ -9,9 +9,17 @@ const { denseSearch } = require("./dense");
 const { fuseRankings, fusionAlpha, fusionNormalization } = require("./fusion");
 
 const MAX_COMPACT_TEXT = 500;
-// `auto` runs the all-term query and falls back to any-term when it returns
-// nothing (R-1); it is the default since 0.10 (section 10).
+// `auto` runs the all-term query first; when it yields fewer than `autoFill`
+// hits, the any-term results follow the all-term hits (R-1). It is the
+// default since 0.10 (section 10). With no all-term hit the page is the
+// any-term ranking (mode "any"); with some, the all-term hits keep their order
+// and precedence and the any-term results are appended (mode "auto"); with
+// `autoFill` or more, only the all-term hits are returned (mode "all").
 const SEARCH_MODES = Object.freeze(["auto", "all", "any"]);
+// 0.11.0-rc.2: a single long document that happens to contain every term must
+// not hide the documents that match most of them.
+const DEFAULT_AUTO_FILL = 3;
+const MAX_AUTO_FILL = 250;
 // R-4: a response is flagged when the any-term fallback produced it and its
 // top result matched strictly fewer than half of the query terms.
 const LOW_CONFIDENCE_COVERAGE = 0.5;
@@ -236,6 +244,23 @@ function searchMode(value) {
   return value;
 }
 
+// Precedence: explicit search option, then the project's `autoFill`, then
+// DEFAULT_AUTO_FILL. 0 restores the 0.10 behaviour (fall back only on zero).
+function autoFillOption(value, index) {
+  let raw = value;
+  if (raw === undefined || raw === null) {
+    raw = index?.project?.autoFill;
+  }
+  if (raw === undefined || raw === null) {
+    return DEFAULT_AUTO_FILL;
+  }
+  const number = Number(raw);
+  if (!Number.isSafeInteger(number) || number < 0 || number > MAX_AUTO_FILL) {
+    throw new TypeError(`autoFill must be an integer between 0 and ${MAX_AUTO_FILL}.`);
+  }
+  return number;
+}
+
 function floorOption(value, name) {
   if (value === undefined || value === null) {
     return 0;
@@ -265,8 +290,12 @@ function priorFactor(doc, asOf) {
 // the ranked results (doc, score, matchedTerms, coverage, relevance), the mode
 // that produced them, and the all-term count: the AND result size or, under
 // `any`, the hits that matched every token. The optional prior multiplies
-// scores before ranking; `relevance` is score over the run's top score, and
-// the floors drop results below either value after that.
+// scores before ranking; `relevance` is score over the best score shown, and
+// the floors drop results below either value after that. Under `auto` the
+// all-term hits lead in their own order and, when there are fewer than
+// `autoFill` of them, the remaining any-term hits follow in theirs: both
+// passes run over the whole filtered set, so the candidate list, and every
+// page cut from it, does not depend on offset or limit.
 function rankQuery(index, config, analysis, docsByUri) {
   const searchIndex = prepareSearchIndex(index, config);
   const run = (combineWith) =>
@@ -275,39 +304,53 @@ function rankQuery(index, config, analysis, docsByUri) {
       filter: (result) => docsByUri.has(String(result.id)),
       document: (id) => docsByUri.get(id),
     });
-  let hits;
+  const prior = config.freshnessPrior ? (doc) => priorFactor(doc, config.asOf) : () => 1;
+  const ranked = (hits) => {
+    const list = hits
+      .filter((hit) => docsByUri.has(hit.id))
+      .map((hit) => {
+        const doc = docsByUri.get(hit.id);
+        return Object.assign({ doc }, hit, { score: hit.score * prior(doc) });
+      });
+    list.sort((a, b) => b.score - a.score || compareDocs(a.doc, b.doc));
+    return list;
+  };
+  let results;
   let mode;
   let allTermsTotal;
+  // URIs of the all-term hits when the all-term pass ran (the literal guard's group).
+  let allTermUris = null;
   if (config.mode === "any") {
-    hits = run("OR");
+    results = ranked(run("OR"));
     mode = "any";
-    allTermsTotal = hits.filter((hit) => hit.coverage === 1).length;
+    allTermsTotal = results.filter((hit) => hit.coverage === 1).length;
   } else {
-    hits = run("AND");
+    results = ranked(run("AND"));
     mode = "all";
-    allTermsTotal = hits.length;
-    if (!hits.length && config.mode === "auto") {
-      hits = run("OR");
-      mode = "any";
+    allTermsTotal = results.length;
+    allTermUris = new Set(results.map((entry) => entry.doc.uri));
+    if (config.mode === "auto" && results.length < config.autoFill) {
+      const fill = ranked(run("OR")).filter((entry) => !allTermUris.has(entry.doc.uri));
+      if (!results.length) {
+        results = fill;
+        mode = "any";
+        allTermUris = null;
+      } else if (fill.length) {
+        results = results.concat(fill);
+        mode = "auto";
+      }
     }
   }
-  const prior = config.freshnessPrior ? (doc) => priorFactor(doc, config.asOf) : () => 1;
-  const results = hits
-    .filter((hit) => docsByUri.has(hit.id))
-    .map((hit) => {
-      const doc = docsByUri.get(hit.id);
-      return Object.assign({ doc }, hit, { score: hit.score * prior(doc) });
-    });
-  results.sort((a, b) => b.score - a.score || compareDocs(a.doc, b.doc));
-  const top = results.length ? results[0].score : 0;
+  const top = results.reduce((best, entry) => Math.max(best, entry.score), 0);
   results.forEach((entry) => {
     entry.relevance = top > 0 ? entry.score / top : 0;
   });
   // Lexical evidence (matched terms, coverage, score) for candidates the
   // lexical pass did not return: dense neighbours that match only some terms
-  // under an all-term pass. An any-term pass already holds every match.
+  // under an all-term pass. An any-term pass (alone or appended) already
+  // holds every match.
   const evidence = (uris) => {
-    if (mode === "any" || !uris.size) return [];
+    if (mode !== "all" || !uris.size) return [];
     const subset = new Map(Array.from(uris, (uri) => [uri, docsByUri.get(uri)]));
     return runQuery(searchIndex, analysis.tokens, {
       combineWith: "OR",
@@ -325,6 +368,7 @@ function rankQuery(index, config, analysis, docsByUri) {
     results: applyFloors(results, config),
     mode,
     allTermsTotal,
+    allTermUris,
     unfloored: results,
     evidence,
   };
@@ -390,11 +434,17 @@ function hybridRank(index, config, ranking, filteredDocs, analysis) {
     alpha: config.alpha,
     normalization: config.fusionNormalization,
   });
-  // Not at alpha 1, which must reproduce the dense ranking exactly.
+  // Not at alpha 1, which must reproduce the dense ranking exactly. At alpha
+  // 0 the all-term hits lead whatever the terms, as in the lexical ranking
+  // (auto appends the any-term results after them), which alpha 0 must
+  // reproduce.
   const guard =
-    alpha < 1 && ranking.mode === "all" && analysis.tokens.some((token) => token.kind !== "plain");
+    alpha < 1 &&
+    ranking.allTermUris !== null &&
+    ranking.allTermUris.size > 0 &&
+    (alpha === 0 || analysis.tokens.some((token) => token.kind !== "plain"));
   if (guard) {
-    const group = (entry) => (passUris.has(entry.id) ? 0 : 1);
+    const group = (entry) => (ranking.allTermUris.has(entry.id) ? 0 : 1);
     // Array.prototype.sort is stable: fused order holds within each group.
     fused.sort((a, b) => group(a) - group(b));
   }
@@ -432,6 +482,7 @@ function hybridFields(entry) {
 function searchConcepts(index, options) {
   const config = Object.assign({}, options || {}, {
     mode: searchMode(options?.mode),
+    autoFill: autoFillOption(options?.autoFill, index),
     minCoverage: floorOption(options?.minCoverage, "minCoverage"),
     minRelevance: floorOption(options?.minRelevance, "minRelevance"),
   });
@@ -449,7 +500,12 @@ function searchConcepts(index, options) {
     if (!analysis.tokens.length) {
       // Punctuation-only text: nothing to run, reported under the requested mode.
       results = [];
-      ranking = { mode: config.mode === "any" ? "any" : "all", allTermsTotal: 0, results };
+      ranking = {
+        mode: config.mode === "any" ? "any" : "all",
+        allTermsTotal: 0,
+        allTermUris: null,
+        results,
+      };
     } else {
       const docsByUri = new Map(filteredDocs.map((doc) => [doc.uri, doc]));
       ranking = rankQuery(index, config, analysis, docsByUri);
@@ -521,6 +577,7 @@ function searchConcepts(index, options) {
 }
 
 module.exports = {
+  DEFAULT_AUTO_FILL,
   FRESHNESS_PRIOR,
   LOW_CONFIDENCE_COVERAGE,
   SEARCH_MODES,

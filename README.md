@@ -644,8 +644,15 @@ Use `list_remote_bundles` to inspect what was loaded.
 together with its listing filters. Text search tokenizes case-insensitively,
 folds diacritics, drops stop words and single letters, and stems every term
 with the catalog's languages (English and Italian at 1.0). `mode` is `auto`
-by default since 0.10: every term must match, and when nothing does the
-search falls back to any-term matching; `all` restores the pre-0.10
+by default since 0.10: the concepts matching every term come first, in their
+own order, and when fewer than `autoFill` of them exist (default 3) the
+concepts matching only some of the terms follow them (the response's `mode`
+is then `auto`; it is `any` when nothing matches every term and `all` when
+nothing was appended). This keeps one long document that happens to contain
+every term from hiding the shorter documents that match most of them.
+`autoFill` is a library search option and an `okf.project.yaml` key
+(`autoFill: 0` restores the 0.10 rule: fall back only when nothing matches
+every term), never a tool argument. `all` restores the pre-0.10
 behaviour and `any` ranks anything matching one term. BM25+ ranks title,
 type, tags, aliases, description, path, body, and an exact field (ids,
 paths, aliases, raw title tokens) that is never stemmed, so identifiers and
@@ -660,7 +667,7 @@ ordering and `relevance` instead.
 
 Query responses report `mode` (the one that ran), `queryTerms`,
 `droppedTerms`, `allTermsTotal` (concepts matching every term, also under
-`any`) and `lowConfidence`, true when the any-term fallback produced the page
+`any`) and `lowConfidence`, true when `mode` is `any` (the any-term ranking produced the page)
 and its top result matched fewer than half of the terms. Each result carries
 `coverage` (share of query terms matched), `relevance` (score over the top
 score) and, in full detail, `matchedTerms`. Opt-in floors `minCoverage` and

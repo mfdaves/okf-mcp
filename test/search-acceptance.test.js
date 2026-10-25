@@ -101,7 +101,7 @@ test("the 0.10 lexical search meets the pre-registered WP1 targets on both full 
   assert.equal(atlasShipped.flaggedNoAnswer, atlas.noAnswer.lowConfidence.flaggedNoAnswer);
   FIXTURES.forEach((name) => {
     assert.ok(
-      report.fixtures[name].perQuery.every((entry) => entry.mode === "all" || entry.mode === "any"),
+      report.fixtures[name].perQuery.every((entry) => ["all", "any", "auto"].includes(entry.mode)),
     );
   });
 });

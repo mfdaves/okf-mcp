@@ -148,7 +148,8 @@ const paths = (response) => response.results.map((entry) => entry.path);
 
 test("the default mode requires every term, applies field boosts, and reports the match", (t) => {
   const { index } = searchFixture(t);
-  const result = searchConcepts(index, { query: "ADMISSION, payload" });
+  // autoFill 0: the all-term pass alone, as in 0.10.
+  const result = searchConcepts(index, { query: "ADMISSION, payload", autoFill: 0 });
   assert.equal(result.total, 2);
   assert.equal(result.mode, "all");
   assert.equal(result.allTermsTotal, 2);
@@ -163,6 +164,16 @@ test("the default mode requires every term, applies field boosts, and reports th
   assert.equal(result.results[0].relevance, 1);
   assert.equal(result.results[1].coverage, 1);
   assert.ok(result.results[1].relevance > 0 && result.results[1].relevance < 1);
+  // The default (autoFill 3): fewer than three all-term hits, so the any-term
+  // match follows them; the all-term hits keep their order and fields.
+  const filled = searchConcepts(index, { query: "ADMISSION, payload" });
+  assert.equal(filled.mode, "auto");
+  assert.equal(filled.total, 3);
+  assert.equal(filled.allTermsTotal, 2);
+  assert.equal(filled.lowConfidence, false);
+  assert.deepEqual(paths(filled).slice(0, 2), ["title.md", "body.md"]);
+  assert.deepEqual(filled.results.slice(0, 2), result.results);
+  assert.equal(filled.results[2].coverage, 0.5);
 });
 
 test("auto falls back to any-term matching and flags low coverage strictly below one half", (t) => {
@@ -203,6 +214,7 @@ test("stop words and single letters are dropped and the term limit counts what i
   const dropped = searchConcepts(index, {
     query: "what is the payload admission?",
     languages: ["en"],
+    autoFill: 0,
   });
   assert.deepEqual(dropped.queryTerms, ["payload", "admission"]);
   assert.deepEqual(dropped.droppedTerms, ["what", "is", "the"]);
@@ -228,7 +240,11 @@ test("stop words and single letters are dropped and the term limit counts what i
 
 test("stems match morphological variants while the raw token stays indexed", (t) => {
   const { index } = searchFixture(t);
-  const stemmed = searchConcepts(index, { query: "classify executions", languages: ["en"] });
+  const stemmed = searchConcepts(index, {
+    query: "classify executions",
+    languages: ["en"],
+    autoFill: 0,
+  });
   assert.equal(stemmed.mode, "all");
   assert.deepEqual(paths(stemmed), ["title.md"]);
   assert.match(stemmed.results[0].snippet, /Classifies work before execution/);
@@ -244,7 +260,7 @@ test("diacritics fold on both sides of the match", (t) => {
   assert.deepEqual(paths(plain), ["cities.md", "growth.md"]);
   assert.equal(plain.mode, "all");
   assert.match(plain.results[0].snippet, /Città/);
-  const accented = searchConcepts(index, { query: "CITTÀ metropolitana" });
+  const accented = searchConcepts(index, { query: "CITTÀ metropolitana", autoFill: 0 });
   assert.deepEqual(paths(accented), ["cities.md"]);
   assert.deepEqual(accented.queryTerms, ["città", "metropolitana"]);
 });
@@ -532,7 +548,7 @@ test("addDocuments, removeDocuments and adoptSearchIndex keep the lexical index 
   assert.equal(adoptSearchIndex(index, next), true);
   assert.equal(adoptSearchIndex(index, next), false);
   assert.equal(addDocuments(index, [lateDoc]), false);
-  assert.deepEqual(paths(searchConcepts(next, { query: "payload admission" })), [
+  assert.deepEqual(paths(searchConcepts(next, { query: "payload admission", autoFill: 0 })), [
     "title.md",
     "body.md",
   ]);
@@ -602,4 +618,126 @@ test("a rebuilt OKF index receives a fresh lexical index", (t) => {
   const rebuilt = buildIndex([{ id: "rebuild", root }]);
   assert.equal(searchConcepts(rebuilt, { query: "later addition" }).total, 1);
   assert.equal(searchConcepts(rebuilt, { query: "later addition" }).results[0].path, "later.md");
+});
+
+// 0.11.0-rc.2: one long document that contains every term must not hide the
+// shorter documents that match most of them (a 54,740-character plan did so on
+// a real catalog: the all-term pass returned it alone and auto never fell back).
+function writeLongDocumentCatalog(root) {
+  const filler = Array.from(
+    { length: 400 },
+    (_, position) => `Remediation step ${position} reviews logging and dashboards.`,
+  ).join(" ");
+  writeConcept(
+    root,
+    "remediation-plan.md",
+    { type: "Plan", title: "Correctness remediation plan" },
+    `# Correctness remediation plan\n\n${filler} It also mentions deploy, restart and pm2 once.`,
+  );
+  writeConcept(
+    root,
+    "production-deployment.md",
+    { type: "Runbook", title: "Production deployment" },
+    "# Production deployment\n\nHow to deploy the downloader with pm2.",
+  );
+  writeConcept(
+    root,
+    "restart-procedure.md",
+    { type: "Runbook", title: "Restart procedure" },
+    "# Restart procedure\n\nRestart the workers with pm2 after a freeze.",
+  );
+  writeConcept(
+    root,
+    "unrelated.md",
+    { type: "Concept", title: "Billing" },
+    "# Billing\n\nInvoices and credit notes.",
+  );
+}
+
+function longDocumentFixture(t) {
+  const root = tempRoot(t, "okf-search-autofill-");
+  writeLongDocumentCatalog(root);
+  return buildIndex([{ id: "ops", root }]);
+}
+
+test("auto appends any-term results when fewer than autoFill documents match every term", (t) => {
+  const index = longDocumentFixture(t);
+  const query = "deploy restart pm2";
+  const result = searchConcepts(index, { query, languages: ["en"] });
+  assert.equal(result.mode, "auto");
+  assert.equal(result.allTermsTotal, 1);
+  assert.deepEqual(paths(result), [
+    "remediation-plan.md",
+    "restart-procedure.md",
+    "production-deployment.md",
+  ]);
+  assert.equal(result.total, 3);
+  assert.equal(result.results[0].coverage, 1, "the all-term hit keeps precedence");
+  assert.ok(result.results.slice(1).every((entry) => entry.coverage < 1));
+  assert.equal(result.lowConfidence, false);
+  assert.ok(result.results.every((entry) => entry.relevance > 0 && entry.relevance <= 1));
+  // autoFill 0 restores the 0.10 behaviour: the long document alone.
+  const strict = searchConcepts(index, { query, languages: ["en"], autoFill: 0 });
+  assert.deepEqual(
+    [strict.mode, strict.total, strict.allTermsTotal, paths(strict)],
+    ["all", 1, 1, ["remediation-plan.md"]],
+  );
+  // With enough all-term hits nothing is appended.
+  const enough = searchConcepts(index, { query, languages: ["en"], autoFill: 1 });
+  assert.deepEqual([enough.mode, enough.total], ["all", 1]);
+  // No all-term hit: the any-term ranking, as before.
+  const none = searchConcepts(index, { query: "pm2 invoices zzz", languages: ["en"] });
+  assert.equal(none.mode, "any");
+  assert.equal(none.allTermsTotal, 0);
+  // Explicit modes are untouched.
+  assert.equal(searchConcepts(index, { query, languages: ["en"], mode: "all" }).total, 1);
+  assert.equal(searchConcepts(index, { query, languages: ["en"], mode: "any" }).mode, "any");
+});
+
+test("auto-filled pages concatenate to the single large page", (t) => {
+  const index = longDocumentFixture(t);
+  const query = "deploy restart pm2";
+  const whole = searchConcepts(index, { query, languages: ["en"], limit: 50 });
+  const pages = [0, 1, 2].map((offset) =>
+    searchConcepts(index, { query, languages: ["en"], limit: 1, offset }),
+  );
+  assert.deepEqual(
+    pages.flatMap((page) => page.results),
+    whole.results,
+  );
+  pages.forEach((page) => {
+    assert.deepEqual(
+      [page.total, page.mode, page.allTermsTotal, page.lowConfidence],
+      [whole.total, whole.mode, whole.allTermsTotal, whole.lowConfidence],
+    );
+  });
+});
+
+test("autoFill comes from the search option, then the project config, then 3", (t) => {
+  const root = tempRoot(t, "okf-search-autofill-project-");
+  writeLongDocumentCatalog(path.join(root, "ops"));
+  const project = path.join(root, "okf.project.yaml");
+  const write = (extra) =>
+    fs.writeFileSync(
+      project,
+      `project: ops\nlanguages: [en]\nbundles:\n  - id: ops\n    root: ops\n${extra}`,
+    );
+  write("autoFill: 0\n");
+  const pinned = buildProjectIndex(project);
+  assert.equal(pinned.project.autoFill, 0);
+  assert.equal(searchConcepts(pinned, { query: "deploy restart pm2" }).total, 1);
+  assert.equal(searchConcepts(pinned, { query: "deploy restart pm2", autoFill: 3 }).total, 3);
+  write("");
+  assert.equal(
+    searchConcepts(buildProjectIndex(project), { query: "deploy restart pm2" }).total,
+    3,
+  );
+  write("autoFill: -1\n");
+  const invalid = buildProjectIndex(project);
+  assert.ok(invalid.errors.some((error) => error.code === "invalid_auto_fill"));
+  assert.equal(invalid.project.autoFill, undefined);
+  assert.throws(
+    () => searchConcepts(pinned, { query: "deploy", autoFill: 1.5 }),
+    /autoFill must be an integer between 0 and 250/,
+  );
 });

@@ -30,9 +30,10 @@ const QUERY_GUIDANCE =
 
 const SEARCH_DESCRIPTION =
   "Search OKF concepts with a text query and structured filters; returns ranked summaries " +
-  `with match confidence. ${QUERY_GUIDANCE} Mode auto requires every term and falls back to ` +
-  "any-term matching when nothing matches all of them. The response reports the mode that " +
-  "ran, queryTerms and droppedTerms, allTermsTotal (how many concepts match every term), and " +
+  `with match confidence. ${QUERY_GUIDANCE} Mode auto lists the concepts matching every ` +
+  "term first and, when there are only a few of them, follows them with concepts matching " +
+  "some of the terms (mode auto in the response; any when nothing matches every term). The " +
+  "response reports the mode that ran, queryTerms and droppedTerms, allTermsTotal (how many concepts match every term), and " +
   "lowConfidence, true when the any-term fallback produced the page and its best result " +
   "matched fewer than half of the terms: treat such results as weak and rephrase or narrow " +
   "with filters. Each result carries coverage (share of query terms it matched) and relevance " +
@@ -49,6 +50,7 @@ const HYBRID_DESCRIPTION =
 
 // Options only the server supplies; never accepted from tool arguments.
 const RUNTIME_OPTIONS = [
+  "autoFill",
   "queryVector",
   "vectorCache",
   "embedUnits",
@@ -78,9 +80,10 @@ async function runSearch(state, args) {
 }
 
 const MODE_DESCRIPTION =
-  "auto requires every term and falls back to any-term matching when that returns nothing; " +
-  "all requires every term (the pre-0.10 behaviour); any ranks concepts matching at least one " +
-  "term. The response's mode field says which one ran.";
+  "auto lists concepts matching every term first and appends concepts matching some terms " +
+  "when only a few match all of them; all requires every term (the pre-0.10 behaviour); any " +
+  "ranks concepts matching at least one term. The response's mode field says which one ran " +
+  "(auto when both kinds are listed).";
 
 function modeParameter() {
   return stringParameter(MODE_DESCRIPTION, { enum: SEARCH_MODES.slice(), default: "auto" });

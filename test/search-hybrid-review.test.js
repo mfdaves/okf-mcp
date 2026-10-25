@@ -184,8 +184,16 @@ test("dense candidates carry their lexical evidence; floors and lowConfidence re
   });
   await prepareEmbeddings(index, embedder, cache);
   const query = "winter courier delivery";
-  const base = { query, hybrid: true, queryVector: topicVector(query), vectorCache: cache };
-  const lexical = searchConcepts(index, { query });
+  // autoFill 0 keeps the all-term pass alone, so the partial match can only
+  // join through dense retrieval and must carry its own lexical evidence.
+  const base = {
+    query,
+    hybrid: true,
+    queryVector: topicVector(query),
+    vectorCache: cache,
+    autoFill: 0,
+  };
+  const lexical = searchConcepts(index, { query, autoFill: 0 });
   assert.equal(lexical.mode, "all");
   assert.deepEqual(uris(lexical), ["okf://shop/winter-delivery"]);
   const hybrid = searchConcepts(index, Object.assign({ detail: "full" }, base));
@@ -226,22 +234,33 @@ test("with literal terms, all-term hits keep precedence over semantic neighbours
     dimension: embedder.dimension,
   });
   await prepareEmbeddings(index, embedder, cache);
-  const run = (query) =>
-    searchConcepts(index, {
-      query,
-      hybrid: true,
-      queryVector: topicVector("footwear boots shoe"),
-      vectorCache: cache,
-      alpha: 0.9,
-    });
+  const run = (query, extra) =>
+    searchConcepts(
+      index,
+      Object.assign(
+        {
+          query,
+          hybrid: true,
+          queryVector: topicVector("footwear boots shoe"),
+          vectorCache: cache,
+          alpha: 0.9,
+        },
+        extra || {},
+      ),
+    );
   // Without a literal term the dense side may lead at alpha 0.9.
-  const plain = run("refund footwear");
+  const plain = run("refund footwear", { autoFill: 0 });
   assert.equal(plain.mode, "all");
   assert.notEqual(plain.results[0].uri, "okf://shop/footwear-refunds");
-  // With the identifier REF-42 the all-term hit comes first.
-  const literal = run("REF-42 footwear");
+  // With the identifier REF-42 the all-term hit comes first, with or without
+  // the any-term results appended by auto mode.
+  const literal = run("REF-42 footwear", { autoFill: 0 });
   assert.equal(literal.mode, "all");
   assert.equal(literal.results[0].uri, "okf://shop/footwear-refunds");
+  const filled = run("REF-42 footwear");
+  assert.equal(filled.mode, "auto");
+  assert.equal(filled.allTermsTotal, 1);
+  assert.equal(filled.results[0].uri, "okf://shop/footwear-refunds");
   // alpha 1 still reproduces the dense ranking exactly.
   const dense = searchConcepts(index, {
     query: "REF-42 footwear",

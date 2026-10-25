@@ -81,18 +81,15 @@ test("official SDK serves both modern and legacy MCP eras", async (t) => {
       query: "only alpha",
       detail: "full",
     });
-    assert.deepEqual(
-      lexical.payload.results.map((result) => result.path),
-      ["alpha.md"],
-    );
+    // The all-term hit leads; any-term matches follow it (auto mode, autoFill 3).
+    assert.equal(lexical.payload.results[0].path, "alpha.md");
+    assert.equal(lexical.payload.allTermsTotal, 1);
     const listed = await callJson(connection.client, "list_concepts", {
       query: "only beta",
       detail: "full",
     });
-    assert.deepEqual(
-      listed.payload.results.map((result) => result.path),
-      ["beta.md"],
-    );
+    assert.equal(listed.payload.results[0].path, "beta.md");
+    assert.equal(listed.payload.allTermsTotal, 1);
     const compact = await callJson(connection.client, "list_concepts", { limit: 3 });
     assert.deepEqual(Object.keys(compact.payload.results[0]).sort(), [
       "description",
@@ -219,7 +216,7 @@ test("business failures stay tool errors and unexpected failures are sanitized",
 
 test("SDK stdio transport enforces the configured one MiB input boundary", () => {
   const bundle = makeBundle();
-  const oversized = "é".repeat((1024 * 1024) / 2 + 1) + "\n";
+  const oversized = `${"é".repeat((1024 * 1024) / 2 + 1)}\n`;
   const initialize = `${JSON.stringify({
     jsonrpc: "2.0",
     id: 1,

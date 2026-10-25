@@ -165,7 +165,7 @@ test("the search descriptions ask for keywords and identifiers and explain confi
   [
     /keywords in the catalog's languages/,
     /identifiers/,
-    /falls back/,
+    /matching some of the terms/,
     /lowConfidence/,
     /coverage/,
     /relevance/,

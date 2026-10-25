@@ -385,6 +385,7 @@ function applyProject(index, project) {
     remoteBundles: project.remoteBundles,
     strictLinks: project.strictLinks,
     languages: project.languages,
+    autoFill: project.autoFill,
   };
   index.strictLinks = Boolean(index.strictLinks || project.strictLinks);
 }
