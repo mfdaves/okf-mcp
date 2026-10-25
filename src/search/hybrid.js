@@ -16,7 +16,12 @@ const { EmbedderError, describeEmbedder, validateEmbedder } = require("../embed/
 const { OPENAI_SERVER_CODES, createOpenAiEmbedder } = require("../embed/openai");
 const { prepareEmbeddings } = require("../embed/prepare");
 const { DEFAULT_EMBED_UNITS, denseCoverage, resolveUnits, unitMemo } = require("./dense");
-const { fusionAlpha, fusionNormalization } = require("./fusion");
+const {
+  ADAPTIVE_ALPHA,
+  adaptiveWeights,
+  fusionAlphaSetting,
+  fusionNormalization,
+} = require("./fusion");
 const { searchConcepts } = require("./query");
 
 const QUERY_CACHE_SIZE = 256;
@@ -149,7 +154,8 @@ class EmbeddingRuntime {
   constructor(settings, context) {
     const config = settings || {};
     this.context = context || {};
-    this.alpha = fusionAlpha(config.fusion?.alpha);
+    this.alpha = fusionAlphaSetting(config.fusion?.alpha);
+    this.adaptive = adaptiveWeights(config.fusion?.adaptive);
     this.normalization = fusionNormalization(config.fusion?.normalization);
     this.embedUnits =
       typeof config.embedUnits === "string" ? config.embedUnits : DEFAULT_EMBED_UNITS;
@@ -314,6 +320,7 @@ class EmbeddingRuntime {
         vectorCache: this.cache,
         embedUnits: this.units,
         alpha: config.alpha === undefined ? this.alpha : config.alpha,
+        adaptiveAlpha: config.adaptiveAlpha || this.adaptive,
         fusionNormalization: config.fusionNormalization || this.normalization,
       });
       try {
@@ -473,6 +480,7 @@ class EmbeddingRuntime {
       configured: true,
       available: this.ready && Boolean(this.cache?.size),
       alpha: this.alpha,
+      ...(this.alpha === ADAPTIVE_ALPHA ? { adaptive: this.adaptive } : {}),
       normalization: this.normalization,
       embedUnits: this.embedUnits,
       embedder: this.describe(failure),

@@ -13,7 +13,12 @@ const path = require("node:path");
 const { createOpenAiEmbedder } = require("../embed/openai");
 const { parseFrontmatterYaml } = require("../parser");
 const { DEFAULT_EMBED_UNITS, EMBED_UNITS } = require("./dense");
-const { FUSION_NORMALIZATIONS, fusionAlpha, fusionNormalization } = require("./fusion");
+const {
+  FUSION_NORMALIZATIONS,
+  adaptiveWeights,
+  fusionAlphaSetting,
+  fusionNormalization,
+} = require("./fusion");
 
 const EMBEDDER_TYPES = Object.freeze(["openai"]);
 const EMBEDDER_FIELDS = Object.freeze([
@@ -29,6 +34,7 @@ const EMBEDDER_FIELDS = Object.freeze([
   "maxInputChars",
 ]);
 const SETTINGS_FIELDS = Object.freeze(["embedder", "cacheDir", "fusion", "embedUnits"]);
+const FUSION_FIELDS = Object.freeze(["alpha", "normalization", "adaptive"]);
 
 function isObject(value) {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -105,21 +111,24 @@ function normalizeEmbeddingConfig(config, errors) {
       cacheDir = source.cacheDir;
     }
   }
-  let alpha = fusionAlpha(undefined);
+  let alpha = fusionAlphaSetting(undefined);
   let normalization = fusionNormalization(undefined);
+  let adaptive = null;
   if (source.fusion !== undefined) {
     const unknown = isObject(source.fusion)
-      ? Object.keys(source.fusion).filter((key) => key !== "alpha" && key !== "normalization")
+      ? Object.keys(source.fusion).filter((key) => !FUSION_FIELDS.includes(key))
       : [];
     try {
       if (!isObject(source.fusion) || unknown.length) throw new TypeError("fusion");
-      alpha = fusionAlpha(source.fusion.alpha);
+      alpha = fusionAlphaSetting(source.fusion.alpha);
       normalization = fusionNormalization(source.fusion.normalization);
+      // WP3c-2: the adaptive rule's weights, { low, mid, high } (defaults when unset).
+      if (source.fusion.adaptive !== undefined) adaptive = adaptiveWeights(source.fusion.adaptive);
     } catch {
       errors.push({
         code: "invalid_fusion",
         field: "fusion",
-        message: `fusion must be { alpha, normalization } with alpha between 0 and 1 and normalization one of ${FUSION_NORMALIZATIONS.join(", ")}.`,
+        message: `fusion must be { alpha, normalization, adaptive } with alpha "adaptive" or a number between 0 and 1, normalization one of ${FUSION_NORMALIZATIONS.join(", ")} and adaptive { low, mid, high } between 0 and 1 with high >= mid.`,
       });
     }
   }
@@ -136,7 +145,9 @@ function normalizeEmbeddingConfig(config, errors) {
     }
   }
   if (!embedder) return null;
-  return { embedder, cacheDir, fusion: { alpha, normalization }, embedUnits };
+  const fusion = { alpha, normalization };
+  if (adaptive) fusion.adaptive = Object.assign({}, adaptive);
+  return { embedder, cacheDir, fusion, embedUnits };
 }
 
 // The --embedder-config file (JSON, or YAML for any other extension): either

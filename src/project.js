@@ -508,6 +508,7 @@ function loadProjectConfig(configPath) {
   const autoFill = normalizeAutoFillConfig(config, errors);
   const writePolicy = normalizeWritePolicyConfig(config, errors);
   // Hybrid search (WP3c): embedder, cacheDir, fusion.alpha, embedUnits; null when off.
+  // WP3c-2: fusion.alpha may be "adaptive", with fusion.adaptive { low, mid, high }.
   const embedding = normalizeEmbeddingConfig(config, errors);
   return {
     path: resolvedPath,

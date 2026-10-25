@@ -49,7 +49,11 @@ function settings(options) {
   return {
     dimension: Number.isSafeInteger(config.dimension) ? config.dimension : 512,
     unitsPerConcept: Number.isSafeInteger(config.unitsPerConcept) ? config.unitsPerConcept : 1,
-    alpha: typeof config.alpha === "number" ? config.alpha : DEFAULT_FUSION_ALPHA,
+    // A number, or "adaptive" for the WP3c-2 rule (its overhead is part of the measurement).
+    alpha:
+      typeof config.alpha === "number" || config.alpha === "adaptive"
+        ? config.alpha
+        : DEFAULT_FUSION_ALPHA,
   };
 }
 

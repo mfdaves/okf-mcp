@@ -42,7 +42,12 @@ const SEARCH_DESCRIPTION =
   "words for the same idea are found too; relevance is then fused, mode and coverage keep " +
   "their lexical meaning (lowConfidence reads the top result shown), and each result adds lexicalScore, denseScore and " +
   "fusedScore. The response then reports hybrid (whether fusion ran) and embedder, whose " +
-  "degraded flag says the semantic side could not run and the results are lexical only.";
+  "degraded flag says the semantic side could not run and the results are lexical only. " +
+  "Hybrid responses also report alphaUsed, the weight of the semantic side for this query, " +
+  "and alphaReason: fixed, or under the adaptive weight literal_terms (quoted or " +
+  "identifier-like terms and a concept matching every term), all_terms (several concepts " +
+  "match every term), weak_lexical " +
+  "(nothing matches even half of the terms) or interpolated (in between).";
 
 const HYBRID_DESCRIPTION =
   "Fuse lexical and semantic ranking when the server has an embedder configured (the default " +
@@ -55,6 +60,7 @@ const RUNTIME_OPTIONS = [
   "vectorCache",
   "embedUnits",
   "alpha",
+  "adaptiveAlpha",
   "fusionNormalization",
 ];
 

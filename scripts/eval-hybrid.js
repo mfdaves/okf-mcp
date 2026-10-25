@@ -5,6 +5,8 @@
 //
 //   node scripts/eval-search.js --embedder <json|yaml file> [--alpha a] [--units concepts|sections]
 //        [--alpha-sweep 0,0.1,...,1] [--cache-dir <dir>] [--max-tokens 2000000]
+//        [--alpha adaptive] [--adaptive low,mid,high] [--adaptive-grid lows/mids/highs]
+//        [--baseline <report.json>]
 //        --fixture alpinaria [--fixture atlas] [--split dev|heldout|all] [eval-search options]
 //
 // The embedder file holds trusted settings (src/search/embedding-config.js: a bare embedder
@@ -17,6 +19,14 @@
 // --alpha-sweep scores several weights from the same vectors and is refused off the dev split
 // (section 8: tune only on dev). A run whose estimated prompt tokens exceed --max-tokens aborts
 // before any request. Reports never contain the key or the cache path.
+//
+// WP3c-2: --alpha adaptive scores the adaptive weight (--adaptive sets its low, mid and high);
+// --adaptive-grid scores every low/mid/high combination (high >= mid) from the same vectors,
+// dev split only, and names the pre-registered choice (best mean Recall@5 over the fixtures,
+// ties within 0.005 by mean nDCG@10, then the smallest low + mid + high). --baseline pairs this
+// run with an earlier report by query id: per category and overall, the difference in Recall@5
+// with a seeded paired bootstrap 95% interval; a category regresses when the whole interval is
+// below zero.
 
 const fs = require("node:fs");
 const os = require("node:os");
@@ -25,7 +35,13 @@ const { performance } = require("node:perf_hooks");
 
 const { buildProjectIndex } = require("../src/indexer");
 const { loadEmbeddingConfigFile } = require("../src/search/embedding-config");
-const { DEFAULT_FUSION_ALPHA, fusionAlpha, fusionNormalization } = require("../src/search/fusion");
+const {
+  DEFAULT_ALPHA_SETTING,
+  adaptiveWeights,
+  fusionAlpha,
+  fusionAlphaSetting,
+  fusionNormalization,
+} = require("../src/search/fusion");
 const { openEmbeddingRuntime } = require("../src/search/hybrid");
 const { unitMemo } = require("../src/search/dense");
 const { searchConcepts } = require("../src/search/query");
@@ -41,13 +57,21 @@ const HYBRID_FLAGS = new Set([
   "--units",
   "--cache-dir",
   "--max-tokens",
+  "--adaptive",
+  "--adaptive-grid",
+  "--baseline",
 ]);
+// Ties in the adaptive grid: within this much of the best mean dev Recall@5.
+const GRID_TIE = 0.005;
 
 function usage() {
   return [
     "Hybrid options (node scripts/eval-search.js --embedder <file> ...):",
     "  --embedder <file>         Embedder settings (JSON or YAML); enables the hybrid run.",
-    "  --alpha <a>               Fusion weight of the dense side (default: the file's fusion.alpha or 0.5).",
+    "  --alpha <a|adaptive>      Fusion weight of the dense side, or adaptive (default: the file's fusion.alpha).",
+    "  --adaptive <l,m,h>        Weights of the adaptive rule: low, mid, high (default: the file's or the shipped ones).",
+    "  --adaptive-grid <L/M/H>   Comma-separated lows/mids/highs, every combination with high >= mid; dev split only.",
+    "  --baseline <report.json>  Pair this run with an earlier report: per-category paired bootstrap of the Recall@5 difference.",
     "  --alpha-sweep <list>      Comma-separated weights scored from the same vectors; dev split only.",
     "  --normalization <name>    Fusion normalization: minmax, tmm or lexical-tmm (default: the file's or minmax).",
     "  --units concepts|sections Retrieval units to embed (default: the file's embedUnits or concepts).",
@@ -69,7 +93,10 @@ function parseHybridArgs(argv) {
     if (value === undefined) throw new TypeError(`${argument} requires a value.`);
     index += 1;
     if (argument === "--embedder") hybrid.embedder = value;
-    if (argument === "--alpha") hybrid.alpha = fusionAlpha(value);
+    if (argument === "--alpha") hybrid.alpha = fusionAlphaSetting(value);
+    if (argument === "--adaptive") hybrid.adaptive = parseWeights(value);
+    if (argument === "--baseline") hybrid.baseline = path.resolve(value);
+    if (argument === "--adaptive-grid") hybrid.grid = parseGrid(value);
     if (argument === "--normalization") hybrid.normalization = fusionNormalization(value);
     if (argument === "--units") hybrid.units = value;
     if (argument === "--cache-dir") hybrid.cacheDir = path.resolve(value);
@@ -86,7 +113,36 @@ function parseHybridArgs(argv) {
   if (hybrid.sweep && options.split !== "dev") {
     throw new TypeError("--alpha-sweep runs on the dev split only: add --split dev.");
   }
+  if (hybrid.grid && options.split !== "dev") {
+    throw new TypeError("--adaptive-grid runs on the dev split only: add --split dev.");
+  }
   return Object.assign(options, { hybrid });
+}
+
+function parseWeights(value) {
+  const [low, mid, high] = String(value)
+    .split(",")
+    .map((entry) => entry.trim());
+  return adaptiveWeights({ low, mid, high });
+}
+
+// "0.1,0.2/0.4/0.6,0.75" -> every { low, mid, high } with high >= mid.
+function parseGrid(value) {
+  const lists = String(value)
+    .split("/")
+    .map((part) => part.split(",").map((entry) => fusionAlpha(entry.trim())));
+  if (lists.length !== 3 || lists.some((list) => !list.length)) {
+    throw new TypeError("--adaptive-grid needs three comma-separated lists: lows/mids/highs.");
+  }
+  const rows = [];
+  lists[0].forEach((low) => {
+    lists[1].forEach((mid) => {
+      lists[2].forEach((high) => {
+        if (high >= mid) rows.push(adaptiveWeights({ low, mid, high }));
+      });
+    });
+  });
+  return rows;
 }
 
 function percentile(values, fraction) {
@@ -111,6 +167,7 @@ function settingsFor(options) {
   const settings = loadEmbeddingConfigFile(options.hybrid.embedder);
   if (options.hybrid.units) settings.embedUnits = options.hybrid.units;
   if (options.hybrid.alpha !== undefined) settings.fusion.alpha = options.hybrid.alpha;
+  if (options.hybrid.adaptive) settings.fusion.adaptive = options.hybrid.adaptive;
   if (options.hybrid.normalization) settings.fusion.normalization = options.hybrid.normalization;
   settings.cacheDir = options.hybrid.cacheDir || null;
   return settings;
@@ -176,7 +233,7 @@ async function prepareFixture(fixture, settings, options, env) {
 
 // A search module for evaluateFixture: hybrid searchConcepts with the pre-encoded vector, or
 // lexical when the runtime is degraded or the query could not be encoded.
-function hybridModule(prepared, alpha, label, normalization) {
+function hybridModule(prepared, alpha, label, normalization, adaptive) {
   const responses = new Map();
   const { runtime } = prepared;
   return {
@@ -184,7 +241,10 @@ function hybridModule(prepared, alpha, label, normalization) {
     path: path.join(__dirname, "..", "src", "search", "query.js"),
     isDefault: false,
     name: label,
-    options: { hybrid: true, alpha, normalization, embedUnits: runtime.embedUnits },
+    options: Object.assign(
+      { hybrid: true, alpha, normalization, embedUnits: runtime.embedUnits },
+      alpha === "adaptive" ? { adaptive: adaptive || runtime.adaptive } : {},
+    ),
     prepare: null,
     search(index, query, context) {
       const vector = runtime.ready ? prepared.vectors.get(query) : null;
@@ -197,6 +257,7 @@ function hybridModule(prepared, alpha, label, normalization) {
         vectorCache: vector ? runtime.cache : undefined,
         embedUnits: runtime.units,
         alpha,
+        adaptiveAlpha: adaptive || runtime.adaptive,
         fusionNormalization: normalization,
       });
       responses.set(query, response);
@@ -212,6 +273,11 @@ function applyResponseFlags(result, responses) {
     const response = responses.get(row.query);
     if (response && typeof response.lowConfidence === "boolean") {
       row.lowConfidence = response.lowConfidence;
+    }
+    // WP3c-2: the weight each query used and why.
+    if (response && typeof response.alphaUsed === "number") {
+      row.alphaUsed = response.alphaUsed;
+      row.alphaReason = response.alphaReason;
     }
   });
   const answerable = result.perQuery.filter((row) => row.answerable);
@@ -241,6 +307,94 @@ function categoryIntervals(result, options) {
         evalSearch.bootstrap(rows, options.bootstrap, options.seed).recallAt5,
       ]),
   );
+}
+
+// Paired bootstrap of `metric` differences (current - baseline) over queries both runs scored,
+// per category and overall: { queries, current, baseline, delta, low, high, regressed }.
+function pairedComparison(current, baseline, options, metric) {
+  const key = metric || "recallAt5";
+  const before = new Map(
+    (baseline?.perQuery || []).filter((row) => row.answerable).map((row) => [row.id, row]),
+  );
+  const pairs = current.perQuery
+    .filter((row) => row.answerable && before.has(row.id))
+    .map((row) => ({
+      category: row.category,
+      split: row.split,
+      after: row[key],
+      before: before.get(row.id)[key],
+    }));
+  const summarize = (list, seed) => {
+    if (!list.length) return null;
+    const diffs = list.map((pair) => pair.after - pair.before);
+    const meanOf = (values) => values.reduce((sum, value) => sum + value, 0) / values.length;
+    const random = mulberry32(seed);
+    const draws = [];
+    for (let sample = 0; sample < options.bootstrap; sample += 1) {
+      let sum = 0;
+      for (let draw = 0; draw < diffs.length; draw += 1) {
+        sum += diffs[Math.floor(random() * diffs.length)];
+      }
+      draws.push(sum / diffs.length);
+    }
+    const low = percentile(draws, 0.025);
+    const high = percentile(draws, 0.975);
+    return {
+      queries: list.length,
+      current: meanOf(list.map((pair) => pair.after)),
+      baseline: meanOf(list.map((pair) => pair.before)),
+      delta: meanOf(diffs),
+      low,
+      high,
+      regressed: high !== null && high < 0,
+    };
+  };
+  const groups = new Map();
+  pairs.forEach((pair) => {
+    if (!groups.has(pair.category)) groups.set(pair.category, []);
+    groups.get(pair.category).push(pair);
+  });
+  const bySplit = {};
+  ["dev", "heldout"].forEach((split) => {
+    const subset = pairs.filter((pair) => pair.split === split);
+    if (subset.length) bySplit[split] = summarize(subset, options.seed);
+  });
+  return {
+    metric: key,
+    overall: summarize(pairs, options.seed),
+    bySplit,
+    byCategory: Object.fromEntries(
+      Array.from(groups.entries())
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([category, list]) => [category, summarize(list, options.seed)]),
+    ),
+  };
+}
+
+function mulberry32(seed) {
+  let state = seed | 0;
+  return function next() {
+    state = (state + 0x6d2b79f5) | 0;
+    let t = Math.imul(state ^ (state >>> 15), 1 | state);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// The pre-registered grid choice: best mean Recall@5 over the fixtures, ties within GRID_TIE by
+// mean nDCG@10, then the smallest low + mid + high (the one closest to lexical).
+function chooseGrid(rows) {
+  if (!rows.length) return null;
+  const best = Math.max(...rows.map((row) => row.meanRecallAt5));
+  return rows
+    .filter((row) => row.meanRecallAt5 >= best - GRID_TIE)
+    .sort(
+      (a, b) =>
+        b.meanNdcgAt10 - a.meanNdcgAt10 ||
+        a.low + a.mid + a.high - (b.low + b.mid + b.high) ||
+        a.low - b.low ||
+        a.mid - b.mid,
+    )[0];
 }
 
 function compare(hybrid, lexical) {
@@ -286,8 +440,12 @@ function encodingSummary(values) {
 async function runHybridEvaluation(options, context) {
   const env = context?.env || process.env;
   const settings = settingsFor(options);
-  const alpha = settings.fusion?.alpha ?? DEFAULT_FUSION_ALPHA;
+  const alpha = settings.fusion?.alpha ?? DEFAULT_ALPHA_SETTING;
   const normalization = settings.fusion?.normalization;
+  const adaptive = adaptiveWeights(settings.fusion?.adaptive);
+  const baseline = options.hybrid.baseline
+    ? JSON.parse(fs.readFileSync(options.hybrid.baseline, "utf8"))
+    : null;
   const lexicalModule = evalSearch.loadSearchModule("", {});
   const label = options.label || `hybrid alpha ${alpha} ${normalization}`;
   const report = {
@@ -299,18 +457,25 @@ async function runHybridEvaluation(options, context) {
     searchModule: {
       path: "src/search/query.js",
       name: label,
-      options: { hybrid: true, alpha, normalization, embedUnits: settings.embedUnits },
+      options: Object.assign(
+        { hybrid: true, alpha, normalization, embedUnits: settings.embedUnits },
+        alpha === "adaptive" ? { adaptive } : {},
+      ),
     },
     split: options.split,
     limit: options.limit,
     bootstrap: { samples: options.bootstrap, seed: options.seed, confidence: 0.95 },
     fixtures: {},
-    hybrid: { alpha, normalization, embedUnits: settings.embedUnits, fixtures: {} },
+    hybrid: Object.assign(
+      { alpha, normalization, embedUnits: settings.embedUnits, fixtures: {} },
+      alpha === "adaptive" ? { adaptive } : {},
+      baseline ? { baseline: { label: baseline.label, generatedAt: baseline.generatedAt } } : {},
+    ),
   };
   for (const nameOrPath of options.fixtures) {
     const fixture = evalSearch.resolveFixture(nameOrPath);
     const prepared = await prepareFixture(fixture, settings, options, env);
-    const module = hybridModule(prepared, alpha, label, normalization);
+    const module = hybridModule(prepared, alpha, label, normalization, adaptive);
     const result = evalSearch.evaluateFixture(fixture, module, options);
     applyResponseFlags(result, module.responses);
     result.categoryCi = categoryIntervals(result, options);
@@ -350,6 +515,34 @@ async function runHybridEvaluation(options, context) {
       },
       comparison: compare(result, lexical),
     };
+    if (baseline?.fixtures?.[fixture.name]) {
+      report.hybrid.fixtures[fixture.name].paired = pairedComparison(
+        result,
+        baseline.fixtures[fixture.name],
+        options,
+      );
+    }
+    if (options.hybrid.grid) {
+      report.hybrid.fixtures[fixture.name].grid = options.hybrid.grid.map((weights) => {
+        const gridModule = hybridModule(
+          prepared,
+          "adaptive",
+          `${label} adaptive ${weights.low}/${weights.mid}/${weights.high}`,
+          normalization,
+          weights,
+        );
+        const run = evalSearch.evaluateFixture(fixture, gridModule, options);
+        return Object.assign({}, weights, {
+          recallAt5: run.overall.recallAt5,
+          ndcgAt10: run.overall.ndcgAt10,
+          mrrAt10: run.overall.mrrAt10,
+          p1: run.overall.p1,
+          byCategory: Object.fromEntries(
+            Object.entries(run.byCategory).map(([name, value]) => [name, value.recallAt5]),
+          ),
+        });
+      });
+    }
     if (options.hybrid.sweep) {
       report.hybrid.fixtures[fixture.name].sweep = options.hybrid.sweep.map((weight) => {
         const sweepModule = hybridModule(
@@ -375,8 +568,35 @@ async function runHybridEvaluation(options, context) {
       });
     }
   }
+  if (options.hybrid.grid) {
+    const names = Object.keys(report.hybrid.fixtures);
+    const rows = options.hybrid.grid.map((weights, position) => {
+      const cells = names.map((name) => report.hybrid.fixtures[name].grid[position]);
+      const mean = (key) => cells.reduce((sum, cell) => sum + cell[key], 0) / cells.length;
+      return Object.assign({}, weights, {
+        meanRecallAt5: mean("recallAt5"),
+        meanNdcgAt10: mean("ndcgAt10"),
+        fixtures: Object.fromEntries(
+          names.map((name, index) => [
+            name,
+            {
+              recallAt5: cells[index].recallAt5,
+              ndcgAt10: cells[index].ndcgAt10,
+              synonym: cells[index].byCategory.synonym ?? null,
+              exact: cells[index].byCategory.exact ?? null,
+              keyword: cells[index].byCategory.keyword ?? null,
+            },
+          ]),
+        ),
+      });
+    });
+    report.hybrid.grid = { rule: GRID_RULE, rows, choice: chooseGrid(rows) };
+  }
   return report;
 }
+
+const GRID_RULE =
+  "best mean dev Recall@5 over the fixtures; ties within 0.005 by mean nDCG@10, then the smallest low + mid + high";
 
 const pct = (value) =>
   value === null || value === undefined ? "–" : `${(value * 100).toFixed(1)}%`;
@@ -414,6 +634,26 @@ function renderHybrid(report) {
       );
     });
     lines.push("");
+    if (entry.paired) {
+      lines.push(
+        `Paired with \`${report.hybrid.baseline?.label || "baseline"}\` (Recall@5 difference, paired bootstrap 95% CI):`,
+        "",
+        "| group | n | baseline | this run | delta | 95% CI | regressed |",
+        "|---|---|---|---|---|---|---|",
+      );
+      const pairedRow = (name, value) =>
+        value
+          ? `| ${name} | ${value.queries} | ${num(value.baseline)} | ${num(value.current)} | ${value.delta >= 0 ? "+" : ""}${num(value.delta)} | [${num(value.low)}, ${num(value.high)}] | ${value.regressed ? "yes" : "no"} |`
+          : `| ${name} | 0 | – | – | – | – | – |`;
+      lines.push(pairedRow("overall", entry.paired.overall));
+      Object.entries(entry.paired.bySplit).forEach(([split, value]) => {
+        lines.push(pairedRow(split, value));
+      });
+      Object.entries(entry.paired.byCategory).forEach(([category, value]) => {
+        lines.push(pairedRow(category, value));
+      });
+      lines.push("");
+    }
     if (entry.sweep) {
       lines.push(
         "| alpha | Recall@5 (95% CI) | nDCG@10 | MRR@10 | P@1 | synonym R@5 | mixed-lang R@5 | search p95 ms |",
@@ -427,6 +667,27 @@ function renderHybrid(report) {
       lines.push("");
     }
   });
+  if (report.hybrid.grid) {
+    const names = Object.keys(report.hybrid.fixtures);
+    lines.push(
+      "### Adaptive grid (dev split)",
+      "",
+      `Rule: ${report.hybrid.grid.rule}. Choice: ${report.hybrid.grid.choice ? `low ${report.hybrid.grid.choice.low}, mid ${report.hybrid.grid.choice.mid}, high ${report.hybrid.grid.choice.high}` : "none"}.`,
+      "",
+      `| low | mid | high | mean Recall@5 | mean nDCG@10 | ${names.map((name) => `${name} R@5 / synonym / exact`).join(" | ")} |`,
+      `|---|---|---|---|---|${names.map(() => "---|").join("")}`,
+    );
+    report.hybrid.grid.rows.forEach((row) => {
+      const cells = names.map((name) => {
+        const cell = row.fixtures[name];
+        return `${num(cell.recallAt5)} / ${num(cell.synonym, 2)} / ${num(cell.exact, 2)}`;
+      });
+      lines.push(
+        `| ${row.low} | ${row.mid} | ${row.high} | ${num(row.meanRecallAt5)} | ${num(row.meanNdcgAt10)} | ${cells.join(" | ")} |`,
+      );
+    });
+    lines.push("");
+  }
   return lines.join("\n");
 }
 
@@ -454,8 +715,19 @@ function summaryOf(report) {
       ...(entry.sweep
         ? { sweep: entry.sweep.map((row) => ({ alpha: row.alpha, recallAt5: row.recallAt5 })) }
         : {}),
+      ...(entry.paired
+        ? {
+            paired: {
+              overall: entry.paired.overall,
+              regressed: Object.entries(entry.paired.byCategory)
+                .filter(([, value]) => value?.regressed)
+                .map(([category]) => category),
+            },
+          }
+        : {}),
     });
   });
+  if (report.hybrid.grid) summary.adaptiveChoice = report.hybrid.grid.choice;
   return summary;
 }
 
@@ -495,8 +767,10 @@ if (require.main === module) {
 }
 
 module.exports = {
+  chooseGrid,
   cli,
   main,
+  pairedComparison,
   parseHybridArgs,
   renderHybrid,
   runHybridEvaluation,

@@ -190,3 +190,67 @@ test("node scripts/eval-search.js --embedder runs the hybrid harness end to end"
   assert.match(fs.readFileSync(`${out}.md`, "utf8"), /## Hybrid run/);
   assert.ok(JSON.parse(fs.readFileSync(`${out}.json`, "utf8")).hybrid.fixtures.atlas);
 });
+
+test("the harness scores the adaptive weight, its dev grid and a paired baseline", async (t) => {
+  const { run, dir } = await harness(t);
+  const fixed = await run(["--alpha", "0.4"]);
+  const baselineFile = path.join(dir, "baseline.json");
+  fs.writeFileSync(baselineFile, JSON.stringify(fixed));
+  const adaptive = await run([
+    "--alpha",
+    "adaptive",
+    "--adaptive",
+    "0.1,0.3,0.8",
+    "--baseline",
+    baselineFile,
+  ]);
+  assert.equal(adaptive.hybrid.alpha, "adaptive");
+  assert.deepEqual(adaptive.hybrid.adaptive, { low: 0.1, mid: 0.3, high: 0.8 });
+  const rows = adaptive.fixtures.atlas.perQuery;
+  assert.ok(rows.every((row) => typeof row.alphaUsed === "number" && row.alphaReason));
+  assert.ok(rows.some((row) => row.alphaReason !== "all_terms"));
+  const paired = adaptive.hybrid.fixtures.atlas.paired;
+  assert.equal(paired.overall.queries, fixed.fixtures.atlas.queries.answerable);
+  assert.ok(Math.abs(paired.overall.baseline - fixed.fixtures.atlas.overall.recallAt5) < 1e-12);
+  assert.ok(Math.abs(paired.overall.current - adaptive.fixtures.atlas.overall.recallAt5) < 1e-12);
+  assert.ok(
+    paired.overall.low <= paired.overall.delta && paired.overall.delta <= paired.overall.high,
+  );
+  Object.values(paired.byCategory).forEach((value) => {
+    assert.equal(value.regressed, value.high < 0);
+  });
+  // A run paired with itself differs by exactly zero everywhere.
+  const self = await run(["--alpha", "0.4", "--baseline", baselineFile]);
+  assert.deepEqual(
+    [self.hybrid.fixtures.atlas.paired.overall.low, self.hybrid.fixtures.atlas.paired.overall.high],
+    [0, 0],
+  );
+  const grid = await run(["--split", "dev", "--adaptive-grid", "0.1,0.2/0.4/0.4,0.8"]);
+  assert.deepEqual(
+    grid.hybrid.grid.rows.map((row) => [row.low, row.mid, row.high]),
+    [
+      [0.1, 0.4, 0.4],
+      [0.1, 0.4, 0.8],
+      [0.2, 0.4, 0.4],
+      [0.2, 0.4, 0.8],
+    ],
+  );
+  assert.ok(grid.hybrid.grid.choice, "a choice is named");
+  assert.throws(
+    () =>
+      parseHybridArgs([
+        "--embedder",
+        "x.json",
+        "--fixture",
+        "atlas",
+        "--adaptive-grid",
+        "0.1/0.4/0.8",
+      ]),
+    /dev split only/,
+  );
+  assert.throws(
+    () =>
+      parseHybridArgs(["--embedder", "x.json", "--fixture", "atlas", "--adaptive", "0.1,0.9,0.5"]),
+    /high >= mid/,
+  );
+});

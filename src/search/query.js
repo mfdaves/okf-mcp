@@ -6,7 +6,7 @@ const { resolveConcept } = require("../indexer");
 const { foldDiacritics } = require("./languages");
 const { analyzeQuery, prepareSearchIndex, runQuery, searchLanguages } = require("./lexical");
 const { denseSearch } = require("./dense");
-const { fuseRankings, fusionAlpha, fusionNormalization } = require("./fusion");
+const { fuseRankings, fusionNormalization, resolveAlpha } = require("./fusion");
 
 const MAX_COMPACT_TEXT = 500;
 // `auto` runs the all-term query first; when it yields fewer than `autoFill`
@@ -416,7 +416,22 @@ function hybridRank(index, config, ranking, filteredDocs, analysis) {
     return { id: entry.id, score, unit: entry.unit };
   });
   const units = new Map(dense.map((entry) => [entry.id, entry.unit]));
-  const alpha = fusionAlpha(config.alpha);
+  // One weight per query (WP3c-2): fixed, or chosen by the adaptive rule from
+  // the lexical pass, which does not depend on offset or limit.
+  const choice = resolveAlpha(
+    config.alpha,
+    {
+      literal:
+        ranking.allTermUris !== null &&
+        ranking.allTermUris.size > 0 &&
+        analysis.tokens.some((token) => token.kind !== "plain"),
+      allTermsTotal: ranking.allTermsTotal,
+      autoFill: config.autoFill,
+      topCoverage: lexical.reduce((best, entry) => Math.max(best, entry.coverage || 0), 0),
+    },
+    config.adaptiveAlpha,
+  );
+  const alpha = choice.alpha;
   // Partial matches among the dense neighbours join the lexical side after
   // the pass's hits (never at alpha 0, which must reproduce the lexical list).
   const extra =
@@ -431,7 +446,7 @@ function hybridRank(index, config, ranking, filteredDocs, analysis) {
   const fused = fuseRankings({
     lexical: lexical.concat(extra).map((entry) => ({ id: entry.doc.uri, score: entry.score })),
     dense,
-    alpha: config.alpha,
+    alpha,
     normalization: config.fusionNormalization,
   });
   // Not at alpha 1, which must reproduce the dense ranking exactly. At alpha
@@ -463,7 +478,7 @@ function hybridRank(index, config, ranking, filteredDocs, analysis) {
       unit: units.get(entry.id),
     });
   });
-  return applyFloors(results, config);
+  return { results: applyFloors(results, config), alpha, alphaReason: choice.reason };
 }
 
 function hybridFields(entry) {
@@ -496,6 +511,7 @@ function searchConcepts(index, options) {
   let results;
   let ranking = null;
   let hybrid = false;
+  let fusion = null;
   if (analysis.query) {
     if (!analysis.tokens.length) {
       // Punctuation-only text: nothing to run, reported under the requested mode.
@@ -510,9 +526,8 @@ function searchConcepts(index, options) {
       const docsByUri = new Map(filteredDocs.map((doc) => [doc.uri, doc]));
       ranking = rankQuery(index, config, analysis, docsByUri);
       hybrid = config.hybrid === true && Boolean(config.queryVector && config.vectorCache);
-      results = hybrid
-        ? hybridRank(index, config, ranking, filteredDocs, analysis)
-        : ranking.results;
+      fusion = hybrid ? hybridRank(index, config, ranking, filteredDocs, analysis) : null;
+      results = hybrid ? fusion.results : ranking.results;
     }
   } else {
     results = filteredDocs.map((doc) => ({ doc, score: 0 }));
@@ -567,8 +582,11 @@ function searchConcepts(index, options) {
     if (hybrid) {
       Object.assign(response, {
         hybrid: true,
-        alpha: fusionAlpha(config.alpha),
+        alpha: fusion.alpha,
         normalization: fusionNormalization(config.fusionNormalization),
+        // WP3c-2: the weight this query used and why (`fixed` unless adaptive).
+        alphaUsed: fusion.alpha,
+        alphaReason: fusion.alphaReason,
       });
     }
   }

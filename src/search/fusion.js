@@ -28,6 +28,33 @@ const DEFAULT_FUSION_NORMALIZATION = "tmm";
 // Theoretical lower bounds per side, used by "tmm" and "lexical-tmm".
 const THEORETICAL_MIN = Object.freeze({ lexical: 0, dense: -1 });
 
+// Adaptive weight (WP3c-2): `fusion.alpha: "adaptive"` decides the weight once per query from
+// signals the lexical pass has already computed, so every page of a query uses the same one:
+//
+//   literal terms (quoted or identifier-like) matched by the all-term pass -> low (the literal
+//     guard keeps the all-term hits ahead as before);
+//   at least `autoFill` all-term hits and a best lexical coverage of 1     -> mid;
+//   no all-term hit and a best lexical coverage below 0.5                  -> high;
+//   otherwise linear in the best lexical coverage, from high at 0.5 to mid at 1.
+//
+// With high >= mid the weight never grows with the lexical coverage. The weights are tuned on
+// the development split (test/fixtures/retrieval/reports/hybrid-0.12-2026-10-25.md).
+const ADAPTIVE_ALPHA = "adaptive";
+// Dev-split choice over low {0.1, 0.2, 0.3} x mid {0.3, 0.4, 0.5} x high {0.6, 0.75, 0.9}
+// (best mean Recall@5, ties within 0.005 by mean nDCG@10, then the smallest sum). The fixed
+// 0.4 stays the default: the adaptive weight did not meet its pre-registered conditions.
+const DEFAULT_ADAPTIVE_WEIGHTS = Object.freeze({ low: 0.1, mid: 0.5, high: 0.9 });
+const ADAPTIVE_WEAK_COVERAGE = 0.5;
+// The fusion weight used when none is configured: a number, or ADAPTIVE_ALPHA.
+const DEFAULT_ALPHA_SETTING = DEFAULT_FUSION_ALPHA;
+const ALPHA_REASONS = Object.freeze([
+  "fixed",
+  "literal_terms",
+  "all_terms",
+  "weak_lexical",
+  "interpolated",
+]);
+
 function fusionNormalization(value) {
   if (value === undefined || value === null) return DEFAULT_FUSION_NORMALIZATION;
   if (!FUSION_NORMALIZATIONS.includes(value)) {
@@ -43,6 +70,71 @@ function fusionAlpha(value) {
     throw new TypeError("fusion alpha must be a number between 0 and 1.");
   }
   return alpha;
+}
+
+// A configured weight: ADAPTIVE_ALPHA or a number in [0, 1] (DEFAULT_ALPHA_SETTING when unset).
+function fusionAlphaSetting(value) {
+  if (value === undefined || value === null) return DEFAULT_ALPHA_SETTING;
+  if (value === ADAPTIVE_ALPHA) return ADAPTIVE_ALPHA;
+  try {
+    return fusionAlpha(value);
+  } catch {
+    throw new TypeError(`fusion alpha must be "${ADAPTIVE_ALPHA}" or a number between 0 and 1.`);
+  }
+}
+
+// { low, mid, high } over the defaults; every weight in [0, 1] and high >= mid.
+function adaptiveWeights(value) {
+  if (value === undefined || value === null) return DEFAULT_ADAPTIVE_WEIGHTS;
+  const unknown =
+    typeof value === "object" && !Array.isArray(value)
+      ? Object.keys(value).filter((key) => !Object.hasOwn(DEFAULT_ADAPTIVE_WEIGHTS, key))
+      : ["value"];
+  if (unknown.length) {
+    throw new TypeError("fusion adaptive weights must be an object of low, mid and high.");
+  }
+  const weights = {};
+  Object.keys(DEFAULT_ADAPTIVE_WEIGHTS).forEach((key) => {
+    weights[key] =
+      value[key] === undefined ? DEFAULT_ADAPTIVE_WEIGHTS[key] : fusionAlpha(value[key]);
+  });
+  if (weights.high < weights.mid) {
+    throw new TypeError("fusion adaptive weights need high >= mid.");
+  }
+  return Object.freeze(weights);
+}
+
+const roundWeight = (value) => Math.round(value * 1e6) / 1e6;
+
+// signals: { literal, allTermsTotal, autoFill, topCoverage } -> { alpha, reason }.
+function adaptiveAlpha(signals, weights) {
+  const config = adaptiveWeights(weights);
+  const source = signals || {};
+  const coverage = Math.min(1, Math.max(0, Number(source.topCoverage) || 0));
+  const allTerms = Number(source.allTermsTotal) || 0;
+  const autoFill = Number(source.autoFill) || 0;
+  if (source.literal) return { alpha: config.low, reason: "literal_terms" };
+  if (allTerms > 0 && allTerms >= autoFill && coverage >= 1) {
+    return { alpha: config.mid, reason: "all_terms" };
+  }
+  if (allTerms === 0 && coverage < ADAPTIVE_WEAK_COVERAGE) {
+    return { alpha: config.high, reason: "weak_lexical" };
+  }
+  const share = Math.min(
+    1,
+    Math.max(0, (coverage - ADAPTIVE_WEAK_COVERAGE) / (1 - ADAPTIVE_WEAK_COVERAGE)),
+  );
+  return {
+    alpha: roundWeight(config.high + (config.mid - config.high) * share),
+    reason: "interpolated",
+  };
+}
+
+// The weight of one query: a fixed setting as configured, or the adaptive rule's choice.
+function resolveAlpha(setting, signals, weights) {
+  const value = fusionAlphaSetting(setting);
+  if (value === ADAPTIVE_ALPHA) return adaptiveAlpha(signals, weights);
+  return { alpha: value, reason: "fixed" };
 }
 
 // [{ id, score }] in rank order -> Map(id -> { rank, score, norm }). With
@@ -140,10 +232,18 @@ function fuseRankings(options) {
 }
 
 module.exports = {
+  ADAPTIVE_ALPHA,
+  ALPHA_REASONS,
+  DEFAULT_ADAPTIVE_WEIGHTS,
+  DEFAULT_ALPHA_SETTING,
   DEFAULT_FUSION_ALPHA,
   DEFAULT_FUSION_NORMALIZATION,
   FUSION_NORMALIZATIONS,
+  adaptiveAlpha,
+  adaptiveWeights,
   fuseRankings,
   fusionAlpha,
+  fusionAlphaSetting,
   fusionNormalization,
+  resolveAlpha,
 };
