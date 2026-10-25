@@ -2,6 +2,16 @@
 
 All notable changes to `@mfdaves/okf-mcp`. The format follows Keep a Changelog; versions follow SemVer. Until 1.0, minor versions may change defaults where this file says so.
 
+## 0.11.0-rc.2 — unreleased
+
+Three defects found by running 0.11.0-rc.1 against a real 560-concept catalog, fixed.
+
+### Fixed
+
+- One oversized document no longer turns hybrid search off for a whole catalog. A generated contract dense with identifiers was longer than the embedding model accepts; the whole request failed and the server fell back to lexical-only search for every document. The client now plans requests with a cautious estimate (one token per 3 characters) and truncates at 24,000 characters by default instead of 32,000. If the provider still refuses a request, the client splits the batch until the refused document stands alone, retries it once at half its length (never below 2,000 characters), and skips it only if it is refused again. A skipped document is listed in the preparation receipt as `skipped: [{ id, reason: "input_rejected" }]` and in `embedding_status` and the startup receipt as `skipped: { count, ids }`. Every other document is embedded and search stays hybrid. On the real catalog: 560 of 560 embedded, none skipped, one retried at half length. The default change gives a new embedder id, so existing vector caches made with the default are rebuilt once.
+- Search mode `auto` is no longer stopped by one long document that happens to contain every word of the query. It used to fall back to any-word matches only when no document matched every word. Now the documents that match every word come first, in their usual order, and documents that match some of the words follow them whenever fewer than `autoFill` documents match every word (default 3). In that case `mode` is `auto`; `allTermsTotal`, `coverage` and `lowConfidence` mean what they meant before. Set `autoFill` as a library search option or in `okf.project.yaml`; `autoFill: 0` restores the old rule. It is not a tool argument. Lexical Recall@5 on the fixtures: 0.742 → 0.823 and 0.760 → 0.827. Hybrid results on the fixtures are unchanged.
+- `get_context` now stays within its token budget. Only the text of the sections used to be counted, so a response was 1.6 to 1.7 times the budget. `usedTokens` now measures the whole JSON response: the candidate concepts, query terms, counters and every section field. Sections are packed into what is left. When even the other fields do not fit, the candidate list is shortened from the end, and the new `omittedConcepts` field counts what was dropped. The tool returns compact JSON, so the text an agent receives is exactly what was measured. A section's `tokens` field now counts the whole section object. Because the old overhead is now charged to the budget, fewer sections fit: the fixtures' section-anchor hit at 1,200 tokens went from 1.000 to 0.900 and from 0.791 to 0.721.
+
 ## 0.11.0-rc.1 — 2026-10-24
 
 The first usable version of the "knowledge runtime for autonomous agents" direction described in `docs/plan-1.0.md`. Measured on the two committed retrieval fixtures (`test/fixtures/retrieval/`, 297 pre-registered queries, Italian and English); numbers are in the committed reports under `test/fixtures/retrieval/reports/`.
