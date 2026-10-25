@@ -240,7 +240,8 @@ function evaluateQuery(index, query, context) {
     .filter((entry) => entry.grade >= 1)
     .map((entry) => `okf://${entry.bundle}/${entry.id}`);
   const top = new Set(candidates.slice(0, RECALL_CUTOFF));
-  const sectionTokens = result.sections.reduce((sum, section) => sum + section.tokens, 0);
+  // usedTokens covers the whole response as serialised (0.11.0-rc.2).
+  const responseTokens = Math.ceil(JSON.stringify(result).length / 4);
   return {
     id: query.id,
     split: query.split || null,
@@ -258,8 +259,9 @@ function evaluateQuery(index, query, context) {
     usedTokens: result.usedTokens,
     sections: result.sections.length,
     totalSections: result.totalSections,
-    // Over budget, or the reported total disagrees with the sections it sums.
-    budgetExceeded: result.usedTokens > context.budgetTokens || sectionTokens !== result.usedTokens,
+    // Over budget, or the reported total disagrees with the response it measures.
+    budgetExceeded:
+      result.usedTokens > context.budgetTokens || responseTokens !== result.usedTokens,
     truncated: result.truncated,
     mode: result.mode,
     lowConfidence: result.lowConfidence,

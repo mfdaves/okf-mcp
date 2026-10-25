@@ -726,11 +726,19 @@ ordered by the candidate concept rank; within a concept, sections whose text
 matches the query come before sections found only through that metadata, and
 a strongly matching section may move ahead of up to four weaker concepts.
 Sections are deduplicated and packed in that order while they fit
-`budgetTokens` (default 1,200, never exceeded). The budget covers what is
-delivered: each section costs `ceil(characters / 4)` of the JSON of its
-`uri`, `anchor`, `heading`, `title`, `text`, `truncated` and `provenance`; the
-scoring fields (`tokens`, `score`, `relevance`, `coverage`, `matchedTerms`)
-are not counted, and the estimator is named in the response. Provenance is
+`budgetTokens` (default 1,200, never exceeded). The budget covers the whole
+response as delivered: `usedTokens` is `ceil(characters / 4)` of the entire
+JSON result, every field included (the candidate `concepts`, `queryTerms`,
+the counters and every section field, scoring fields too), and `get_context`
+returns that JSON compact, so the text an agent receives is what was
+measured. Sections are packed into what the rest of the response leaves;
+when even the fields around them do not fit, the candidate concept list is
+shortened from its tail (`omittedConcepts`), and only a budget smaller than
+the query echo and the field names can be exceeded (then no section and no
+concept is returned). Each section's `tokens` is the same estimate for that
+section, and the estimator is named in the response. Before 0.11.0-rc.2 only
+the sections' content fields were counted, so responses ran at 1.6-1.7 times
+the budget. Provenance is
 `compact` by default (`status`, `freshness`, `verified` as a boolean,
 `sourceCount`); `provenance: "full"` returns `status`, `staleAfter`,
 `freshness`, `trustTier`, `verified`, `generated` and `sources`, and

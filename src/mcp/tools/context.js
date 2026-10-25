@@ -7,7 +7,6 @@ const {
   defineTool,
   expectedToolOperation,
   integerParameter,
-  jsonContent,
   stringParameter,
 } = require("../registry");
 const { QUERY_GUIDANCE, tools: searchTools } = require("./search");
@@ -22,13 +21,17 @@ const CONTEXT_DESCRIPTION =
   "concepts); their sections are ranked, deduplicated and packed in rank order while they fit " +
   "budgetTokens. Ranking follows the candidate concept order; within a concept, sections whose " +
   "own text matches the query come first, and a strongly matching section may move ahead of a " +
-  "few weaker concepts. The budget covers what is delivered: each section costs " +
-  "ceil(characters / 4) of the JSON of its uri, anchor, heading, title, text, truncated and " +
-  "provenance (the scoring fields are not counted); the estimator is named in the response, " +
-  "the sum is usedTokens and the budget is never exceeded. Provenance is compact by default " +
+  "few weaker concepts. The budget covers what is delivered, the whole response as returned: " +
+  "usedTokens is ceil(characters / 4) of the entire JSON result, every field included (the " +
+  "candidate concepts, queryTerms, the counters and every section field), and the budget is " +
+  "never exceeded unless it is smaller than the query echo and the field names alone; when " +
+  "the fields around the sections do not fit, the candidate concept list is shortened from " +
+  "its tail (omittedConcepts). Each section's tokens is the same estimate for that section; " +
+  "the estimator is named in the response. Provenance is compact by default " +
   "(status, freshness, verified, sourceCount); set provenance to full for staleAfter, " +
   "trustTier, the verified and generated events and the sources, or to none to spend all of " +
-  "the budget on text. When the best section alone is larger than the budget it is returned on its own, its " +
+  "the budget on text. When the best section alone is larger than what the rest of the response " +
+  "leaves it is returned on its own, its " +
   "text cut at a sentence boundary, with truncated true; omittedSections counts what did not " +
   "fit. Each section carries uri, " +
   "anchor (the concept URI for the text before the first heading, uri#heading-slug otherwise; " +
@@ -82,7 +85,7 @@ const tools = {
             { minLength: 1, maxLength: MAX_QUERY_CHARACTERS },
           ),
           budgetTokens: integerParameter(
-            "Token budget for the packed sections, estimated as ceil(characters / 4) and never exceeded.",
+            "Token budget for the whole response, estimated as ceil(characters / 4) of its JSON and never exceeded.",
             1,
             CONTEXT_LIMITS.budgetTokens.maximum,
             CONTEXT_LIMITS.budgetTokens.default,
@@ -108,12 +111,13 @@ const tools = {
       ),
       ["query"],
     ),
-    handler: async (state, args) =>
-      jsonContent(
-        await expectedToolOperation(() => assembleContext(state.index, args), {
-          translateTypeError: true,
-        }),
-      ),
+    // Compact JSON: the text returned is the serialisation usedTokens measures.
+    handler: async (state, args) => {
+      const result = await expectedToolOperation(() => assembleContext(state.index, args), {
+        translateTypeError: true,
+      });
+      return { content: [{ type: "text", text: JSON.stringify(result) }] };
+    },
   },
 };
 

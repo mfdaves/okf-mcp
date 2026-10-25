@@ -52,33 +52,28 @@ function note(title, body, extra) {
   return `---\ntype: Note\ntitle: "${title}"\ndescription: "About ${title}."\n${extra || ""}---\n\n# ${title}\n\n${body}\n`;
 }
 
-// A section's delivered size: its content fields serialised, scoring fields left out.
+// What is delivered, as the budget counts it (0.11.0-rc.2): the compact JSON of the
+// whole value, every field included.
 const SCORING_FIELDS = ["tokens", "score", "relevance", "matchedTerms", "coverage"];
-const serialisedTokens = (section) => {
-  const content = Object.assign({}, section);
-  SCORING_FIELDS.forEach((name) => {
-    delete content[name];
-  });
-  assert.deepEqual(
-    Object.keys(content),
-    CONTEXT_CONTENT_FIELDS.filter((name) => name in section),
-  );
-  return estimateContextTokens(JSON.stringify(content));
-};
+const serialisedTokens = (value) => estimateContextTokens(JSON.stringify(value));
+// The response around its sections.
+const frameTokens = (result) => serialisedTokens(Object.assign({}, result, { sections: [] }));
 
 const checkBudget = (result, budget, limit) => {
-  assert.ok(result.usedTokens <= budget, `used ${result.usedTokens} > budget ${budget}`);
-  assert.equal(
-    result.usedTokens,
-    result.sections.reduce((sum, section) => sum + section.tokens, 0),
+  assert.equal(result.usedTokens, serialisedTokens(result), "usedTokens is the whole response");
+  // Only a budget below the fixed fields (query echo, field names) can be exceeded, and
+  // then nothing but those fields is returned.
+  assert.ok(
+    result.usedTokens <= budget || (!result.sections.length && !result.concepts.length),
+    `used ${result.usedTokens} > budget ${budget}`,
   );
   result.sections.forEach((section) => {
     assert.equal(section.tokens, serialisedTokens(section));
+    assert.deepEqual(
+      Object.keys(section).filter((name) => !SCORING_FIELDS.includes(name)),
+      CONTEXT_CONTENT_FIELDS.filter((name) => name in section),
+    );
   });
-  assert.ok(
-    result.sections.reduce((sum, section) => sum + serialisedTokens(section), 0) <= budget,
-    "the serialised sections fit the budget",
-  );
   assert.ok(result.sections.length <= limit);
 };
 
@@ -133,6 +128,42 @@ test("the budget is never exceeded across random budgets, limits and queries", (
     () => assembleContext(index, { query: "scarponi", provenance: "verbose" }),
     /provenance must be one of compact, full, none/,
   );
+});
+
+test("the whole serialised response fits random budgets, in the library and over MCP", async () => {
+  const { tools } = require("../src/mcp/tools/context");
+  const index = buildProjectIndex(ALPINARIA);
+  const sidecar = fixtureQueries("alpinaria");
+  const random = mulberry32(SEED + 1);
+  for (let round = 0; round < 120; round += 1) {
+    const query = sidecar.queries[Math.floor(random() * sidecar.queries.length)];
+    const budgetTokens = 150 + Math.floor(random() * 3850);
+    const options = {
+      query: query.query,
+      budgetTokens,
+      asOf: sidecar.as_of,
+      conceptLimit: 1 + Math.floor(random() * 50),
+      provenance: ["compact", "full", "none"][round % 3],
+    };
+    const response = assembleContext(index, options);
+    assert.ok(
+      Math.ceil(JSON.stringify(response).length / 4) <= budgetTokens,
+      `${query.id} at ${budgetTokens}`,
+    );
+    assert.equal(response.usedTokens, Math.ceil(JSON.stringify(response).length / 4));
+    assert.equal(response.omittedConcepts + response.concepts.length <= options.conceptLimit, true);
+    if (round % 10 === 0) {
+      const returned = await tools.get_context.handler({ index }, options);
+      const text = returned.content[0].text;
+      assert.ok(Math.ceil(text.length / 4) <= budgetTokens, "the MCP text fits the budget");
+      assert.deepEqual(JSON.parse(text), response);
+    }
+  }
+  // Below the fixed fields nothing else is returned and usedTokens says what it costs.
+  const tiny = assembleContext(index, { query: "scarponi donna", budgetTokens: 1 });
+  assert.deepEqual([tiny.sections, tiny.concepts], [[], []]);
+  assert.ok(tiny.omittedConcepts > 0);
+  assert.equal(tiny.usedTokens, serialisedTokens(tiny));
 });
 
 test("assembly is deterministic and ordered by concept rank, own text first, with a bounded lift", () => {
@@ -191,7 +222,9 @@ test("assembly is deterministic and ordered by concept rank, own text first, wit
     "totalSections",
     "omittedSections",
     "truncated",
+    "omittedConcepts",
   ]);
+  assert.equal(first.omittedConcepts, 0);
 });
 
 test("identical sections are packed once and the first in rank order wins", (t) => {
@@ -230,32 +263,37 @@ test("a best section larger than the budget is returned alone, cut at a sentence
   const findings = full.sections.find((section) => section.anchor.endsWith("#findings"));
   assert.ok(findings && !findings.truncated && findings.tokens > 100);
   assert.equal(full.sections[0].anchor, findings.anchor, "the long section ranks first");
-  const budget = 120;
   const lean = { query: "heron migration timing", includeProvenance: false };
+  // The response around the sections (query echo, candidate concepts, counters).
+  const frame = frameTokens(assembleContext(index, Object.assign({ budgetTokens: 5000 }, lean)));
+  const budget = frame + 120;
   const cut = assembleContext(index, Object.assign({ budgetTokens: budget }, lean));
+  checkBudget(cut, budget, 20);
   assert.equal(cut.truncated, true);
   assert.equal(cut.sections.length, 1);
   assert.equal(cut.omittedSections, full.totalSections - 1);
+  assert.equal(cut.omittedConcepts, 0);
   const [section] = cut.sections;
   assert.equal(section.anchor, findings.anchor);
   assert.equal(section.truncated, true);
-  assert.ok(section.tokens <= budget);
-  assert.equal(cut.usedTokens, section.tokens);
   assert.ok(findings.text.startsWith(section.text));
   assert.match(section.text, /timing\.$/, "ends at a sentence boundary");
-  assert.equal(section.tokens, serialisedTokens(section));
   // The fields around the text take their share; the text fills at least half of the rest.
   const overhead = serialisedTokens(Object.assign({}, section, { text: "" }));
-  assert.ok(section.text.length > (budget - overhead) * 4 * 0.5);
+  assert.ok(section.text.length > (budget - frame - overhead) * 4 * 0.5);
   // A budget below any sentence falls back to a word boundary, still within budget.
-  const small = assembleContext(index, Object.assign({ budgetTokens: overhead + 6 }, lean));
+  const smallBudget = frame + overhead + 8;
+  const small = assembleContext(index, Object.assign({ budgetTokens: smallBudget }, lean));
+  checkBudget(small, smallBudget, 20);
   assert.equal(small.sections.length, 1);
-  assert.ok(small.sections[0].tokens <= overhead + 6);
   assert.ok(findings.text.startsWith(small.sections[0].text));
   assert.doesNotMatch(small.sections[0].text, /\s$/);
-  // Below the fields themselves nothing is returned, and nothing is over budget.
-  const none = assembleContext(index, Object.assign({ budgetTokens: overhead - 1 }, lean));
-  assert.deepEqual([none.sections, none.usedTokens, none.truncated], [[], 0, false]);
+  // Below the section's own fields no section is returned, and nothing is over budget.
+  const noneBudget = frame + overhead - 4;
+  const none = assembleContext(index, Object.assign({ budgetTokens: noneBudget }, lean));
+  checkBudget(none, noneBudget, 20);
+  assert.deepEqual([none.sections, none.truncated], [[], false]);
+  assert.ok(none.usedTokens <= noneBudget);
   assert.equal(none.omittedSections, none.totalSections);
 });
 
@@ -282,7 +320,8 @@ test("filters, mode and asOf are honoured and the preamble carries the lead fiel
     assert.ok(index.byUri.get(section.uri).path.startsWith("decisions/"));
   });
   const none = assembleContext(index, { query: "scarponi donna", bundle: "missing" });
-  assert.deepEqual([none.sections, none.concepts, none.usedTokens], [[], [], 0]);
+  assert.deepEqual([none.sections, none.concepts], [[], []]);
+  assert.equal(none.usedTokens, serialisedTokens(none));
   const all = assembleContext(index, { query: "scarponi trekking donna", mode: "all" });
   assert.equal(all.mode, "all");
   const any = assembleContext(index, { query: "scarponi trekking donna", mode: "any" });
@@ -333,7 +372,7 @@ test("provenance comes from the concept's v0.2 signals and can be left out", () 
   assert.equal(DEFAULT_PROVENANCE, "compact");
   const result = assembleContext(index, {
     query: "scarponi donna",
-    budgetTokens: 600,
+    budgetTokens: 1200,
     provenance: "full",
   });
   assert.ok(result.sections.length > 0);
@@ -363,7 +402,7 @@ test("provenance comes from the concept's v0.2 signals and can be left out", () 
   });
   const bare = assembleContext(index, {
     query: "scarponi donna",
-    budgetTokens: 600,
+    budgetTokens: 1200,
     includeProvenance: false,
   });
   bare.sections.forEach((section) => {
@@ -377,7 +416,7 @@ test("provenance comes from the concept's v0.2 signals and can be left out", () 
   );
   const compact = assembleContext(index, {
     query: "scarponi donna",
-    budgetTokens: 600,
+    budgetTokens: 1200,
     provenance: "compact",
   });
   compact.sections.forEach((section) => {
@@ -390,9 +429,12 @@ test("provenance comes from the concept's v0.2 signals and can be left out", () 
     });
   });
   // Compact is the default; none is the same as includeProvenance false.
-  assert.deepEqual(assembleContext(index, { query: "scarponi donna", budgetTokens: 600 }), compact);
   assert.deepEqual(
-    assembleContext(index, { query: "scarponi donna", budgetTokens: 600, provenance: "none" }),
+    assembleContext(index, { query: "scarponi donna", budgetTokens: 1200 }),
+    compact,
+  );
+  assert.deepEqual(
+    assembleContext(index, { query: "scarponi donna", budgetTokens: 1200, provenance: "none" }),
     bare,
   );
 });

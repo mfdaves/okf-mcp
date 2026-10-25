@@ -18,18 +18,24 @@
 // fall back to document order. Sections are deduplicated by anchor and by
 // identical text hash and packed greedily in that order while they fit.
 //
-// The budget covers what is delivered, not only the text: a section costs
-// ceil(characters / 4) of the JSON serialisation of its content fields (uri,
-// anchor, heading, title, text, truncated, and provenance when included);
-// the scoring fields (tokens, score, relevance, matchedTerms, coverage) are
-// not counted. The estimator is named in the result and the budget is never
-// exceeded. Provenance is `compact` by default (status, freshness, verified,
-// sourceCount); `provenance: "full"` adds staleAfter, trustTier, the verified
-// and generated events and the sources, and `provenance: "none"` (or
-// `includeProvenance: false`) leaves it out. When the best
-// section alone is larger than the budget it is returned on its own with its
-// text cut at a sentence boundary, and `truncated` says so; when not even its
-// fields without text fit, nothing is returned.
+// The budget covers the whole response as delivered (0.11.0-rc.2): usedTokens
+// is ceil(characters / 4) of the JSON serialisation of the entire result,
+// every top-level field included (query, concepts, queryTerms, the counters,
+// usedTokens itself) and every section field (scoring fields too). Sections
+// are packed into what the rest of the response leaves; a section's `tokens`
+// is the same estimate of the section object alone. The estimator is named in
+// the result and the budget is never exceeded, unless it is smaller than the
+// response's fixed fields (the query echo and field names), in which case no
+// section and no concept is returned and usedTokens says how large the
+// response is. When the fields around the sections do not fit, the candidate
+// concept list is shortened from its tail first (omittedConcepts counts the
+// concepts left out). Provenance is `compact` by default (status, freshness,
+// verified, sourceCount); `provenance: "full"` adds staleAfter, trustTier,
+// the verified and generated events and the sources, and `provenance: "none"`
+// (or `includeProvenance: false`) leaves it out. When the best section alone
+// is larger than what is left it is returned on its own with its text cut at
+// a sentence boundary, and `truncated` says so; when not even its fields
+// without text fit, no section is returned.
 //
 // The result is structured JSON; catalog text appears only inside section
 // fields (B-6, C-3). Provenance per section is the concept's v0.2 signals.
@@ -83,7 +89,9 @@ const DEFAULT_PROVENANCE = "compact";
 // test/fixtures/retrieval/reports/context-0.11-2026-10-24).
 const DEFAULT_CONCEPT_LIFT = 4;
 const MAX_CONCEPT_LIFT = 10;
-// The delivered fields a section's token cost is measured on.
+// A section's content fields (the scoring fields are tokens, score, relevance,
+// matchedTerms and coverage). Since 0.11.0-rc.2 every field counts against
+// the budget; the list stays exported for library callers.
 const CONTENT_FIELDS = Object.freeze([
   "uri",
   "anchor",
@@ -98,20 +106,34 @@ function estimateContextTokens(text) {
   return Math.ceil(String(text || "").length / CHARS_PER_TOKEN);
 }
 
-// Characters of the JSON serialisation of a section's content fields.
-function contentLength(section) {
-  const content = {};
-  CONTENT_FIELDS.forEach((name) => {
-    if (section[name] !== undefined) {
-      content[name] = section[name];
-    }
-  });
-  return JSON.stringify(content).length;
+// Characters of a value as delivered (compact JSON).
+function serializedLength(value) {
+  return JSON.stringify(value).length;
 }
 
-// The token cost of a section as returned (see the header).
-function sectionCost(section) {
-  return Math.ceil(contentLength(section) / CHARS_PER_TOKEN);
+// A section's `tokens` is part of what it costs: settle it on the estimate of
+// the section object including its own digits. Returns the section's length.
+function settleTokens(section) {
+  let tokens = 0;
+  for (;;) {
+    section.tokens = tokens;
+    const length = serializedLength(section);
+    const next = Math.ceil(length / CHARS_PER_TOKEN);
+    if (next <= tokens) return length;
+    tokens = next;
+  }
+}
+
+// The whole response's estimate with usedTokens set to it (a fixed point:
+// usedTokens is part of the response it measures).
+function settleUsedTokens(response) {
+  let used = 0;
+  for (;;) {
+    response.usedTokens = used;
+    const next = Math.ceil(serializedLength(response) / CHARS_PER_TOKEN);
+    if (next <= used) return used;
+    used = next;
+  }
 }
 
 function integerOption(value, name, fallback, maximum) {
@@ -321,15 +343,16 @@ function truncateText(text, maxChars) {
   return text.slice(0, cut).trimEnd();
 }
 
-// The best section cut to fit the budget once serialised, or null when its
-// fields without any text already exceed it. JSON escaping can make the text
-// cost more than its length, so the allowance shrinks until it fits.
-function truncatedSection(build, text, budgetTokens) {
-  const limit = budgetTokens * CHARS_PER_TOKEN;
-  let allowance = limit - contentLength(build("", true));
+// The best section cut to fit `limitChars` once serialised (its tokens
+// settled), or null when its fields without any text already exceed it. JSON
+// escaping can make the text cost more than its length, so the allowance
+// shrinks until it fits.
+function truncatedSection(build, text, limitChars) {
+  const empty = build("", true);
+  let allowance = limitChars - settleTokens(empty);
   while (allowance > 0) {
     const section = build(truncateText(text, allowance), true);
-    const excess = contentLength(section) - limit;
+    const excess = settleTokens(section) - limitChars;
     if (excess <= 0) {
       return section;
     }
@@ -338,40 +361,66 @@ function truncatedSection(build, text, budgetTokens) {
   return null;
 }
 
-// Greedy by rank: a section is taken when its serialised cost fits what is
-// left of the budget and the limit, otherwise skipped. A best section larger
-// than the whole budget is returned alone, cut.
-function packSections(ranked, budgetTokens, limit, build) {
+// Greedy by rank into `availableChars` (what the rest of the response leaves
+// of the budget): a section is taken when its serialised length, plus the
+// comma that separates it from the previous one, fits what is left and the
+// limit allows it, otherwise skipped. A best section larger than everything
+// available is returned alone, cut.
+function packSections(ranked, availableChars, limit, build) {
   if (ranked.length) {
     const best = ranked[0];
-    if (sectionCost(build(best, best.entry.section.text, false)) > budgetTokens) {
+    const whole = build(best, best.entry.section.text, false);
+    if (settleTokens(whole) > availableChars) {
       const cut = truncatedSection(
         (text, isCut) => build(best, text, isCut),
         best.entry.section.text,
-        budgetTokens,
+        availableChars,
       );
       if (!cut) {
-        return { packed: [], usedTokens: 0, omitted: ranked.length, truncated: false };
+        return { packed: [], omitted: ranked.length, truncated: false };
       }
-      cut.tokens = sectionCost(cut);
-      return { packed: [cut], usedTokens: cut.tokens, omitted: ranked.length - 1, truncated: true };
+      return { packed: [cut], omitted: ranked.length - 1, truncated: true };
     }
   }
   const packed = [];
-  let usedTokens = 0;
+  let used = 0;
   let omitted = 0;
   ranked.forEach((candidate) => {
     const section = build(candidate, candidate.entry.section.text, false);
-    const tokens = sectionCost(section);
-    if (packed.length >= limit || usedTokens + tokens > budgetTokens) {
+    const cost = settleTokens(section) + (packed.length ? 1 : 0);
+    if (packed.length >= limit || used + cost > availableChars) {
       omitted += 1;
       return;
     }
-    section.tokens = tokens;
     packed.push(section);
-    usedTokens += tokens;
+    used += cost;
   });
-  return { packed, usedTokens, omitted, truncated: false };
+  return { packed, omitted, truncated: false };
+}
+
+// The response around the sections, sized for the worst case of the fields
+// packing can still change (usedTokens at the full budget, every section
+// omitted, truncated false), so what it leaves is a safe allowance. The
+// candidate list is shortened from its tail while even that does not fit.
+function responseFrame(fields, candidates, budgetTokens, rankedCount) {
+  const limitChars = budgetTokens * CHARS_PER_TOKEN;
+  const frame = (concepts) =>
+    Object.assign({}, fields, {
+      usedTokens: budgetTokens,
+      concepts,
+      sections: [],
+      totalSections: rankedCount,
+      omittedSections: rankedCount,
+      truncated: false,
+      omittedConcepts: candidates.length - concepts.length,
+    });
+  let concepts = candidates;
+  let length = serializedLength(frame(concepts));
+  while (length > limitChars && concepts.length) {
+    concepts = concepts.slice(0, -1);
+    length = serializedLength(frame(concepts));
+  }
+  return { concepts, availableChars: Math.max(0, limitChars - length) };
 }
 
 function sectionResult(candidate, text, truncated, analysis, provenanceMode, signalsOf) {
@@ -450,24 +499,36 @@ function assembleContext(index, options) {
           signalsOf,
         })
       : [];
-  const packing = packSections(ranked, budgetTokens, limit, (candidate, text, truncated) =>
-    sectionResult(candidate, text, truncated, analysis, provenanceMode, signalsOf),
-  );
-  return {
+  const fields = {
     query,
     budgetTokens,
     estimator: CONTEXT_TOKEN_ESTIMATOR,
-    usedTokens: packing.usedTokens,
+    usedTokens: 0,
     mode: response.mode,
     lowConfidence: Boolean(response.lowConfidence),
     queryTerms: response.queryTerms || [],
     droppedTerms: response.droppedTerms || [],
-    concepts: candidates,
+  };
+  const frame = responseFrame(fields, candidates, budgetTokens, ranked.length);
+  const packing = packSections(ranked, frame.availableChars, limit, (candidate, text, truncated) =>
+    sectionResult(candidate, text, truncated, analysis, provenanceMode, signalsOf),
+  );
+  const result = Object.assign(fields, {
+    concepts: frame.concepts,
     sections: packing.packed,
     totalSections: ranked.length,
     omittedSections: packing.omitted,
     truncated: packing.truncated,
-  };
+    omittedConcepts: candidates.length - frame.concepts.length,
+  });
+  // The frame was sized for the worst case, so this holds; the loop is a
+  // guard that keeps the promise if a field ever grows past that estimate.
+  while (settleUsedTokens(result) > budgetTokens && result.sections.length) {
+    result.sections.pop();
+    result.omittedSections += 1;
+    if (!result.sections.length) result.truncated = false;
+  }
+  return result;
 }
 
 // Defaults and ceilings of the sizing options, for the tool schema and CLI.
