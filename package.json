@@ -52,6 +52,7 @@
     "okf.project.yaml",
     "server.json",
     "README.md",
+    "CHANGELOG.md",
     "LICENSE"
   ],
   "engines": {

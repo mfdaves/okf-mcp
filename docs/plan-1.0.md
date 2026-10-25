@@ -6,7 +6,7 @@ Status: revision 9, 2026-10-25: v0.11.0-rc.2 and v0.12.0-rc.1 cut; WP3c-2 done w
 
 Each work package (WP) in section 7 is self-contained: goal, scope, deliverables, acceptance tests, budgets, dependencies, and the files it owns. An agent assigned a WP needs this document, the repo, and the evidence folder; nothing else. Requirement IDs (`R-xx`, `W-xx`, ...) are the vocabulary for commits, tests, and reviews. Section 12 says how to brief an agent and which WPs may run in parallel.
 
-Evidence lives in a temporary local folder (`seo-eval/` fixture, baseline, prototype runs, `results/abstain-signal.json`; `search010/` lexical prototype, stemmer comparison, `search010/scale/` 5k benchmarks; `dl/` papers). That folder is not permanent; WP0 moves the durable parts into the repo. Numbers quoted below were measured on the maintainer's machine (Node 24.17) against commit `66676af`.
+Early evidence (the first SEO fixture and baseline, prototype runs, the abstention-signal measurement, the lexical prototype and stemmer comparison, 5k benchmarks, downloaded papers) lived in a temporary local folder; WP0 moved the durable parts into the repo under `test/fixtures/retrieval/`. Numbers quoted below were measured on the maintainer's machine (Node 24.17) against commit `66676af`.
 
 ## 1. Problem and vision
 
