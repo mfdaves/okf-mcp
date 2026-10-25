@@ -2,7 +2,7 @@
 
 All notable changes to `@mfdaves/okf-mcp`. The format follows Keep a Changelog; versions follow SemVer. Until 1.0, minor versions may change defaults where this file says so.
 
-## 0.11.0-rc.2 — unreleased
+## 0.11.0-rc.2 — 2026-10-25
 
 Three defects found by running 0.11.0-rc.1 against a real 560-concept catalog, fixed.
 
