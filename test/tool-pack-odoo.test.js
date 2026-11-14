@@ -157,7 +157,15 @@ test("the okf-odoo tool pack answers over HTTP for odoo.read principals with the
     body: INITIALIZE_BODY,
   });
   assert.equal(challenge.status, 401);
-  assert.ok(challenge.headers["www-authenticate"].includes('scope="okf.read okf.write odoo.read"'));
+  // Core scopes, then the ones the loaded pack declares, each once in order.
+  const { okfToolPack } = require(path.join(ODOO, "src", "tool-pack.js"));
+  const advertised = [
+    ...new Set(
+      ["okf.read", "okf.write"].concat(Object.values(okfToolPack.tools).map((tool) => tool.scope)),
+    ),
+  ];
+  assert.ok(advertised.includes("odoo.read"));
+  assert.ok(challenge.headers["www-authenticate"].includes(`scope="${advertised.join(" ")}"`));
 
   // Without odoo.read the tools are neither listed nor callable.
   const plain = await connectHttp(t, server.url, { token: "tok-plain-user" });

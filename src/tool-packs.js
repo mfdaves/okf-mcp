@@ -24,7 +24,7 @@
 
 const { fromJsonSchema } = require("@modelcontextprotocol/server");
 
-const { boundedErrorDetails, publicErrorCode } = require("./error-details");
+const { TOOL_PACK_DETAILS, boundedErrorDetails, publicErrorCode } = require("./error-details");
 const { loadInstalledPackage } = require("./producers");
 
 const TOOL_NAME = /^[a-z][a-z0-9_]{2,63}$/;
@@ -321,7 +321,11 @@ async function callPackTool(pack, tool, args, principal, options) {
     if (config.signal?.aborted) return failure(tool.name, "tool_pack_cancelled");
     const code = publicErrorCode(error);
     if (!code) return failure(tool.name, "tool_pack_execution_failed");
-    return failure(tool.name, code, boundedErrorDetails(error, [...hidden, ...pack.secrets]));
+    return failure(
+      tool.name,
+      code,
+      boundedErrorDetails(error, [...hidden, ...pack.secrets], TOOL_PACK_DETAILS),
+    );
   } finally {
     clearTimeout(timer);
   }

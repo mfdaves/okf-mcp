@@ -67,7 +67,12 @@ exports.okfToolPack = {
       description: "Fail in the requested way.",
       annotations,
       inputSchema: schema(
-        { mode: { type: "string", enum: ["coded", "plain", "badcode", "secret", "throwstring"] } },
+        {
+          mode: {
+            type: "string",
+            enum: ["coded", "plain", "badcode", "secret", "throwstring", "long"],
+          },
+        },
         ["mode"],
       ),
       scope: "fake.read",
@@ -86,6 +91,10 @@ exports.okfToolPack = {
           };
         }
         if (args.mode === "badcode") error.code = "Access Denied";
+        if (args.mode === "long") {
+          error.code = "query_error";
+          error.details = { short: "a".repeat(499), exact: "b".repeat(500), long: "c".repeat(501) };
+        }
         throw error;
       },
     },

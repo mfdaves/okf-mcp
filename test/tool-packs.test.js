@@ -10,6 +10,7 @@ const test = require("node:test");
 
 const { createMcpServer, createStateAsync, registerMcpInterface } = require("../src/mcp/server");
 const { runMcpHttpServer } = require("../src/mcp/http");
+const { TOOL_PACK_DETAILS, boundedErrorDetails } = require("../src/error-details");
 const { loadToolPacks } = require("../src/tool-packs");
 const { startFakeIntrospectionServer } = require("./fake-introspection-server");
 const {
@@ -188,6 +189,12 @@ test("over HTTP a principal sees pack tools by scope and passes its token as the
     assert.equal((await failure(mode)).code, "tool_pack_execution_failed", mode);
   }
   assert.equal((await failure("secret")).code, "tool_pack_secret_not_allowed");
+  // Detail strings up to 500 characters pass; longer ones are truncated.
+  const long = await failure("long");
+  assert.equal(long.code, "query_error");
+  assert.equal(long.details.short, "a".repeat(499));
+  assert.equal(long.details.exact, "b".repeat(500));
+  assert.equal(long.details.long, `${"c".repeat(499)}…`);
 
   for (const entry of seen) {
     assert.equal(entry.includes(SENTINEL), false, entry.slice(0, 200));
@@ -294,6 +301,33 @@ test("a tool that requires a subject token is offered only to authenticated HTTP
     loadToolPacks(project, { loader: async () => ({ okfToolPack }), env: {} }),
     (error) => error.code === "incompatible_tool_pack",
   );
+});
+
+test("error details: tool packs keep 500 characters and truncate, producers keep 200 and drop", () => {
+  const error = {
+    code: "query_error",
+    details: {
+      short: "a".repeat(499),
+      exact: "b".repeat(500),
+      long: "c".repeat(501),
+      secret: `${"d".repeat(600)} key-123`,
+      multiline: "line\nline",
+      nested: { a: 1 },
+      position: 12,
+    },
+  };
+  assert.deepEqual(boundedErrorDetails(error, ["key-123"], TOOL_PACK_DETAILS), {
+    short: "a".repeat(499),
+    exact: "b".repeat(500),
+    long: `${"c".repeat(499)}…`,
+    position: 12,
+  });
+  assert.equal(boundedErrorDetails(error, [], TOOL_PACK_DETAILS).long.length, 500);
+  // Producers (plan A9) are unchanged: at most 200 characters, longer dropped.
+  const producer = {
+    details: { fits: "e".repeat(200), over: "f".repeat(201), short: "a".repeat(499) },
+  };
+  assert.deepEqual(boundedErrorDetails(producer, []), { fits: "e".repeat(200) });
 });
 
 test("a pack call is bounded by its timeout and by the request's abort signal", async (t) => {
