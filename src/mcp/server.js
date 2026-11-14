@@ -213,6 +213,8 @@ function createState(bundleArgs, options) {
     languages: options?.languages || undefined,
     // "http" once an HTTP handler serves the state to many principals.
     transport: "stdio",
+    // Set by an HTTP handler: run before a call or resource read (plan I-2c).
+    refreshBeforeRead: null,
     // One tool-call queue per process: every McpServer built on this state
     // (one per stdio connection, one per HTTP request) runs its tool calls
     // through it, so calls from different sessions never interleave.
@@ -415,6 +417,20 @@ async function createStateAsync(bundleArgs, options) {
   });
 }
 
+// Runs a read of the index. With a refresher set (MCP over HTTP, plan I-2c)
+// the read goes through the call queue and the refresher runs first in the
+// same job, so the check is taken in arrival order with the calls; without
+// one (stdio) the read runs as before.
+function readIndex(state, read) {
+  if (!state.refreshBeforeRead) return read();
+  const current = state.callQueue.then(() => {
+    state.refreshBeforeRead();
+    return read();
+  });
+  state.callQueue = current.catch(() => {});
+  return current;
+}
+
 // One McpServer over shared state, advertising and serving the tools the
 // principal may use (the flags' principal when none is given, as over stdio).
 function registerMcpInterface(state, principal) {
@@ -432,7 +448,7 @@ function registerMcpInterface(state, principal) {
     },
   );
   const resources = new ResourceTemplate("okf://{+locator}", {
-    list: async () => listResources(state.index),
+    list: async () => readIndex(state, () => listResources(state.index)),
   });
   server.registerResource(
     "okf-documents",
@@ -441,7 +457,7 @@ function registerMcpInterface(state, principal) {
       description: "Markdown documents in the loaded Open Knowledge Format catalog.",
       mimeType: "text/markdown",
     },
-    async (uri) => readResource(state.index, uri.href),
+    async (uri) => readIndex(state, () => readResource(state.index, uri.href)),
   );
   registry.names
     .filter((name) => toolEnabled(registry.tools[name], state, caller))
@@ -460,6 +476,7 @@ function registerMcpInterface(state, principal) {
         async (args) => {
           const current = state.callQueue.then(async () => {
             try {
+              state.refreshBeforeRead?.();
               return await callTool(state, name, args, caller);
             } catch {
               return jsonContent(

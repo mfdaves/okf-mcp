@@ -442,6 +442,42 @@ test("only principals that may write see absolute server paths in list_bundles",
   assert.equal(writerBundles.payload[0].absoluteRoot, fs.realpathSync(root));
 });
 
+test("introspection load: at most 8 upstream calls at once and a negative cache", async (t) => {
+  const fake = await startFakeIntrospectionServer(CLIENT);
+  t.after(() => fake.close());
+  const server = await startServer(t, makeRepo(t), {
+    mode: "introspect",
+    url: fake.url,
+    issuer: ISSUER,
+  });
+  // A repeated bad token reaches the authorization server once.
+  for (let round = 0; round < 5; round += 1) {
+    assert.equal((await post(server, "tok-bad")).status, 401);
+  }
+  assert.equal(fake.callsFor("tok-bad"), 1);
+
+  // 100 distinct random tokens at once: at most 8 upstream calls in flight,
+  // the others answered 503 without detail and without reaching upstream.
+  fake.control.delayMs = 300;
+  const tokens = Array.from({ length: 100 }, () => crypto.randomBytes(16).toString("hex"));
+  const answers = await Promise.all(tokens.map((token) => post(server, token)));
+  assert.ok(fake.stats.maxInFlight <= 8, `maxInFlight ${fake.stats.maxInFlight}`);
+  const upstream = tokens.filter((token) => fake.callsFor(token) > 0).length;
+  const refused = answers.filter((answer) => answer.status === 401).length;
+  const unavailable = answers.filter((answer) => answer.status === 503);
+  assert.equal(refused, upstream);
+  assert.equal(refused + unavailable.length, 100);
+  assert.ok(unavailable.length > 0);
+  for (const answer of unavailable) {
+    assert.deepEqual(JSON.parse(answer.body), { error: "temporarily_unavailable" });
+  }
+
+  // Once the burst is over, introspection serves again.
+  fake.control.delayMs = 0;
+  fake.answer("tok-ok", activeAnswer());
+  assert.equal((await post(server, "tok-ok")).status, 200);
+});
+
 test("a token file grants the principals it lists", async (t) => {
   const root = makeRepo(t);
   const file = path.join(os.tmpdir(), `okf-tokens-${process.pid}-${Date.now()}.yaml`);

@@ -8,7 +8,7 @@ const test = require("node:test");
 
 const { main } = require("../src/cli");
 const { runMcpHttpServer } = require("../src/mcp/http");
-const { callJson, connectHttp } = require("./mcp-client");
+const { callJson, connectHttp, writeTokenFile } = require("./mcp-client");
 
 function concept(title, body) {
   return ["---", "type: Reference", `title: ${title}`, "---", "", `# ${title}`, "", body, ""].join(
@@ -117,6 +117,62 @@ function tokenFile(t) {
   );
   return file;
 }
+
+test("the refresh check runs only for index reads, in the call queue's order", async (t) => {
+  const root = makeRoot(t);
+  const events = [];
+  // A stand-in batch validator that records when each call runs.
+  const service = {
+    async validateChanges(input) {
+      events.push(`call ${input.changes[0].title}`);
+      await pause(20);
+      return { valid: true, status: "valid", changes: [] };
+    },
+  };
+  const file = writeTokenFile(t, [
+    { token: "tok", subject: "w", actor: "human:w", scopes: ["okf.read", "okf.write"] },
+  ]);
+  const server = await start(t, root, 0, {
+    allowWrite: true,
+    actor: "human:operator",
+    liveAuthoringService: service,
+    http: { port: 0, refreshIntervalMs: 0, auth: { mode: "tokens", file } },
+  });
+  const refresh = server.state.refreshIndex;
+  server.state.refreshIndex = () => {
+    events.push("refresh");
+    return refresh();
+  };
+  const clients = [];
+  for (let index = 0; index < 3; index += 1) {
+    clients.push(await connectHttp(t, server.url, { token: "tok" }));
+  }
+  // initialize, ping and tools/list never refresh; resource reads do.
+  await clients[0].ping();
+  await clients[0].listTools();
+  assert.deepEqual(events, []);
+  const listed = await clients[0].listResources();
+  await clients[0].readResource({ uri: listed.resources[0].uri });
+  assert.deepEqual(events, ["refresh", "refresh"]);
+
+  // Concurrent calls: each one's check runs right before it, in order.
+  events.length = 0;
+  await Promise.all(
+    clients.map((client, index) =>
+      client.callTool({
+        name: "okf_validate_changes",
+        arguments: {
+          changes: [{ op: "create", path: `x${index}.md`, type: "Reference", title: `t${index}` }],
+        },
+      }),
+    ),
+  );
+  assert.equal(events.length, 6, events.join(","));
+  for (let index = 0; index < 6; index += 2) {
+    assert.equal(events[index], "refresh", events.join(","));
+    assert.match(events[index + 1], /^call t\d$/, events.join(","));
+  }
+});
 
 test("--refresh-interval is parsed strictly", async (t) => {
   const calls = [];

@@ -5,7 +5,9 @@
 // client credentials (form-urlencoded before base64, RFC 6749 section
 // 2.3.1), reads `token` from a form body, and answers the JSON registered for
 // that token with `answer(token, json)`, else `{ "active": false }`. Every
-// request is recorded; `status` makes it answer that HTTP status instead.
+// request is recorded; `control.status` makes it answer that HTTP status
+// instead, `control.delayMs` holds each answer back, and `stats` counts the
+// requests in flight and the most seen at once.
 
 const http = require("node:http");
 
@@ -29,8 +31,14 @@ async function startFakeIntrospectionServer(options) {
   const answers = new Map();
   const requests = [];
   const sockets = new Set();
-  const control = { status: null };
+  const control = { status: null, delayMs: 0 };
+  const stats = { inFlight: 0, maxInFlight: 0 };
   const server = http.createServer(async (request, response) => {
+    stats.inFlight += 1;
+    stats.maxInFlight = Math.max(stats.maxInFlight, stats.inFlight);
+    response.once("close", () => {
+      stats.inFlight -= 1;
+    });
     const body = await readBody(request);
     const token = new URLSearchParams(body).get("token");
     requests.push({
@@ -40,6 +48,7 @@ async function startFakeIntrospectionServer(options) {
       authorized: request.headers.authorization === expectedAuthorization,
       token,
     });
+    if (control.delayMs) await new Promise((resolve) => setTimeout(resolve, control.delayMs));
     const send = (status, value) => {
       response.writeHead(status, { "content-type": "application/json" });
       response.end(JSON.stringify(value));
@@ -62,6 +71,7 @@ async function startFakeIntrospectionServer(options) {
     url: `http://127.0.0.1:${server.address().port}/introspect`,
     requests,
     control,
+    stats,
     answer(token, json) {
       answers.set(token, json);
     },

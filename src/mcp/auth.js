@@ -11,8 +11,9 @@
 //   OKF_INTROSPECTION_CLIENT_ID / OKF_INTROSPECTION_CLIENT_SECRET only. A
 //   token is accepted when `active` is true, `aud` equals the public MCP URL,
 //   `exp` is in the future and `scope` holds okf.read; the actor is
-//   human:<username>. Answers are cached by token hash until the earlier of
-//   `exp` and 60 s, so a revoked token can live that long here.
+//   human:<username>. Accepted answers are cached by token hash until the
+//   earlier of `exp` and 60 s, so a revoked token can live that long here;
+//   refused ones for 30 s. At most 8 introspections run at once.
 //
 // Token values never reach an error, a log line, a response or the MCP
 // request context: only their hash is kept.
@@ -36,7 +37,9 @@ const { KNOWN_SCOPES, READ_SCOPE } = require("./principal");
 
 const RESERVED_SCOPES = ["odoo.read"];
 const CACHE_TTL_MS = 60 * 1000;
-const CACHE_LIMIT = 10000;
+const NEGATIVE_CACHE_TTL_MS = 30 * 1000;
+const CACHE_LIMIT = 1000;
+const MAX_CONCURRENT_INTROSPECTIONS = 8;
 const INTROSPECTION_TIMEOUT_MS = 5000;
 const MAX_TOKEN_FILE_BYTES = 1024 * 1024;
 
@@ -181,25 +184,41 @@ function basicCredentials(clientId, clientSecret) {
   return Buffer.from(`${encode(clientId)}:${encode(clientSecret)}`).toString("base64");
 }
 
+// A bounded least-recently-used map of token hash to { result, until }.
+function lruCache(limit, now) {
+  const entries = new Map();
+  return {
+    get(key) {
+      const entry = entries.get(key);
+      if (!entry) return undefined;
+      entries.delete(key);
+      if (entry.until <= now()) return undefined;
+      entries.set(key, entry);
+      return entry;
+    },
+    set(key, entry) {
+      entries.delete(key);
+      if (entries.size >= limit) entries.delete(entries.keys().next().value);
+      entries.set(key, entry);
+    },
+  };
+}
+
+// Answers are cached by token hash in two bounded LRU caches: accepted ones
+// until the earlier of exp and 60 s, refused ones (inactive, wrong audience,
+// expired) for 30 s. Concurrent lookups of one token share one upstream
+// call, and at most `maxConcurrent` upstream calls run at once; a lookup
+// beyond that is answered as unavailable (503) instead of queued.
 function introspectionVerifier(options) {
   const { url, audience, clientId, clientSecret } = options;
   const fetchImpl = options.fetch || globalThis.fetch;
   const now = options.now || Date.now;
-  const cache = new Map();
+  const limit = options.cacheLimit || CACHE_LIMIT;
+  const maxConcurrent = options.maxConcurrent || MAX_CONCURRENT_INTROSPECTIONS;
+  const accepted = lruCache(limit, now);
+  const refused = lruCache(limit, now);
   const pending = new Map();
-
-  // A full cache drops expired answers, then the oldest ones.
-  function remember(hash, entry) {
-    if (cache.size >= CACHE_LIMIT) {
-      const time = now();
-      for (const [key, value] of cache) if (value.until <= time) cache.delete(key);
-      for (const key of cache.keys()) {
-        if (cache.size < CACHE_LIMIT) break;
-        cache.delete(key);
-      }
-    }
-    cache.set(hash, entry);
-  }
+  let inFlight = 0;
 
   async function introspect(token) {
     let response;
@@ -230,24 +249,33 @@ function introspectionVerifier(options) {
   }
 
   async function lookup(hash, token) {
-    const answer = await introspect(token);
-    const result = introspectionPrincipal(answer, audience, now() / 1000);
-    remember(hash, {
-      result,
-      until: Math.min(now() + CACHE_TTL_MS, result ? result.exp * 1000 : Number.POSITIVE_INFINITY),
-    });
-    return result;
+    inFlight += 1;
+    try {
+      const answer = await introspect(token);
+      const result = introspectionPrincipal(answer, audience, now() / 1000);
+      if (result) {
+        accepted.set(hash, { result, until: Math.min(now() + CACHE_TTL_MS, result.exp * 1000) });
+      } else {
+        refused.set(hash, { result: null, until: now() + NEGATIVE_CACHE_TTL_MS });
+      }
+      return result;
+    } finally {
+      inFlight -= 1;
+    }
   }
 
   return {
     async verifyAccessToken(token) {
       const hash = tokenHash(token);
-      const cached = cache.get(hash);
+      const cached = accepted.get(hash) || refused.get(hash);
       let result;
-      if (cached && cached.until > now()) {
+      if (cached) {
         result = cached.result;
       } else {
         if (!pending.has(hash)) {
+          if (inFlight >= maxConcurrent) {
+            throw new IntrospectionUnavailableError("too many introspections in flight");
+          }
           pending.set(
             hash,
             lookup(hash, token).finally(() => pending.delete(hash)),
@@ -294,6 +322,8 @@ function createHttpAuth(auth, options) {
       clientSecret,
       fetch: config.fetch,
       now: config.now,
+      cacheLimit: config.cacheLimit,
+      maxConcurrent: config.maxConcurrent,
     });
   }
   const bearer = { verifier, requiredScopes: [READ_SCOPE], resourceMetadataUrl };

@@ -303,7 +303,7 @@ okf --root /path/to/okf mcp --http
 | `--allowed-origin <origin>` | Another accepted browser `Origin` (hostname or origin URL); repeatable. Requests without an `Origin` header are not affected. |
 | `--auth tokens:<file>`, `--auth introspect:<url>` | Bearer authentication, see below. |
 | `--authorization-server <issuer>` | With introspection, the issuer named in the protected-resource metadata. |
-| `--refresh-interval <ms>` | Check the files for changes made outside okf-mcp before a request at most this often (default `2000`; `0` checks before every request). |
+| `--refresh-interval <ms>` | Check the files for changes made outside okf-mcp before a tool call or resource read at most this often (default `2000`; `0` checks before every one). |
 
 The server answers:
 
@@ -416,9 +416,11 @@ okf --root /srv/okf --write --actor process:okf-mcp --git-commit mcp --http \
   `403 insufficient_scope`. When the authorization server cannot be reached,
   times out (5 s) or answers anything but `200` with JSON, the request gets
   `503` with `{"error":"temporarily_unavailable"}` and no further detail.
-- Answers, accepted or not, are cached by the token's SHA-256 until the
-  earlier of `exp` and 60 seconds, so a revoked token keeps working for up to
-  a minute.
+- Answers are cached by the token's SHA-256 in two bounded caches: accepted
+  ones until the earlier of `exp` and 60 seconds (a revoked token keeps
+  working for up to a minute), refused ones for 30 seconds. At most 8
+  introspection requests run at once; a request that would need a ninth gets
+  `503` with `{"error":"temporarily_unavailable"}`.
 
 Token values never appear in a response, an error, a log line or the MCP
 request context; only their hash is kept.
@@ -426,8 +428,9 @@ request context; only their hash is kept.
 ### Index freshness
 
 Over HTTP the server re-reads files changed outside okf-mcp (for example by
-`git pull` or an editor) before a request, at most once per
-`--refresh-interval`. Changes are detected by file size and modification time,
+`git pull` or an editor) before a tool call or a resource read, at most once
+per `--refresh-interval`; `initialize`, `ping` and `tools/list` never trigger
+it. The check runs in the call queue, in the same order as the calls. Changes are detected by file size and modification time,
 as for writes. An unchanged check costs about 35 ms at 5,000 concepts.
 
 ### Behind a reverse proxy

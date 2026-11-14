@@ -138,20 +138,22 @@ async function sendWebResponse(res, response, extraHeaders) {
   }
 }
 
-// Plan I-2c: before an MCP request, when at least `intervalMs` has passed
-// since the last check, refresh the shared index from disk. The refresh runs
-// in the call queue, so no tool call sees the index change under it, and the
-// request waits for it, so it sees the files as they were when it arrived. A
-// failed refresh leaves the index as it was.
+// Plan I-2c: the refresher the server state runs before a call or resource
+// read that uses the index (never for initialize, ping or tools/list),
+// inside the call queue and in the same job as that read: when at least
+// `intervalMs` has passed since the last check, the shared index is
+// refreshed from disk. A failed refresh leaves the index as it was.
 function indexRefresher(state, intervalMs) {
   let checkedAt = Date.now();
-  return async () => {
+  return () => {
     const now = Date.now();
     if (now - checkedAt < intervalMs) return;
     checkedAt = now;
-    const settled = state.callQueue.then(() => state.refreshIndex()).catch(() => {});
-    state.callQueue = settled;
-    await settled;
+    try {
+      state.refreshIndex();
+    } catch {
+      // Served from the index it had.
+    }
   };
 }
 
@@ -164,7 +166,7 @@ function createMcpHttpHandler(state, options) {
   const config = options || {};
   // From now on many principals share this state (see GATES.runtimeRemote).
   state.transport = "http";
-  const refreshIfDue = indexRefresher(
+  state.refreshBeforeRead = indexRefresher(
     state,
     config.refreshIntervalMs ?? DEFAULT_REFRESH_INTERVAL_MS,
   );
@@ -222,7 +224,6 @@ function createMcpHttpHandler(state, options) {
       const tooLarge = jsonRpcError(413, -32600, "Request body too large.");
       return { response: tooLarge, headers, close: true };
     }
-    await refreshIfDue();
     // createMcpHandler hands authInfo to the factory as-is; it carries the
     // principal, never the bearer token.
     const authInfo = {
