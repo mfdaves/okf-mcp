@@ -282,6 +282,49 @@ function rollbackReceipt(plan, rollback, error) {
   };
 }
 
+// The validation receipt of a batch refused before planning finished (an
+// AuthoringPolicyError): nothing was inspected or staged.
+function invalidValidationReceipt(error, generated, gitCommit) {
+  return {
+    valid: false,
+    readyToApply: false,
+    applied: false,
+    filesChanged: false,
+    status: "invalid",
+    snapshot: {
+      checkedAt: generated.at,
+      timeOfCheck: true,
+      generatedBy: generated.by,
+      graphValidation: "not_run",
+    },
+    preconditions: {
+      allSatisfied: false,
+      revisions: [],
+      git: {
+        enabled: gitCommit,
+        ready: false,
+        repositoryStatus: "not_inspected",
+        repositoryRoot: null,
+        diagnostics: [],
+      },
+    },
+    generated,
+    durability: durabilityReceipt(null, false),
+    changes: [],
+    validation: policyValidation(error),
+    ...(error?.code ? { code: error.code } : {}),
+    ...(error && error.details !== undefined ? { details: error.details } : {}),
+    git: {
+      enabled: gitCommit,
+      repository: false,
+      repositoryRoot: null,
+      repositoryStatus: "not_inspected",
+      commitState: "not_attempted",
+      persistence: "none",
+    },
+  };
+}
+
 function validationReceipt(plan) {
   const git = {
     enabled: plan.gitPreflight.enabled,
@@ -319,6 +362,7 @@ function validationReceipt(plan) {
 module.exports = {
   candidateSummaries,
   durabilityReceipt,
+  invalidValidationReceipt,
   policyReceipt,
   policyValidation,
   preconditionsReceipt,

@@ -29,6 +29,7 @@ const {
   applySourcePatch,
   applyTagPatch,
   conceptConflictDetails,
+  authorValue,
   conceptIsManaged,
   nonEmptyString,
   normalizeBody,
@@ -45,8 +46,8 @@ const { enforceWritePolicy, resolveWritePolicy, withPolicyViolations } = require
 const {
   candidateSummaries,
   durabilityReceipt,
+  invalidValidationReceipt,
   policyReceipt,
-  policyValidation,
   preconditionsReceipt,
   rollbackReceipt,
   snapshotReceipt,
@@ -388,10 +389,16 @@ class LiveAuthoringService {
     return rollback(applied, staged, createdDirectories);
   }
 
-  generatedStamp() {
+  // The actor a call writes for: the context's (a per-request principal),
+  // else the one the service was configured with.
+  callActor(context) {
+    return context && context.actor !== undefined ? actorValue(context.actor) : this.actor;
+  }
+
+  generatedStamp(actor) {
     const timestampValue = this.now();
     return {
-      by: this.actor,
+      by: actor || this.actor,
       at:
         timestampValue instanceof Date
           ? timestampValue.toISOString()
@@ -442,7 +449,9 @@ class LiveAuthoringService {
       if (error?.code) throw error;
       throw new AuthoringPolicyError(error?.message ? error.message : String(error));
     }
-    const generated = this.generatedStamp();
+    const actor = this.callActor(context);
+    const author = authorValue(context?.author);
+    const generated = this.generatedStamp(actor);
     const additionalBundles =
       context && Array.isArray(context.additionalBundles) ? context.additionalBundles : [];
     let currentIndex = this.currentIndex(additionalBundles);
@@ -461,7 +470,7 @@ class LiveAuthoringService {
       }
     }
     const policy = enforceWritePolicy(this.writePolicy, {
-      actor: this.actor,
+      actor,
       candidates,
       index: currentIndex,
     });
@@ -536,6 +545,7 @@ class LiveAuthoringService {
     return {
       input,
       bundle,
+      author,
       generated,
       additionalBundles,
       currentIndex,
@@ -549,49 +559,6 @@ class LiveAuthoringService {
     };
   }
 
-  invalidValidationReceipt(error) {
-    const validation = policyValidation(error);
-    const generated = this.generatedStamp();
-    return {
-      valid: false,
-      readyToApply: false,
-      applied: false,
-      filesChanged: false,
-      status: "invalid",
-      snapshot: {
-        checkedAt: generated.at,
-        timeOfCheck: true,
-        generatedBy: generated.by,
-        graphValidation: "not_run",
-      },
-      preconditions: {
-        allSatisfied: false,
-        revisions: [],
-        git: {
-          enabled: this.gitCommit,
-          ready: false,
-          repositoryStatus: "not_inspected",
-          repositoryRoot: null,
-          diagnostics: [],
-        },
-      },
-      generated,
-      durability: durabilityReceipt(null, false),
-      changes: [],
-      validation,
-      ...(error?.code ? { code: error.code } : {}),
-      ...(error && error.details !== undefined ? { details: error.details } : {}),
-      git: {
-        enabled: this.gitCommit,
-        repository: false,
-        repositoryRoot: null,
-        repositoryStatus: "not_inspected",
-        commitState: "not_attempted",
-        persistence: "none",
-      },
-    };
-  }
-
   async validateChanges(input, context) {
     return this.store.withWriteLock(() => {
       this.publication = null;
@@ -601,7 +568,8 @@ class LiveAuthoringService {
         if (!(error instanceof AuthoringPolicyError)) {
           throw error;
         }
-        return this.invalidValidationReceipt(error);
+        const generated = this.generatedStamp(this.callActor(context));
+        return invalidValidationReceipt(error, generated, this.gitCommit);
       }
     });
   }
@@ -703,7 +671,7 @@ class LiveAuthoringService {
     }
     let git;
     try {
-      git = this.git.commitGit(plan.gitPreflight, plan.candidates, plan.message);
+      git = this.git.commitGit(plan.gitPreflight, plan.candidates, plan.message, plan.author);
     } catch (error) {
       git = {
         enabled: plan.gitPreflight.enabled,

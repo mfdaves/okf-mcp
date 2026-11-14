@@ -1,6 +1,7 @@
 "use strict";
 
 const assert = require("node:assert/strict");
+const { spawnSync } = require("node:child_process");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
@@ -8,9 +9,13 @@ const test = require("node:test");
 const { Client } = require("@modelcontextprotocol/client");
 const { StdioClientTransport } = require("@modelcontextprotocol/client/stdio");
 
+const { ConceptAuthoringService } = require("../src/authoring");
+const { proposalServiceFor } = require("../src/authoring/proposal-policy");
 const { main, parseArgs, usage } = require("../src/cli");
+const { LiveAuthoringService } = require("../src/live-authoring");
 const { createMcpServer, callTool, createStateAsync } = require("../src/mcp/server");
 const { loadProjectConfig } = require("../src/project");
+const { FileConceptStore } = require("../src/store");
 const { callJson, connectMcp } = require("./mcp-client");
 
 const repositoryRoot = path.resolve(__dirname, "..");
@@ -478,4 +483,127 @@ test("--policy is parsed strictly and an invalid policy never yields a writable 
     createMcpServer([], { projectPath: invalid.projectPath, allowWrite: true, actor: MODEL }),
     /invalid project configuration/,
   );
+});
+
+function git(repository, args) {
+  // The caller's GIT_* variables would override the repository identity.
+  const env = Object.fromEntries(
+    Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_")),
+  );
+  const result = spawnSync("git", ["-C", repository].concat(args), { encoding: "utf8", env });
+  if (result.error) throw result.error;
+  if (result.status !== 0) throw new Error(result.stderr || result.stdout);
+  return String(result.stdout || "").trim();
+}
+
+function note(file, title) {
+  return { bundle: "internal", changes: [{ op: "create", path: file, type: "Reference", title }] };
+}
+
+test("one live service judges and stamps each call with that call's actor", async (t) => {
+  const { root, projectPath } = makeProject(t);
+  const store = FileConceptStore.fromProject(projectPath);
+  const service = new LiveAuthoringService(store, { actor: MODEL });
+
+  // The configured actor and an explicit one are judged alike: the nightly
+  // rule does not cover the internal bundle.
+  for (const context of [undefined, { actor: MODEL }]) {
+    const denied = await service.validateChanges(note("notes/one.md", "One"), context);
+    assert.equal(denied.valid, false);
+    assert.equal(denied.generated.by, MODEL);
+    assert.deepEqual(summary(denied.policyViolations), [
+      ["nightly", "bundle_denied", null, "notes/one.md"],
+    ]);
+  }
+  // A human caller of the same service matches the first rule.
+  const applied = await service.applyChanges(note("notes/one.md", "One"), { actor: "human:alice" });
+  assert.equal(applied.applied, true);
+  assert.equal(applied.generated.by, "human:alice");
+  assert.deepEqual(applied.policyViolations, []);
+  assert.match(
+    fs.readFileSync(path.join(root, "bundles", "internal", "notes", "one.md"), "utf8"),
+    /^ {2}by: human:alice$/m,
+  );
+  const refused = await service.applyChanges(note("notes/two.md", "Two"), { actor: MODEL });
+  assert.equal(refused.applied, false);
+  assert.deepEqual(summary(refused.policyViolations), [
+    ["nightly", "bundle_denied", null, "notes/two.md"],
+  ]);
+  assert.equal(fs.existsSync(path.join(root, "bundles", "internal", "notes", "two.md")), false);
+  // A batch refused before planning still names the call's actor.
+  const malformed = await service.validateChanges(
+    { changes: [{ op: "move" }] },
+    { actor: "human:alice" },
+  );
+  assert.equal(malformed.status, "invalid");
+  assert.equal(malformed.generated.by, "human:alice");
+  assert.equal(malformed.snapshot.generatedBy, "human:alice");
+  await assert.rejects(
+    service.validateChanges(note("notes/three.md", "Three"), { actor: "nobody" }),
+    /actor must use/,
+  );
+  assert.equal(service.actor, MODEL);
+
+  // Proposals record and are judged against the call's actor too.
+  const authoring = new ConceptAuthoringService(store, { actor: MODEL });
+  assert.equal(proposalServiceFor(authoring, MODEL), authoring);
+  assert.equal(proposalServiceFor(authoring, undefined), authoring);
+  const proposal = {
+    bundle: "internal",
+    path: "notes/proposed.md",
+    frontmatter: { type: "Reference", title: "Proposed" },
+    body: "# Proposed",
+  };
+  const byModel = await proposalServiceFor(authoring, MODEL).proposeConcept(proposal);
+  assert.equal(byModel.created, false);
+  assert.deepEqual(summary(byModel.policyViolations), [
+    ["nightly", "bundle_denied", null, "notes/proposed.md"],
+  ]);
+  const byAlice = await proposalServiceFor(authoring, "human:alice").proposeConcept(proposal);
+  assert.equal(byAlice.created, true);
+  assert.equal(byAlice.proposal.proposedBy, "human:alice");
+  assert.equal(authoring.actor, MODEL);
+  assert.throws(() => proposalServiceFor(authoring, "nobody"), /actor must use/);
+});
+
+test("a call's author signs the git commit while the configured identity commits", async (t) => {
+  const { root, projectPath } = makeProject(t);
+  git(root, ["init", "--quiet"]);
+  git(root, ["config", "user.name", "Repo Committer"]);
+  git(root, ["config", "user.email", "committer@example.invalid"]);
+  git(root, ["add", "--all"]);
+  git(root, ["commit", "--quiet", "-m", "fixture"]);
+  const service = new LiveAuthoringService(FileConceptStore.fromProject(projectPath), {
+    actor: MODEL,
+    gitCommit: true,
+  });
+  const author = { name: "Mario Rossi", email: "mrossi@example.com" };
+  const signed = await service.applyChanges(note("notes/signed.md", "Signed"), {
+    actor: "human:mrossi",
+    author,
+  });
+  assert.equal(signed.applied, true);
+  assert.equal(signed.git.committed, true);
+  assert.equal(signed.generated.by, "human:mrossi");
+  assert.equal(
+    git(root, ["log", "-1", "--format=%an/%ae/%cn/%ce"]),
+    "Mario Rossi/mrossi@example.com/Repo Committer/committer@example.invalid",
+  );
+  // Without an author both roles stay the configured identity.
+  const plain = await service.applyChanges(note("notes/plain.md", "Plain"), {
+    actor: "human:alice",
+  });
+  assert.equal(plain.git.committed, true);
+  assert.equal(git(root, ["log", "-1", "--format=%an/%cn"]), "Repo Committer/Repo Committer");
+  for (const malformed of [
+    { name: "Mario Rossi" },
+    { name: "Mario\nRossi", email: "mrossi@example.com" },
+    { name: "Mario <Rossi>", email: "mrossi@example.com" },
+  ]) {
+    await assert.rejects(
+      service.applyChanges(note("notes/bad.md", "Bad"), { actor: "human:x", author: malformed }),
+      /author must carry/,
+    );
+  }
+  assert.equal(git(root, ["status", "--porcelain"]), "");
 });

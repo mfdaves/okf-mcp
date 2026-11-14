@@ -1,5 +1,6 @@
 "use strict";
 
+const { validActor } = require("../v02");
 const { evaluateProposal, policyDiagnostics, refusedProposal } = require("./policy-hook");
 
 // The write policy applied to the proposal flow of ConceptAuthoringService
@@ -134,4 +135,25 @@ async function prepareAcceptance(service, proposalId) {
   };
 }
 
-module.exports = { checkProposal, prepareAcceptance, refuseMigration, refuseUpdate };
+// The service a call made for `actor` (a per-request principal) proposes,
+// accepts and rejects through: a delegate whose actor is the call's, so
+// `proposedBy` and every policy verdict name it, sharing the store, the
+// write policy and every method with the configured service, which keeps no
+// other per-call state. The configured service itself when the actors agree.
+function proposalServiceFor(service, actor) {
+  if (actor === undefined || actor === null || actor === service.actor) {
+    return service;
+  }
+  if (!validActor(actor)) {
+    throw new Error("actor must use human:<id>, process:<id>, or provider/model syntax.");
+  }
+  return Object.create(service, { actor: { value: actor, enumerable: true } });
+}
+
+module.exports = {
+  checkProposal,
+  prepareAcceptance,
+  proposalServiceFor,
+  refuseMigration,
+  refuseUpdate,
+};

@@ -314,6 +314,25 @@ function actorValue(value) {
   return actor;
 }
 
+// The git author a batch is committed for: both `name` and `email` as
+// single-line strings without angle brackets (git would strip or reject
+// them), or null when none is given.
+function authorValue(value) {
+  if (value === undefined || value === null) {
+    return null;
+  }
+  const valid = (text) =>
+    typeof text === "string" &&
+    text.trim() === text &&
+    text.length > 0 &&
+    text.length <= 256 &&
+    !/[\p{Cc}<>]/u.test(text);
+  if (!isPlainObject(value) || !valid(value.name) || !valid(value.email)) {
+    throw new Error("author must carry a single-line name and email.");
+  }
+  return { name: value.name, email: value.email };
+}
+
 function generatedOwners(document) {
   const owners = [];
   const generated = document && document.frontmatter && document.frontmatter.generated;
@@ -371,6 +390,7 @@ function staleUpdateDetails(index, uri, bundle, project) {
 module.exports = {
   MANAGED_METADATA_KEYS,
   actorValue,
+  authorValue,
   applyRelationPatch,
   applySourcePatch,
   applyTagPatch,

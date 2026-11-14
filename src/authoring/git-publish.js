@@ -635,7 +635,10 @@ class GitPublisher {
     }
   }
 
-  commitGit(preflight, candidates, message) {
+  // `author` ({ name, email }, or null) is the principal a batch is written
+  // for: it becomes the commit's author, while the committer stays the
+  // repository's configured identity.
+  commitGit(preflight, candidates, message, author) {
     if (!preflight.enabled) {
       return {
         enabled: false,
@@ -707,14 +710,13 @@ class GitPublisher {
           candidates,
         );
       }
-      const committed = this.runGit(preflight.repository, [
-        "commit-tree",
-        expectedTree,
-        "-p",
-        preflight.headBefore,
-        "-m",
-        message,
-      ]);
+      const committed = this.runGit(
+        preflight.repository,
+        ["commit-tree", expectedTree, "-p", preflight.headBefore, "-m", message],
+        author
+          ? { environment: { GIT_AUTHOR_NAME: author.name, GIT_AUTHOR_EMAIL: author.email } }
+          : undefined,
+      );
       if (!commandSucceeded(committed)) {
         return this.finalizeGitFailure(preflight, files, committed, expectedTree, candidates);
       }
