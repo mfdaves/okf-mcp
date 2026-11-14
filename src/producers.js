@@ -68,6 +68,41 @@ function diagnostic(code, extra) {
   );
 }
 
+const PRODUCER_ERROR_CODE = /^[a-z][a-z0-9_]{0,63}$/;
+const MAX_ERROR_DETAILS = 16;
+const MAX_ERROR_DETAIL_CHARS = 200;
+
+// A producer that cannot generate may throw an error carrying its own code
+// (for example access_denied) and a `details` object of scalar values (for
+// example the section it could not read). The receipt reports both as one
+// diagnostic; the error's message is never forwarded (B-6). Detail keys
+// are identifiers, strings are single-line and bounded, numbers finite;
+// anything else, and any string holding a secret the producer read, is
+// dropped. Null when the error carries no usable code.
+function producerErrorDiagnostic(error, secrets) {
+  const code = error && typeof error.code === "string" ? error.code : "";
+  if (!PRODUCER_ERROR_CODE.test(code)) return null;
+  const raw =
+    error.details && typeof error.details === "object" && !Array.isArray(error.details)
+      ? error.details
+      : {};
+  const details = {};
+  for (const [key, value] of Object.entries(raw)) {
+    if (Object.keys(details).length >= MAX_ERROR_DETAILS) break;
+    if (!/^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(key)) continue;
+    const scalar =
+      value === null ||
+      typeof value === "boolean" ||
+      (typeof value === "number" && Number.isFinite(value)) ||
+      (typeof value === "string" &&
+        value.length <= MAX_ERROR_DETAIL_CHARS &&
+        !/[\p{Cc}]/u.test(value) &&
+        !secrets.some((secret) => secret && value.includes(secret)));
+    if (scalar) details[key] = value;
+  }
+  return Object.assign(diagnostic(code), Object.keys(details).length ? { details } : {});
+}
+
 function isInside(root, target) {
   const relative = path.relative(root, target);
   return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
@@ -493,7 +528,11 @@ class ProducerService {
       });
     } catch (error) {
       if (error instanceof ProducerHostError) throw error;
-      throw new ProducerHostError("Producer execution failed.", "producer_execution_failed");
+      const reported = producerErrorDiagnostic(error, accessedSecrets);
+      if (!reported) {
+        throw new ProducerHostError("Producer execution failed.", "producer_execution_failed");
+      }
+      return { instance, descriptor, valid: false, readyToApply: false, diagnostics: [reported] };
     }
     let files;
     let summary;

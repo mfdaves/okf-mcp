@@ -8,7 +8,7 @@ const test = require("node:test");
 
 const { isConfiguredGeneratorOutput } = require("../src/authoring");
 const { loadProjectConfig } = require("../src/project");
-const { ProducerService, loadInstalledProducer } = require("../src/producers");
+const { ProducerService, loadInstalledProducer, producerReceipt } = require("../src/producers");
 const { normalizeProducedFiles, sha256 } = require("../src/producer-publisher");
 const { FileConceptStore } = require("../src/store");
 const { callJson, connectMcp } = require("./mcp-client");
@@ -477,4 +477,96 @@ test("workspace and linked producer installs resolve through their node_modules 
     "postgresql",
   );
   assert.throws(() => loadInstalledProducer(project, "@fixture/not-installed"), /not installed/);
+});
+
+test("a producer's own error code and scalar details reach the receipt, never its message", async (t) => {
+  const fixture = makeProject();
+  t.after(() => fs.rmSync(fixture.root, { recursive: true, force: true }));
+  const CATALOG_TEXT = "Quarterly figures of the northern region";
+  const SECRET = "postgresql://secret.invalid/application";
+  // generate() reads its secret, then fails with its own error.
+  const failing = (code, details) => async (context) => {
+    context.getSecret("DATABASE_URL");
+    const error = new Error(`Cannot read ${CATALOG_TEXT}`);
+    error.code = code;
+    if (details !== undefined) error.details = details;
+    throw error;
+  };
+  const expected = {
+    code: "access_denied",
+    severity: "error",
+    layer: "producer",
+    details: { section: "crons" },
+  };
+
+  const preview = await serviceFor(fixture, failing("access_denied", { section: "crons" })).preview(
+    "primary-db",
+  );
+  assert.equal(preview.valid, false);
+  assert.equal(preview.readyToApply, false);
+  const receipt = producerReceipt(preview, "full");
+  assert.deepEqual(receipt.diagnostics, [expected]);
+  assert.equal(JSON.stringify(receipt).includes(CATALOG_TEXT), false);
+
+  const run = await serviceFor(fixture, failing("access_denied", { section: "crons" })).run(
+    "primary-db",
+  );
+  assert.equal(run.applied, false);
+  assert.deepEqual(producerReceipt(run, "compact").diagnostics, [expected]);
+  assert.equal(fs.existsSync(path.join(fixture.bundle, "database.md")), false);
+
+  // Only bounded scalars under identifier keys survive, never the secret.
+  const bounded = await serviceFor(
+    fixture,
+    failing("access_denied", {
+      section: "crons",
+      count: 3,
+      partial: true,
+      none: null,
+      nested: { a: 1 },
+      list: [1],
+      notFinite: Number.NaN,
+      long: "x".repeat(201),
+      multiline: "a\nb",
+      "bad key": "x",
+      dsn: SECRET,
+      quoted: `see ${SECRET}`,
+    }),
+  ).preview("primary-db");
+  assert.deepEqual(bounded.diagnostics[0].details, {
+    section: "crons",
+    count: 3,
+    partial: true,
+    none: null,
+  });
+  const withoutDetails = await serviceFor(fixture, failing("source_unreachable", [1])).preview(
+    "primary-db",
+  );
+  assert.deepEqual(withoutDetails.diagnostics, [
+    { code: "source_unreachable", severity: "error", layer: "producer" },
+  ]);
+
+  // A missing or invalid code falls back to the host's generic failure.
+  for (const code of [undefined, 42, "Access_Denied", "ECONNREFUSED", "28P01", "a".repeat(65)]) {
+    await assert.rejects(
+      serviceFor(fixture, failing(code, { section: "crons" })).preview("primary-db"),
+      (error) => {
+        assert.equal(error.code, "producer_execution_failed");
+        assert.equal(error.message.includes(CATALOG_TEXT), false);
+        assert.equal(error.details, undefined);
+        return true;
+      },
+    );
+  }
+
+  // Through MCP the preview tool returns the same receipt.
+  const { client } = await connectMcp(t, [], {
+    projectPath: fixture.projectPath,
+    producerLoader: async () => moduleFor(failing("access_denied", { section: "crons" })),
+    producerEnv: { DATABASE_URL: SECRET },
+  });
+  const viaMcp = await callJson(client, "okf_preview_producer", { producer: "primary-db" });
+  assert.equal(viaMcp.payload.valid, false);
+  assert.deepEqual(viaMcp.payload.diagnostics, [expected]);
+  assert.equal(viaMcp.result.content[0].text.includes(CATALOG_TEXT), false);
 });

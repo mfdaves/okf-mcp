@@ -200,7 +200,7 @@ okf --project okf.project.yaml producer preview main-database
 okf --project okf.project.yaml producer run main-database --write --actor process:nightly-refresh
 ```
 
-`producer preview` exits `1` when the candidate is invalid; `producer run` exits `1` when nothing was published. Both print the same receipt the MCP tools return.
+`producer preview` exits `1` when the candidate is invalid; `producer run` exits `1` when nothing was published. Both print the same receipt the MCP tools return. A producer that cannot generate may throw an error with its own `code` (lowercase, `^[a-z][a-z0-9_]{0,63}$`, for example `access_denied`) and a `details` object of scalar values; the receipt then carries one producer-layer diagnostic with that code and the bounded details (identifier keys, finite numbers, booleans, null, single-line strings up to 200 characters that hold no secret the producer read). The error's message is never reported. An error without such a code is reported as `producer_execution_failed`.
 
 For a configured project, MCP exposes:
 
