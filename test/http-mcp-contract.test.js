@@ -45,7 +45,13 @@ test("MCP over HTTP lists the stdio tools and answers reads in both protocol era
   const server = await startHttp(t);
   assert.match(server.url, /^http:\/\/127\.0\.0\.1:\d+\/mcp$/);
   const stdio = await connectMcp(t, [], { rootPath: ROOT });
-  const expected = contractTools((await stdio.client.listTools()).tools);
+  // The same definitions, minus what an HTTP principal needs okf.write for
+  // even when stdio's flags alone would enable it (stored proposals).
+  const HTTP_WRITE_ONLY = ["okf_list_proposals", "okf_get_proposal"];
+  const expected = contractTools((await stdio.client.listTools()).tools).filter(
+    (tool) => !HTTP_WRITE_ONLY.includes(tool.name),
+  );
+  assert.equal(expected.length, (await stdio.client.listTools()).tools.length - 2);
 
   const legacy = await connectHttp(t, server.url, { mode: "legacy" });
   const modern = await connectHttp(t, server.url, { mode: { pin: "2026-07-28" } });

@@ -330,9 +330,10 @@ Every HTTP request runs for a principal: a subject, an actor, scopes, and
 optionally a name and an email. `okf.read` is required for any call.
 `okf.write` adds the live write tools (`okf_validate_changes`,
 `okf_apply_changes`, when the server runs with `--write`), producer runs
-(`okf_run_producer`) and, with `--allow-remote-tool`, `load_remote_bundle`,
-which changes the index every principal reads (over stdio the flag alone
-enables it, as before). A principal without `okf.write` does not see those
+(`okf_run_producer`), the stored proposals (`okf_list_proposals`,
+`okf_get_proposal`, which can hold complete candidate Markdown) and, with
+`--allow-remote-tool`, `load_remote_bundle`, which changes the index every
+principal reads. Over stdio those flags alone enable them, as before. A principal without `okf.write` does not see those
 tools in `tools/list`, and calling one fails as calling a disabled tool does.
 
 Writes made for a principal stamp its actor in `generated.by` and are judged

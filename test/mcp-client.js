@@ -1,6 +1,10 @@
 "use strict";
 
+const crypto = require("node:crypto");
+const fs = require("node:fs");
 const http = require("node:http");
+const os = require("node:os");
+const path = require("node:path");
 const { Client, StreamableHTTPClientTransport } = require("@modelcontextprotocol/client");
 const { InMemoryTransport } = require("@modelcontextprotocol/server");
 const { serveStdio } = require("@modelcontextprotocol/server/stdio");
@@ -96,6 +100,36 @@ const MCP_POST_HEADERS = Object.freeze({
   accept: "application/json, text/event-stream",
 });
 
+// A token file (--auth tokens:<file>) for `entries` of { token, subject,
+// actor, scopes }, removed after the test.
+function writeTokenFile(t, entries) {
+  const file = path.join(
+    os.tmpdir(),
+    `okf-tokens-${process.pid}-${crypto.randomBytes(6).toString("hex")}.yaml`,
+  );
+  if (t) t.after(() => fs.rmSync(file, { force: true }));
+  const lines = ["tokens:"];
+  for (const entry of entries) {
+    lines.push(
+      `  - sha256: ${crypto.createHash("sha256").update(entry.token).digest("hex")}`,
+      `    subject: ${entry.subject}`,
+      `    actor: ${entry.actor}`,
+      `    scopes: [${entry.scopes.join(", ")}]`,
+    );
+  }
+  fs.writeFileSync(file, `${lines.join("\n")}\n`);
+  return file;
+}
+
+// The JSON-RPC error code of a call the server refuses, or its result.
+async function callOutcome(client, name, args) {
+  try {
+    return { result: await client.callTool({ name, arguments: args || {} }) };
+  } catch (error) {
+    return { code: error.code };
+  }
+}
+
 async function callJson(client, name, args) {
   const result = await client.callTool({ name, arguments: args || {} });
   return {
@@ -108,8 +142,10 @@ module.exports = {
   INITIALIZE_BODY,
   MCP_POST_HEADERS,
   callJson,
+  callOutcome,
   connectFactory,
   connectHttp,
   connectMcp,
   httpExchange,
+  writeTokenFile,
 };

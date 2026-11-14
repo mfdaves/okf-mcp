@@ -166,6 +166,11 @@ const GATES = {
   producerWrite: (state, principal) =>
     Boolean(state?.producerService && state.allowWrite && state.actor && canWrite(principal)),
   projectHelper: (state) => Boolean(state?.authoringService),
+  // Stored proposals can hold complete candidate Markdown, which the REST
+  // authoring API guards with its write token. Over stdio the process's one
+  // principal reads them as before; over HTTP the principal needs okf.write.
+  proposalRead: (state, principal) =>
+    Boolean(state?.authoringService && (state.transport !== "http" || canWrite(principal))),
   authoringMutation: (state) => Boolean(state?.authoringService && state.allowAuthoring),
   computationAuthoring: (state) =>
     Boolean(state?.authoringService && state.allowAuthoring && state.allowComputationAuthoring),

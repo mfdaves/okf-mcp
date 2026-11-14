@@ -159,7 +159,7 @@ const tools = {
         enum: ["proposed", "accepted", "rejected"],
       }),
     }),
-    enabled: GATES.projectHelper,
+    enabled: GATES.proposalRead,
     handler: async (state, args, principal) =>
       jsonContent(
         await expectedToolOperation(() => requireAuthoring(state, principal).listProposals(args)),
@@ -174,7 +174,7 @@ const tools = {
       },
       ["proposalId"],
     ),
-    enabled: GATES.projectHelper,
+    enabled: GATES.proposalRead,
     handler: async (state, args, principal) =>
       jsonContent(
         await expectedToolOperation(() => requireAuthoring(state, principal).getProposal(args)),
