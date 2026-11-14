@@ -25,7 +25,6 @@ const { MAX_MCP_MESSAGE_BYTES, createStateAsync, registerMcpInterface } = requir
 
 const DEFAULT_MCP_PATH = "/mcp";
 const DEFAULT_REFRESH_INTERVAL_MS = 2000;
-const HEALTH_PATH = "/health";
 
 function jsonRpcError(status, code, message) {
   return Response.json({ jsonrpc: "2.0", error: { code, message }, id: null }, { status });
@@ -150,6 +149,9 @@ function createMcpHttpHandler(state, options) {
     config.refreshIntervalMs ?? DEFAULT_REFRESH_INTERVAL_MS,
   );
   const mcpPath = config.mcpPath || DEFAULT_MCP_PATH;
+  // GET /health, and beside the endpoint as well (/okf/mcp → /okf/health),
+  // where a client deriving it from the MCP URL looks for it.
+  const healthPaths = new Set(["/health", `${mcpPath.replace(/\/[^/]*$/, "")}/health`]);
   const allowedHosts = localhostAllowedHostnames().concat(config.allowedHosts || []);
   const allowedOrigins = localhostAllowedOrigins().concat(config.allowedOrigins || []);
   const mcp = createMcpHandler(
@@ -163,7 +165,7 @@ function createMcpHttpHandler(state, options) {
     const rejected = hostHeaderValidationResponse(probe, allowedHosts);
     if (rejected) return rejected;
     const pathname = new URL(probe.url).pathname;
-    if (pathname === HEALTH_PATH && (req.method === "GET" || req.method === "HEAD")) {
+    if (healthPaths.has(pathname) && (req.method === "GET" || req.method === "HEAD")) {
       return Response.json({ status: "ok" });
     }
     const extra = config.routes ? await config.routes(probe) : undefined;

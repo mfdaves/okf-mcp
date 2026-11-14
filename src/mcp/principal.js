@@ -28,13 +28,15 @@ function canWrite(principal) {
 }
 
 // What a write made for this principal hands the authoring services: its
-// actor, and the git author when it carries both a name and an email.
+// actor, and as git author its name and email, each when it carries one.
 function principalWriteContext(principal) {
+  const author = Object.assign(
+    principal?.name ? { name: principal.name } : {},
+    principal?.email ? { email: principal.email } : {},
+  );
   return {
     ...(principal?.actor ? { actor: principal.actor } : {}),
-    ...(principal?.name && principal?.email
-      ? { author: { name: principal.name, email: principal.email } }
-      : {}),
+    ...(Object.keys(author).length ? { author } : {}),
   };
 }
 

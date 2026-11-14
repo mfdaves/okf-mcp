@@ -595,14 +595,25 @@ test("a call's author signs the git commit while the configured identity commits
   });
   assert.equal(plain.git.committed, true);
   assert.equal(git(root, ["log", "-1", "--format=%an/%cn"]), "Repo Committer/Repo Committer");
+  // Each author field is optional; a missing one is the configured identity's.
+  const nameOnly = await service.applyChanges(note("notes/name-only.md", "Name only"), {
+    actor: "human:mrossi",
+    author: { name: "Mario Rossi" },
+  });
+  assert.equal(nameOnly.git.committed, true);
+  assert.equal(
+    git(root, ["log", "-1", "--format=%an <%ae>/%cn"]),
+    "Mario Rossi <committer@example.invalid>/Repo Committer",
+  );
   for (const malformed of [
-    { name: "Mario Rossi" },
+    "Mario Rossi",
     { name: "Mario\nRossi", email: "mrossi@example.com" },
-    { name: "Mario <Rossi>", email: "mrossi@example.com" },
+    { name: "Mario <Rossi>" },
+    { email: " mrossi@example.com" },
   ]) {
     await assert.rejects(
       service.applyChanges(note("notes/bad.md", "Bad"), { actor: "human:x", author: malformed }),
-      /author must carry/,
+      /author (must be an object|name and email must be)/,
     );
   }
   assert.equal(git(root, ["status", "--porcelain"]), "");

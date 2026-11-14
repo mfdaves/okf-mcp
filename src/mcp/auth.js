@@ -30,7 +30,7 @@ const {
   verifyBearerToken,
 } = require("@modelcontextprotocol/server");
 
-const { authorValue } = require("../authoring/candidates");
+const { validAuthorField } = require("../authoring/candidates");
 const { validActor } = require("../v02");
 const { KNOWN_SCOPES, READ_SCOPE } = require("./principal");
 
@@ -135,10 +135,19 @@ function tokenFileVerifier(file) {
   };
 }
 
+// `aud` against the public MCP URL, verbatim except for one trailing slash
+// on either side.
+function sameAudience(aud, audience) {
+  const trim = (value) => (value.endsWith("/") ? value.slice(0, -1) : value);
+  return typeof aud === "string" && trim(aud) === trim(audience);
+}
+
 // The principal an introspection answer grants, or null when the token is
-// not accepted (shared contract, plan I-2a).
+// not accepted (shared contract, plan I-2a). `name` and `email` are each
+// optional; one that is absent or unusable leaves that git author field to
+// the configured identity.
 function introspectionPrincipal(answer, audience, nowSeconds) {
-  if (answer?.active !== true || answer.aud !== audience) return null;
+  if (answer?.active !== true || !sameAudience(answer.aud, audience)) return null;
   if (typeof answer.exp !== "number" || !(answer.exp > nowSeconds)) return null;
   const scopes = typeof answer.scope === "string" ? answer.scope.split(" ") : [];
   const username = typeof answer.username === "string" ? answer.username : "";
@@ -149,12 +158,8 @@ function introspectionPrincipal(answer, audience, nowSeconds) {
     actor: `human:${username.replace(/[\s\p{Cc}]/gu, "-")}`,
     scopes: new Set(KNOWN_SCOPES.filter((scope) => scopes.includes(scope))),
   };
-  try {
-    const author = authorValue({ name: answer.name, email: answer.email });
-    Object.assign(principal, author);
-  } catch {
-    // Without a usable name and email, commits keep the configured author.
-  }
+  if (validAuthorField(answer.name)) principal.name = answer.name;
+  if (validAuthorField(answer.email)) principal.email = answer.email;
   return { principal, exp: answer.exp, clientId: answer.client_id };
 }
 

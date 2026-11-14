@@ -148,14 +148,14 @@ test("write tools hand the principal's actor and author to the authoring service
   const writer = await connectAs(t, state, WRITER);
   await callJson(writer, "okf_validate_changes", args);
   await callJson(writer, "okf_apply_changes", args);
-  const unnamed = await connectAs(t, state, Object.assign({}, WRITER, { email: undefined }));
-  await callJson(unnamed, "okf_apply_changes", args);
+  const noEmail = await connectAs(t, state, Object.assign({}, WRITER, { email: undefined }));
+  await callJson(noEmail, "okf_apply_changes", args);
   await callJson(await connectAs(t, state, undefined), "okf_apply_changes", args);
   const author = { name: "Mario Rossi", email: "mrossi@example.com" };
   assert.deepEqual(contexts, [
     { additionalBundles: [], actor: "human:mrossi", author },
     { additionalBundles: [], actor: "human:mrossi", author },
-    { additionalBundles: [], actor: "human:mrossi" },
+    { additionalBundles: [], actor: "human:mrossi", author: { name: "Mario Rossi" } },
     { additionalBundles: [], actor: ACTOR },
   ]);
 });

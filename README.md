@@ -311,7 +311,8 @@ The server answers:
   `2026-07-28`, and 2025-era clients (including the `2025-11-25` `initialize`
   handshake) through its stateless fallback. No session is kept: `GET` and
   `DELETE` on the endpoint answer `405` to 2025-era clients.
-- `GET /health` with `{"status":"ok"}`.
+- `GET /health` with `{"status":"ok"}`, also beside the endpoint when its
+  path is deeper (`/okf/mcp` → `/okf/health`).
 - with introspection, the RFC 9728 protected-resource metadata at
   `/.well-known/oauth-protected-resource` plus the path of `--public-url`
   (for example `/.well-known/oauth-protected-resource/mcp`) and at
@@ -333,9 +334,10 @@ optionally a name and an email. `okf.read` is required for any call.
 in `tools/list`, and calling one fails as calling a disabled tool does.
 
 Writes made for a principal stamp its actor in `generated.by` and are judged
-by the write policy for that actor. With `--git-commit`, a principal that
-carries a name and an email becomes the commit author; the committer stays
-the repository's configured Git identity. Producer runs keep
+by the write policy for that actor. With `--git-commit`, the principal's name
+and email become the commit author; a missing one falls back to the
+repository's configured Git identity, which also stays the committer.
+Producer runs keep
 `process:<producer>`. `--write` still requires `--actor`, which names the
 server process as over stdio; every authenticated HTTP principal writes as
 its own actor.
@@ -387,12 +389,13 @@ okf --root /srv/okf --write --actor process:okf-mcp --git-commit mcp --http \
   `OKF_INTROSPECTION_CLIENT_SECRET` only. The URL must be `https`, or `http`
   on a loopback host, without credentials, query or fragment; redirects are
   not followed.
-- A token is accepted when `active` is `true`, `aud` equals `--public-url`,
-  `exp` is in the future and `scope` holds `okf.read`. The principal's subject
+- A token is accepted when `active` is `true`, `aud` equals `--public-url`
+  (one trailing slash ignored on either side), `exp` is in the future and
+  `scope` holds `okf.read`. The principal's subject
   is `sub`, its actor `human:<username>` (whitespace and control characters
   replaced by `-`), its scopes the `okf.read` and `okf.write` entries of
-  `scope` (others are ignored), and its git author `name` and `email` when
-  both are present.
+  `scope` (others are ignored), and its git author `name` and `email`, each
+  optional.
 - A missing or refused token gets `401` with a `WWW-Authenticate: Bearer`
   challenge carrying `resource_metadata`; a token without `okf.read` gets
   `403 insufficient_scope`. When the authorization server cannot be reached,
@@ -416,7 +419,7 @@ as for writes. An unchanged check costs about 35 ms at 5,000 concepts.
 
 - Bind okf-mcp to a loopback address and let the proxy terminate TLS.
 - Set `--public-url` to the external URL of the endpoint and forward that
-  path unchanged; forward `/health` and
+  path unchanged; forward the health path and
   `/.well-known/oauth-protected-resource…` as well.
 - Forward the `Host` header as the public host (accepted automatically), or
   accept the host the proxy sends with `--allowed-host`.

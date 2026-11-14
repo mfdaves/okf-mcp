@@ -635,9 +635,9 @@ class GitPublisher {
     }
   }
 
-  // `author` ({ name, email }, or null) is the principal a batch is written
-  // for: it becomes the commit's author, while the committer stays the
-  // repository's configured identity.
+  // `author` ({ name?, email? }, or null) is the principal a batch is written
+  // for: it becomes the commit's author, a missing field falling back to the
+  // repository's configured identity, which also stays the committer.
   commitGit(preflight, candidates, message, author) {
     if (!preflight.enabled) {
       return {
@@ -714,7 +714,12 @@ class GitPublisher {
         preflight.repository,
         ["commit-tree", expectedTree, "-p", preflight.headBefore, "-m", message],
         author
-          ? { environment: { GIT_AUTHOR_NAME: author.name, GIT_AUTHOR_EMAIL: author.email } }
+          ? {
+              environment: Object.assign(
+                author.name ? { GIT_AUTHOR_NAME: author.name } : {},
+                author.email ? { GIT_AUTHOR_EMAIL: author.email } : {},
+              ),
+            }
           : undefined,
       );
       if (!commandSucceeded(committed)) {

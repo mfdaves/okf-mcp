@@ -314,23 +314,37 @@ function actorValue(value) {
   return actor;
 }
 
-// The git author a batch is committed for: both `name` and `email` as
-// single-line strings without angle brackets (git would strip or reject
-// them), or null when none is given.
-function authorValue(value) {
-  if (value === undefined || value === null) {
-    return null;
-  }
-  const valid = (text) =>
+// One git author field: a single-line string without angle brackets, which
+// git would strip or reject.
+function validAuthorField(text) {
+  return (
     typeof text === "string" &&
     text.trim() === text &&
     text.length > 0 &&
     text.length <= 256 &&
-    !/[\p{Cc}<>]/u.test(text);
-  if (!isPlainObject(value) || !valid(value.name) || !valid(value.email)) {
-    throw new Error("author must carry a single-line name and email.");
+    !/[\p{Cc}<>]/u.test(text)
+  );
+}
+
+// The git author a batch is committed for: `name` and `email`, each
+// optional (a missing one falls back to the repository's configured
+// identity), or null when neither is given.
+function authorValue(value) {
+  if (value === undefined || value === null) {
+    return null;
   }
-  return { name: value.name, email: value.email };
+  if (!isPlainObject(value)) {
+    throw new Error("author must be an object with name and email.");
+  }
+  const author = {};
+  for (const key of ["name", "email"]) {
+    if (value[key] === undefined || value[key] === null) continue;
+    if (!validAuthorField(value[key])) {
+      throw new Error("author name and email must be single-line text without angle brackets.");
+    }
+    author[key] = value[key];
+  }
+  return Object.keys(author).length ? author : null;
 }
 
 function generatedOwners(document) {
@@ -391,6 +405,7 @@ module.exports = {
   MANAGED_METADATA_KEYS,
   actorValue,
   authorValue,
+  validAuthorField,
   applyRelationPatch,
   applySourcePatch,
   applyTagPatch,

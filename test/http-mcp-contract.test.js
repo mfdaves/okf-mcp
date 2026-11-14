@@ -71,6 +71,32 @@ test("MCP over HTTP lists the stdio tools and answers reads in both protocol era
   assert.equal((await exchange(server.port, { path: "/elsewhere" })).status, 404);
 });
 
+test("the endpoint follows --public-url and /health sits beside it", async (t) => {
+  const server = await startHttp(t, {
+    http: {
+      mcpPath: "/okf/mcp",
+      publicUrl: "https://mcp.example.test/okf/mcp",
+      allowedHosts: ["mcp.example.test"],
+    },
+  });
+  for (const location of ["/okf/health", "/health"]) {
+    const health = await exchange(server.port, {
+      path: location,
+      headers: { host: "mcp.example.test" },
+    });
+    assert.equal(health.status, 200, location);
+    assert.deepEqual(JSON.parse(health.body), { status: "ok" });
+  }
+  const answer = await exchange(server.port, {
+    method: "POST",
+    path: "/okf/mcp",
+    headers: Object.assign({ host: "mcp.example.test" }, MCP_HEADERS),
+    body: INITIALIZE,
+  });
+  assert.equal(answer.status, 200);
+  assert.equal((await exchange(server.port, { method: "POST", path: "/mcp" })).status, 404);
+});
+
 test("a raw 2025-11-25 initialize is served statelessly", async (t) => {
   const server = await startHttp(t);
   const answer = await exchange(server.port, {

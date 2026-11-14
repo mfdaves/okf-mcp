@@ -141,6 +141,7 @@ test("the shared introspection answers map to principals", () => {
     { active: "true" },
     { aud: "https://other.example.com/mcp" },
     { aud: [PUBLIC_URL] },
+    { aud: `${PUBLIC_URL}//` },
     { aud: undefined },
     { exp: undefined },
     { exp: "1794000000" },
@@ -158,9 +159,23 @@ test("the shared introspection answers map to principals", () => {
   assert.deepEqual(variant({ scope: "openid okf.read odoo.read" }).scopes, new Set(["okf.read"]));
   assert.equal(variant({ username: "Mario Rossi\tx\u0007" }).actor, "human:Mario-Rossi-x-");
   assert.equal(variant({ sub: 42 }).subject, "42");
+  // name and email are each optional; an unusable one is dropped alone.
   const anonymous = variant({ name: undefined, email: undefined });
   assert.equal(Object.hasOwn(anonymous, "name") || Object.hasOwn(anonymous, "email"), false);
-  assert.equal(Object.hasOwn(variant({ email: "a@b.c\nX-Injected: 1" }), "email"), false);
+  const noEmail = variant({ email: undefined });
+  assert.equal(noEmail.name, "Mario Rossi");
+  assert.equal(Object.hasOwn(noEmail, "email"), false);
+  assert.equal(Object.hasOwn(variant({ name: undefined }), "name"), false);
+  const injected = variant({ email: "a@b.c\nX-Injected: 1" });
+  assert.equal(Object.hasOwn(injected, "email"), false);
+  assert.equal(injected.name, "Mario Rossi");
+  // One trailing slash is ignored on either side of the audience comparison.
+  const slashed = Object.assign({}, ACTIVE, { aud: `${PUBLIC_URL}/` });
+  assert.equal(introspectionPrincipal(slashed, PUBLIC_URL, before).principal.subject, "42");
+  assert.equal(
+    introspectionPrincipal(ACTIVE, `${PUBLIC_URL}/`, before).principal.actor,
+    "human:mrossi",
+  );
 });
 
 test("introspection gates MCP over HTTP: challenge, metadata, scopes, writes and cache", async (t) => {
@@ -236,6 +251,23 @@ test("introspection gates MCP over HTTP: challenge, metadata, scopes, writes and
     uri: `okf://${path.basename(root)}/notes/by-http`,
   });
   assert.equal(read.payload.title, "By HTTP");
+
+  // An answer without email (and with the audience's trailing slash): the
+  // author's email falls back to the configured identity.
+  const withoutEmail = activeAnswer({ aud: `${PUBLIC_URL}/` });
+  delete withoutEmail.email;
+  fake.answer("tok-no-email", withoutEmail);
+  const noEmail = await connectHttp(t, server.url, { token: "tok-no-email" });
+  const signed = await callJson(
+    noEmail,
+    "okf_apply_changes",
+    create("notes/no-email.md", "No email"),
+  );
+  assert.equal(signed.payload.applied, true);
+  assert.equal(
+    git(root, ["log", "-1", "--format=%an <%ae>/%cn <%ce>"]),
+    "Mario Rossi <committer@example.invalid>/Repo Committer <committer@example.invalid>",
+  );
 
   // Each token reached the authorization server once, with client credentials.
   assert.equal(fake.callsFor("tok-reader"), 1);
