@@ -399,7 +399,12 @@ test("published okf-mcp reference bundle is complete, valid, and packaged", () =
 
   assert.equal(index.errors.length, 0);
   assert.equal(index.warnings.length, 0);
-  assert.equal(index.concepts.length, 17);
+  // Every Markdown file but the reserved index.md is a served concept.
+  const markdownFiles = fs
+    .readdirSync(path.join(repositoryRoot, "okf", "okf-mcp"), { recursive: true })
+    .filter((file) => String(file).endsWith(".md"));
+  assert.ok(index.concepts.length >= 17);
+  assert.equal(index.concepts.length, markdownFiles.length - 1);
   assert.equal(index.reserved.length, 1);
   assert.equal(index.byUri.has("okf://okf-mcp/overview/okf-mcp"), true);
   assert.equal(index.byUri.has("okf://okf-mcp/policies/authoring-safety"), true);

@@ -377,6 +377,8 @@ async function main() {
     const validation = JSON.parse(run(okf, ["--root", installedRoot, "validate"]).stdout);
     assert.equal(validation.conformant, true);
     assert.equal(validation.validForProject, true);
+    const summary = JSON.parse(run(okf, ["--root", installedRoot, "--inspect"]).stdout);
+    assert.equal(summary.brokenLinks + summary.brokenRelations, 0);
 
     await smokeMcp(okfMcp, installedRoot, "legacy");
     await smokeMcp(okfMcp, installedRoot, { pin: "2026-07-28" });
@@ -389,7 +391,7 @@ async function main() {
         {
           package: `${packageMetadata.name}@${packageMetadata.version}`,
           entries: packed.entryCount,
-          concepts: 17,
+          concepts: summary.concepts,
           binaries: ["okf", "okf-mcp"],
           stdio: "passed",
           http: "passed",

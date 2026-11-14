@@ -134,7 +134,11 @@ test("compact discovery keeps a realistic research path within a token budget", 
   );
   const compact = estimatePayload([compactList, compactSearch, concept, neighbors]);
   const full = estimatePayload([fullList, fullSearch, concept, neighbors]);
-  assert.ok(compact.estimatedTokens <= 6500, { compact, full });
+  // The ceiling follows the reference bundle this path reads: 6,198 estimated
+  // tokens at 0.12.0-rc.1, 7,935 at 0.13.0-rc.1, whose HTTP transport adds
+  // neighbors and whose concepts written through okf carry generation
+  // signals. The relative gate below is the property under test.
+  assert.ok(compact.estimatedTokens <= 8500, { compact, full });
   assert.ok(compact.estimatedTokens * 10 <= full.estimatedTokens * 7, { compact, full });
 });
 
