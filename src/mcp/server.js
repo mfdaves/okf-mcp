@@ -128,6 +128,22 @@ function rebuildStateIndex(state) {
 
 // Runs one tool for a principal (the flags' principal when none is given, as
 // over stdio). A tool whose gate the principal does not pass is unknown to it.
+// Plan I-2c: brings the server's index up to date with files edited outside
+// okf-mcp (size and mtime, refreshIndex) and hands a changed index to live
+// authoring as a write would. Indexes that did not come out of buildIndex
+// are left as they are. Callers run it inside the call queue.
+function refreshStateIndex(state) {
+  if (!indexUpdateStats(state.index)) {
+    return state.index;
+  }
+  const refreshed = refreshIndex(state.index);
+  if (refreshed !== state.index) {
+    state.index = refreshed;
+    shareIndexWithLiveAuthoring(state);
+  }
+  return state.index;
+}
+
 async function callTool(state, name, args, principal) {
   const tool = registry.tools[name];
   const caller = principal || flagsPrincipal(state);
@@ -206,6 +222,7 @@ function createState(bundleArgs, options) {
   // Tool handlers refresh the index through the state so index construction
   // stays in this module; handlers never see bundle arguments or build options.
   state.rebuildIndex = () => rebuildStateIndex(state);
+  state.refreshIndex = () => refreshStateIndex(state);
   state.shareLiveIndex = liveIndexCompatible(state);
   shareIndexWithLiveAuthoring(state);
   if (

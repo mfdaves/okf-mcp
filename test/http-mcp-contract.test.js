@@ -176,6 +176,7 @@ test("--http flags are parsed strictly and a non-loopback host needs --auth", as
     allowedHosts: [],
     allowedOrigins: [],
     auth: null,
+    refreshIntervalMs: 2000,
   });
   assert.deepEqual(calls[1].options.http, {
     host: "127.0.0.1",
@@ -185,6 +186,7 @@ test("--http flags are parsed strictly and a non-loopback host needs --auth", as
     allowedHosts: ["proxy.internal", "mcp.example.test"],
     allowedOrigins: ["app.example.test"],
     auth: null,
+    refreshIntervalMs: 2000,
   });
 
   const refused = [

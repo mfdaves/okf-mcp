@@ -60,6 +60,7 @@ function usage() {
     "  --auth tokens:<file>        Bearer tokens from a YAML list of SHA-256 hashes with subject, actor, scopes.",
     "  --auth introspect:<url>     RFC 7662 introspection; credentials from OKF_INTROSPECTION_CLIENT_ID/SECRET.",
     "  --authorization-server <issuer>  Issuer named in the protected-resource metadata (with introspect).",
+    "  --refresh-interval <ms>     With --http, re-read changed files before a request at most this often (2000).",
     "  --allow-computation-authoring Enable coordinated computation proposals (also requires --authoring).",
     "  --strict-links              Treat broken internal Markdown links as project-invalid.",
     "  --languages <codes>         Search stemming languages for --root/--bundle mode: auto (default, detected per bundle), none, or codes such as it,en.",

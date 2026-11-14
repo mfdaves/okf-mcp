@@ -24,6 +24,7 @@ const { anonymousPrincipal } = require("./principal");
 const { MAX_MCP_MESSAGE_BYTES, createStateAsync, registerMcpInterface } = require("./server");
 
 const DEFAULT_MCP_PATH = "/mcp";
+const DEFAULT_REFRESH_INTERVAL_MS = 2000;
 const HEALTH_PATH = "/health";
 
 function jsonRpcError(status, code, message) {
@@ -120,13 +121,34 @@ async function sendWebResponse(res, response, extraHeaders) {
   }
 }
 
+// Plan I-2c: before an MCP request, when at least `intervalMs` has passed
+// since the last check, refresh the shared index from disk. The refresh runs
+// in the call queue, so no tool call sees the index change under it, and the
+// request waits for it, so it sees the files as they were when it arrived. A
+// failed refresh leaves the index as it was.
+function indexRefresher(state, intervalMs) {
+  let checkedAt = Date.now();
+  return async () => {
+    const now = Date.now();
+    if (now - checkedAt < intervalMs) return;
+    checkedAt = now;
+    const settled = state.callQueue.then(() => state.refreshIndex()).catch(() => {});
+    state.callQueue = settled;
+    await settled;
+  };
+}
+
 // The request handler for one shared state. `options`: mcpPath, allowedHosts
 // and allowedOrigins (hostnames, added to the localhost names),
 // `authenticate(request)` resolving to a principal or to a challenge
 // Response, `routes(request)` for extra documents (a Response or undefined),
-// and `beforeRequest()` awaited before each MCP request.
+// and `refreshIntervalMs` (default 2,000; see indexRefresher).
 function createMcpHttpHandler(state, options) {
   const config = options || {};
+  const refreshIfDue = indexRefresher(
+    state,
+    config.refreshIntervalMs ?? DEFAULT_REFRESH_INTERVAL_MS,
+  );
   const mcpPath = config.mcpPath || DEFAULT_MCP_PATH;
   const allowedHosts = localhostAllowedHostnames().concat(config.allowedHosts || []);
   const allowedOrigins = localhostAllowedOrigins().concat(config.allowedOrigins || []);
@@ -157,7 +179,7 @@ function createMcpHttpHandler(state, options) {
     if (body === null) {
       return { response: jsonRpcError(413, -32600, "Request body too large."), close: true };
     }
-    if (config.beforeRequest) await config.beforeRequest();
+    await refreshIfDue();
     // createMcpHandler hands authInfo to the factory as-is; it carries the
     // principal, never the bearer token.
     const authInfo = {
@@ -233,6 +255,7 @@ async function runMcpHttpServer(bundleArgs, options) {
 
 module.exports = {
   DEFAULT_MCP_PATH,
+  DEFAULT_REFRESH_INTERVAL_MS,
   createMcpHttpHandler,
   runMcpHttpServer,
 };

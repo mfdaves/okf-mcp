@@ -526,7 +526,7 @@ function percentile(values, fraction) {
 }
 
 function runChild(root, options) {
-  const { buildIndex } = require("../src/indexer");
+  const { buildIndex, refreshIndex } = require("../src/indexer");
   const modulePath = options.searchModule
     ? path.resolve(options.searchModule)
     : DEFAULT_SEARCH_MODULE;
@@ -565,6 +565,16 @@ function runChild(root, options) {
       totals += typeof out.total === "number" ? out.total : (out.results || out).length;
     });
   }
+  // Plan I-2c: what an HTTP server pays per refresh when no file changed
+  // (a walk of the bundle comparing size and mtime).
+  const refreshTimings = [];
+  for (let round = 0; round < options.rounds; round += 1) {
+    const started = performance.now();
+    if (refreshIndex(index) !== index) {
+      throw new Error("An unchanged bundle produced a new index on refresh.");
+    }
+    refreshTimings.push(performance.now() - started);
+  }
   const end = memory();
   return {
     concepts: index.concepts.length,
@@ -578,6 +588,8 @@ function runChild(root, options) {
     p50Ms: Math.round(percentile(timings, 0.5) * 100) / 100,
     p95Ms: Math.round(percentile(timings, 0.95) * 100) / 100,
     maxMs: Math.round(Math.max.apply(null, timings) * 100) / 100,
+    refreshUnchangedP50Ms: Math.round(percentile(refreshTimings, 0.5) * 100) / 100,
+    refreshUnchangedP95Ms: Math.round(percentile(refreshTimings, 0.95) * 100) / 100,
     avgTotal: Math.round(totals / timings.length),
     rssBeforeMb: before.rssMb,
     rssAfterOkfIndexMb: afterOkf.rssMb,
@@ -595,12 +607,12 @@ function renderMarkdown(report) {
     "",
   );
   lines.push(
-    "| concepts | markdown MB | generate ms | OKF index ms | search index ms | cold build ms | p50 ms | p95 ms | max ms | RSS before / after build / end MB | heap end MB |",
-    "|---|---|---|---|---|---|---|---|---|---|---|",
+    "| concepts | markdown MB | generate ms | OKF index ms | search index ms | cold build ms | p50 ms | p95 ms | max ms | unchanged refresh p50 / p95 ms | RSS before / after build / end MB | heap end MB |",
+    "|---|---|---|---|---|---|---|---|---|---|---|---|",
   );
   report.sizes.forEach((row) => {
     lines.push(
-      `| ${row.concepts} | ${row.markdownMb} | ${row.generateMs} | ${row.okfIndexMs} | ${row.searchIndexMs} | ${row.coldBuildMs} | ${row.p50Ms} | ${row.p95Ms} | ${row.maxMs} | ${row.rssBeforeMb} / ${row.rssAfterSearchIndexMb} / ${row.rssEndMb} | ${row.heapUsedEndMb} |`,
+      `| ${row.concepts} | ${row.markdownMb} | ${row.generateMs} | ${row.okfIndexMs} | ${row.searchIndexMs} | ${row.coldBuildMs} | ${row.p50Ms} | ${row.p95Ms} | ${row.maxMs} | ${row.refreshUnchangedP50Ms} / ${row.refreshUnchangedP95Ms} | ${row.rssBeforeMb} / ${row.rssAfterSearchIndexMb} / ${row.rssEndMb} | ${row.heapUsedEndMb} |`,
     );
   });
   lines.push(

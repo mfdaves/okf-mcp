@@ -5,6 +5,7 @@
 // combination and builds the options of runMcpHttpServer (src/mcp/http.js).
 
 const DEFAULT_HTTP_PORT = 8766;
+const DEFAULT_REFRESH_INTERVAL_MS = 2000;
 
 function createHttpOptions() {
   return {
@@ -14,6 +15,7 @@ function createHttpOptions() {
     allowedOrigins: [],
     auth: "",
     authorizationServer: "",
+    refreshInterval: "",
   };
 }
 
@@ -24,6 +26,7 @@ const VALUE_FLAGS = {
   "--allowed-origin": { key: "allowedOrigins", repeat: true },
   "--auth": { key: "auth" },
   "--authorization-server": { key: "authorizationServer" },
+  "--refresh-interval": { key: "refreshInterval" },
 };
 
 // Consumes one HTTP flag at argv[index]: returns how many extra arguments
@@ -135,10 +138,11 @@ function httpServerOptions(args, fail) {
       http.allowedOrigins.length,
       http.auth,
       http.authorizationServer,
+      http.refreshInterval,
     ];
     if (given.some(Boolean)) {
       throw fail(
-        "--public-url, --allowed-host, --allowed-origin, --auth and --authorization-server require --http.",
+        "--public-url, --allowed-host, --allowed-origin, --auth, --authorization-server and --refresh-interval require --http.",
       );
     }
     return null;
@@ -160,6 +164,12 @@ function httpServerOptions(args, fail) {
   if (!Number.isInteger(port) || port < 0 || port > 65535) {
     throw fail("--port must be an integer from 0 through 65535.");
   }
+  const refreshIntervalMs = http.refreshInterval
+    ? Number(http.refreshInterval)
+    : DEFAULT_REFRESH_INTERVAL_MS;
+  if (!/^\d+$/.test(http.refreshInterval || "0") || refreshIntervalMs > 86400000) {
+    throw fail("--refresh-interval must be a number of milliseconds from 0 through 86400000.");
+  }
   const mcpPath = publicUrl ? publicUrl.pathname.replace(/(.)\/+$/, "$1") : "/mcp";
   return {
     host: args.host,
@@ -171,6 +181,7 @@ function httpServerOptions(args, fail) {
       .concat(publicUrl ? [publicUrl.hostname] : []),
     allowedOrigins: http.allowedOrigins.map((value) => hostnameOf(value, "--allowed-origin", fail)),
     auth,
+    refreshIntervalMs,
   };
 }
 
