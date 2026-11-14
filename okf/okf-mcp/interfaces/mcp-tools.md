@@ -37,9 +37,13 @@ relations:
     target: repo://test/mcp-principal.test.js
   - type: checked_by
     target: repo://test/http-remote-load.test.js
+  - type: configured_by
+    target: repo://src/tool-packs.js
+  - type: checked_by
+    target: repo://test/tool-packs.test.js
 generated:
   by: anthropic/claude-code
-  at: 2026-11-14T17:33:39.682Z
+  at: 2026-11-14T18:17:23.039Z
 ---
 
 # MCP Tool Catalog
@@ -70,4 +74,6 @@ Every tool supplies a purpose-specific description, descriptions for all input p
 
 The official MCP SDK validates tool arguments against the advertised schema without coercion. Unknown or disabled tools are rejected by SDK dispatch. Argument-schema failures and expected validation, storage, network, read-only, and proposal-conflict failures from enabled tools are returned as tool results with `isError: true`. A validation operation that successfully reports invalid OKF remains a successful tool result.
 
-`search_concepts` and the optional text query on `list_concepts` require every case-insensitive query term, regardless of order. They rank title, type, tags, aliases, description, path, and body while keeping arbitrary frontmatter as an exact structured filter. Compact MCP results expose the URI plus bounded title, type, and description; `detail: "full"` returns navigation metadata, signals, ranking, and snippets. Queries are bounded to 512 characters and 16 terms; fuzzy, prefix, stemming, and stop-word expansion are not applied. Scores are relative retrieval scores rather than a stable public scale. Relation-type filtering selects concepts with an outgoing relation of the requested type.
+`search_concepts` and the optional text query on `list_concepts` run in mode `auto` by default: concepts matching every term come first, and when fewer than `autoFill` (default 3) do, concepts matching some of the terms follow; `all` and `any` are explicit modes. Terms are stemmed in the catalog's languages (`auto` uses the Italian and English stemmers a bundle's documents call for; `languages` overrides it), diacritics are folded, stop words and single letters are dropped, and quoted or identifier-like terms are matched literally against ids, paths, aliases, titles and raw tokens. Queries are bounded to 512 characters and 16 terms after stop words. Each result carries `coverage` and `relevance`; the response reports the mode that ran, `queryTerms`, `droppedTerms`, `allTermsTotal`, `lowConfidence` and a `confidence` block, and with a configured embedder the ranking fuses lexical and semantic scores. Compact MCP results expose the URI plus bounded title, type, and description; `detail: "full"` returns navigation metadata, signals, ranking, and snippets. Scores are relative retrieval scores rather than a stable public scale. Relation-type filtering selects concepts with an outgoing relation of the requested type.
+
+Configured tool packs, experimental and outside the 1.0 freeze, add read tools after the core tools: npm packages listed by exact name in the project's `toolPacks` and loaded from its `node_modules`. A principal sees a pack tool with `okf.read` and the tool's scope; its arguments are validated like core tool arguments, its errors reach the caller only as bounded codes and scalar details, and it runs outside the call queue unless the pack serializes. Over HTTP the caller's verified token reaches the pack's handler as its subject (the [MCP HTTP transport](mcp-http.md)).
