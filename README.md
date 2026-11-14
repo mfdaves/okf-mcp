@@ -532,7 +532,9 @@ exports.okfToolPack = {
   with a fixed message, the code, and only bounded scalar details: at most
   16 entries under identifier keys, values null, booleans, finite numbers or
   single-line strings, a string longer than 500 characters cut to 500 ending
-  in `…`, and no string holding the caller's token or a secret the pack read. The error's own
+  in `…`, and no string holding the caller's token or a secret the pack read.
+  The text content repeats this for clients that read only text: the fixed
+  message, then one JSON line with `code` and `details`. The error's own
   message is never forwarded. Any other failure is
   `tool_pack_execution_failed`; the host's own codes are `tool_pack_timeout`,
   `tool_pack_cancelled`, `tool_pack_result_too_large`,

@@ -189,6 +189,24 @@ test("over HTTP a principal sees pack tools by scope and passes its token as the
     assert.equal((await failure(mode)).code, "tool_pack_execution_failed", mode);
   }
   assert.equal((await failure("secret")).code, "tool_pack_secret_not_allowed");
+  // The text content carries the fixed message and one JSON line with the
+  // bounded code and details, the same as the structured content.
+  const coded = record(await fake.callTool({ name: "fake_fail", arguments: { mode: "coded" } }));
+  assert.equal(coded.isError, true);
+  assert.equal(
+    coded.content[0].text,
+    'The tool pack could not complete the call.\n{"code":"access_denied","details":{"section":"crons","count":2}}',
+  );
+  const [, line] = coded.content[0].text.split("\n");
+  assert.deepEqual(JSON.parse(line), {
+    code: coded.structuredContent.code,
+    details: coded.structuredContent.details,
+  });
+  const plain = record(await fake.callTool({ name: "fake_fail", arguments: { mode: "plain" } }));
+  assert.equal(
+    plain.content[0].text,
+    'The tool pack could not complete the call.\n{"code":"tool_pack_execution_failed"}',
+  );
   // Detail strings up to 500 characters pass; longer ones are truncated.
   const long = await failure("long");
   assert.equal(long.code, "query_error");

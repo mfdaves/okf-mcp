@@ -259,16 +259,22 @@ function toolPackScopes(packs) {
   );
 }
 
+// A failed pack call. The text leads with the fixed message, for clients that
+// show only the start of it, followed by one JSON line with the bounded code
+// and details: the same as the structured content, and nothing else from
+// the handler.
 function failure(name, code, details) {
+  const message = "The tool pack could not complete the call.";
   const value = {
     error: "Tool execution failed",
     tool: name,
-    message: "The tool pack could not complete the call.",
+    message,
     code,
     ...(details ? { details } : {}),
   };
+  const line = JSON.stringify({ code, ...(details ? { details } : {}) });
   return {
-    content: [{ type: "text", text: JSON.stringify(value, null, 2) }],
+    content: [{ type: "text", text: `${message}\n${line}` }],
     structuredContent: value,
     isError: true,
   };

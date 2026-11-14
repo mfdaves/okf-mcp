@@ -130,12 +130,19 @@ async function callOutcome(client, name, args) {
   }
 }
 
+// A tool result and its JSON payload: the text content, or the structured
+// content when the text is not JSON (a failed tool-pack call's text leads
+// with a sentence).
 async function callJson(client, name, args) {
   const result = await client.callTool({ name, arguments: args || {} });
-  return {
-    result,
-    payload: JSON.parse(result.content[0].text),
-  };
+  let payload;
+  try {
+    payload = JSON.parse(result.content[0].text);
+  } catch (error) {
+    if (!result.structuredContent) throw error;
+    payload = result.structuredContent;
+  }
+  return { result, payload };
 }
 
 module.exports = {
