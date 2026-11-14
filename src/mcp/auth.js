@@ -150,17 +150,26 @@ function introspectionPrincipal(answer, audience, nowSeconds) {
   if (answer?.active !== true || !sameAudience(answer.aud, audience)) return null;
   if (typeof answer.exp !== "number" || !(answer.exp > nowSeconds)) return null;
   const scopes = typeof answer.scope === "string" ? answer.scope.split(" ") : [];
-  const username = typeof answer.username === "string" ? answer.username : "";
+  const actor = humanActor(answer.username);
   const subject = typeof answer.sub === "number" ? String(answer.sub) : answer.sub;
-  if (!username || typeof subject !== "string" || !subject) return null;
+  if (!actor || typeof subject !== "string" || !subject) return null;
   const principal = {
     subject,
-    actor: `human:${username.replace(/[\s\p{Cc}]/gu, "-")}`,
+    actor,
     scopes: new Set(KNOWN_SCOPES.filter((scope) => scopes.includes(scope))),
   };
   if (validAuthorField(answer.name)) principal.name = answer.name;
   if (validAuthorField(answer.email)) principal.email = answer.email;
   return { principal, exp: answer.exp, clientId: answer.client_id };
+}
+
+// The actor of an introspected user: human:<username> with every character
+// outside [A-Za-z0-9._@+-] mapped to "-", so a username can never carry a
+// "/" (the provider/model actor form) or anything a policy pattern treats
+// specially. Null for an empty username.
+function humanActor(username) {
+  if (typeof username !== "string" || !username) return null;
+  return `human:${username.replace(/[^A-Za-z0-9._@+-]/g, "-")}`;
 }
 
 // HTTP Basic credentials per RFC 6749 section 2.3.1: id and secret are

@@ -11,6 +11,7 @@ const test = require("node:test");
 const { main } = require("../src/cli");
 const { introspectionPrincipal, loadTokenFile } = require("../src/mcp/auth");
 const { runMcpHttpServer } = require("../src/mcp/http");
+const { evaluateWritePolicy, parseWritePolicy } = require("../src/policy/write-policy");
 const { startFakeIntrospectionServer } = require("./fake-introspection-server");
 const {
   INITIALIZE_BODY,
@@ -175,6 +176,40 @@ test("the shared introspection answers map to principals", () => {
   assert.equal(
     introspectionPrincipal(ACTIVE, `${PUBLIC_URL}/`, before).principal.actor,
     "human:mrossi",
+  );
+});
+
+test("introspected usernames become human actors that policy rules cannot be fooled by", () => {
+  const before = ACTIVE.exp - 60;
+  const policy = (rules) => {
+    const parsed = parseWritePolicy({ defaultEffect: "allow", rules });
+    assert.deepEqual(parsed.errors, []);
+    return parsed.policy;
+  };
+  const humansDenied = policy([{ name: "no-humans", actors: ["human:*"], effect: "deny" }]);
+  const modelsDenied = policy([{ name: "no-models", actors: ["*/*"], effect: "deny" }]);
+  const change = [{ op: "create", bundleId: "prod", path: "notes/a.md", type: "Note" }];
+  const expected = {
+    "eve/ops": "human:eve-ops",
+    "eve\\ops": "human:eve-ops",
+    "eve/x@example.com": "human:eve-x@example.com",
+    "José Müller": "human:Jos--M-ller",
+    " mrossi\t": "human:-mrossi-",
+    "a.b_c+d@e-f": "human:a.b_c+d@e-f",
+  };
+  for (const [username, actor] of Object.entries(expected)) {
+    const answer = Object.assign({}, ACTIVE, { username });
+    const { principal } = introspectionPrincipal(answer, PUBLIC_URL, before);
+    assert.equal(principal.actor, actor, username);
+    assert.match(principal.actor, /^human:[A-Za-z0-9._@+-]+$/);
+    const denied = evaluateWritePolicy(humansDenied, { actor: principal.actor, changes: change });
+    assert.equal(denied.violations.length, 1, username);
+    const notModel = evaluateWritePolicy(modelsDenied, { actor: principal.actor, changes: change });
+    assert.equal(notModel.violations.length, 0, username);
+  }
+  assert.equal(
+    introspectionPrincipal(Object.assign({}, ACTIVE, { username: "" }), PUBLIC_URL, before),
+    null,
   );
 });
 

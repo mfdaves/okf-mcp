@@ -395,8 +395,9 @@ okf --root /srv/okf --write --actor process:okf-mcp --git-commit mcp --http \
 - A token is accepted when `active` is `true`, `aud` equals `--public-url`
   (one trailing slash ignored on either side), `exp` is in the future and
   `scope` holds `okf.read`. The principal's subject
-  is `sub`, its actor `human:<username>` (whitespace and control characters
-  replaced by `-`), its scopes the `okf.read` and `okf.write` entries of
+  is `sub`, its actor `human:<username>` (every character outside
+  `A-Z`, `a-z`, `0-9` and `._@+-` replaced by `-`, so a username can never
+  take the `provider/model` form), its scopes the `okf.read` and `okf.write` entries of
   `scope` (others are ignored), and its git author `name` and `email`, each
   optional.
 - A missing or refused token gets `401` with a `WWW-Authenticate: Bearer`
