@@ -414,9 +414,14 @@ okf --root /srv/okf --write --actor process:okf-mcp --git-commit mcp --http \
   `okf.*` such as `odoo.read` gate [tool-pack](#tool-packs-experimental)
   tools, other `okf.*` names are ignored), and its git author `name` and
   `email`, each optional.
-- A missing or refused token gets `401` with a `WWW-Authenticate: Bearer`
-  challenge carrying `resource_metadata`; a token without `okf.read` gets
-  `403 insufficient_scope`. When the authorization server cannot be reached,
+- A request without credentials gets `401` with
+  `WWW-Authenticate: Bearer realm="okf-mcp", scope="…", resource_metadata="…"`
+  and no `error` attribute (RFC 6750 section 3.1); a presented Bearer token
+  that is refused gets the same challenge with `error="invalid_token"`. The
+  `scope` lists every scope the server offers, the same list as
+  `scopes_supported`, so the authorization server narrows it to the user's
+  rights. A token without `okf.read` gets `403` with
+  `error="insufficient_scope", scope="okf.read"`. When the authorization server cannot be reached,
   times out (5 s) or answers anything but `200` with JSON, the request gets
   `503` with `{"error":"temporarily_unavailable"}` and no further detail.
 - Answers are cached by the token's SHA-256 in two bounded caches: accepted

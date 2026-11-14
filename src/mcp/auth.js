@@ -26,7 +26,6 @@ const yaml = require("js-yaml");
 const {
   OAuthError,
   OAuthErrorCode,
-  bearerAuthChallengeResponse,
   buildOAuthProtectedResourceMetadata,
   getOAuthProtectedResourceMetadataUrl,
   verifyBearerToken,
@@ -336,10 +335,22 @@ function createHttpAuth(auth, options) {
     });
   }
   const bearer = { verifier, requiredScopes: [READ_SCOPE], resourceMetadataUrl };
-  // A missing or refused token is answered with every scope the server
-  // offers, so a client signing in asks for all of them; a token lacking
+  // The WWW-Authenticate challenge (RFC 6750 section 3). It names every scope
+  // the server offers, so a client signing in asks for all of them and the
+  // authorization server narrows them to the user's rights; error is set only
+  // when a Bearer token was presented (section 3.1), and a token lacking
   // okf.read is told that it needs okf.read.
-  const signIn = { requiredScopes: scopes, resourceMetadataUrl };
+  const challenge = (status, error, required) => {
+    const header = ['Bearer realm="okf-mcp"']
+      .concat(error ? [`error="${error}"`] : [])
+      .concat([`scope="${required.join(" ")}"`])
+      .concat(resourceMetadataUrl ? [`resource_metadata="${resourceMetadataUrl}"`] : [])
+      .join(", ");
+    return Response.json(
+      { error: error || "unauthorized" },
+      { status, headers: { "www-authenticate": header } },
+    );
+  };
   const metadataPaths = metadata
     ? new Set([new URL(resourceMetadataUrl).pathname, "/.well-known/oauth-protected-resource"])
     : new Set();
@@ -347,10 +358,15 @@ function createHttpAuth(auth, options) {
   return {
     async authenticate(request) {
       const [header] = (request.headers.get("authorization") || "").split(",");
+      // No credentials: no Authorization header, or none with a Bearer token.
+      if (!/^\s*bearer\s+\S/i.test(header)) return challenge(401, null, scopes);
       try {
-        const verified = await verifyBearerToken(header || undefined, bearer);
+        const verified = await verifyBearerToken(header.trim(), bearer);
         // The token itself travels on only as a tool pack's subjectToken.
-        return { principal: verified.extra.principal, subjectToken: header.split(" ")[1] };
+        return {
+          principal: verified.extra.principal,
+          subjectToken: header.trim().split(/\s+/)[1],
+        };
       } catch (error) {
         if (error instanceof IntrospectionUnavailableError) {
           return Response.json(
@@ -358,10 +374,13 @@ function createHttpAuth(auth, options) {
             { status: 503, headers: { "retry-after": "5" } },
           );
         }
-        return bearerAuthChallengeResponse(
-          error,
-          error?.code === OAuthErrorCode.InvalidToken ? signIn : bearer,
-        );
+        if (error?.code === OAuthErrorCode.InsufficientScope) {
+          return challenge(403, "insufficient_scope", [READ_SCOPE]);
+        }
+        if (error?.code === OAuthErrorCode.InvalidToken) {
+          return challenge(401, "invalid_token", scopes);
+        }
+        return Response.json({ error: "server_error" }, { status: 500 });
       }
     },
     routes(request) {

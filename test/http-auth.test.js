@@ -273,8 +273,21 @@ test("introspection gates MCP over HTTP: challenge, metadata, scopes, writes and
   assert.equal(missing.status, 401);
   assert.match(missing.headers["www-authenticate"], /^Bearer /);
   assert.ok(missing.headers["www-authenticate"].includes(`resource_metadata="${METADATA_URL}"`));
-  // Without tool packs, the core scopes are what a client asks for at sign-in.
-  assert.ok(missing.headers["www-authenticate"].includes('scope="okf.read okf.write"'));
+  // RFC 6750 section 3.1: no credentials, so no error attribute; the core
+  // scopes are what a client asks for at sign-in when no tool pack adds more.
+  assert.equal(
+    missing.headers["www-authenticate"],
+    `Bearer realm="okf-mcp", scope="okf.read okf.write", resource_metadata="${METADATA_URL}"`,
+  );
+  for (const authorization of ["Basic b2tmOm1jcA==", "Bearer", "Bearer   "]) {
+    const unauthenticated = await httpExchange(server.port, {
+      method: "POST",
+      headers: Object.assign({ authorization }, MCP_POST_HEADERS),
+      body: INITIALIZE_BODY,
+    });
+    assert.equal(unauthenticated.status, 401, authorization);
+    assert.doesNotMatch(unauthenticated.headers["www-authenticate"], /error=/, authorization);
+  }
   for (const location of [
     new URL(METADATA_URL).pathname,
     "/.well-known/oauth-protected-resource",
@@ -296,6 +309,11 @@ test("introspection gates MCP over HTTP: challenge, metadata, scopes, writes and
     const refused = await post(server, token);
     assert.equal(refused.status, 401, token);
     assert.equal(JSON.parse(refused.body).error, "invalid_token");
+    // A presented token that is refused: error="invalid_token" (section 3.1).
+    assert.equal(
+      refused.headers["www-authenticate"],
+      `Bearer realm="okf-mcp", error="invalid_token", scope="okf.read okf.write", resource_metadata="${METADATA_URL}"`,
+    );
   }
   fake.answer("tok-write-only", activeAnswer({ scope: "okf.write" }));
   const writeOnly = await post(server, "tok-write-only");
@@ -509,8 +527,16 @@ test("a token file grants the principals it lists", async (t) => {
   const server = await startServer(t, root, { mode: "tokens", file });
   const missing = await post(server);
   assert.equal(missing.status, 401);
-  assert.equal(missing.headers["www-authenticate"].includes("resource_metadata"), false);
-  assert.equal((await post(server, "tok-other")).status, 401);
+  assert.equal(
+    missing.headers["www-authenticate"],
+    'Bearer realm="okf-mcp", scope="okf.read okf.write"',
+  );
+  const other = await post(server, "tok-other");
+  assert.equal(other.status, 401);
+  assert.equal(
+    other.headers["www-authenticate"],
+    'Bearer realm="okf-mcp", error="invalid_token", scope="okf.read okf.write"',
+  );
   assert.equal(
     (await httpExchange(server.port, { path: "/.well-known/oauth-protected-resource" })).status,
     404,
