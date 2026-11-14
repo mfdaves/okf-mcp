@@ -1,6 +1,6 @@
 # okf-mcp 1.0 master plan: a knowledge runtime for autonomous agents
 
-Status: revision 9, 2026-10-25: v0.11.0-rc.2 and v0.12.0-rc.1 cut; WP3c-2 done with a recorded negative result; next is real use plus WP6 and WP8.
+Status: revision 10, 2026-11-14: WP6 split into WP6a (MCP over Streamable HTTP with per-user principals, ships as 0.13.0-rc.1) and WP6b (the rest of the deployment surface); I-2a to I-2c added. Revision 9 (2026-10-25) cut v0.11.0-rc.2 and v0.12.0-rc.1 and closed WP3c-2 with a recorded negative result.
 
 ## 0. How to use this document
 
@@ -93,7 +93,10 @@ The reference deployment is an SEO agent (one agent per customer, one bundle per
 | O-2 | Structured receipts with timings for search, context, validate, apply, producer runs; `embedder.remote: true` whenever text left the machine. | Must |
 | O-3 | Cache directory safe to delete at any time; version mismatch rebuilds, never errors; cache paths pass the same safety rules as bundle paths. | Must |
 | I-1 | MCP stdio stays the primary transport. | Must |
-| I-2 | MCP over Streamable HTTP, same registry as stdio. SDK 2.0.0 ships `createMcpHandler` and `WebStandardStreamableHTTPServerTransport` on web `Request`/`Response`; `node:http` needs `@modelcontextprotocol/node` (`toNodeHandler`) or a small shim; the entry is validation-free, so okf-mcp must validate `Origin` and `Host`, bind `127.0.0.1` by default, and require a bearer token. The tool-call queue moves from the `McpServer` instance to shared state so sessions serialise. | Should |
+| I-2 | MCP over Streamable HTTP, same registry as stdio. SDK 2.0.0 ships `createMcpHandler` and `WebStandardStreamableHTTPServerTransport` on web `Request`/`Response`; `node:http` needs `@modelcontextprotocol/node` (`toNodeHandler`) or a small shim; the entry is validation-free, so okf-mcp must validate `Origin` and `Host`, bind `127.0.0.1` by default, and require a bearer token. The tool-call queue moves from the `McpServer` instance to shared state so sessions serialise. Adapter decision (WP6a): a small `node:http` ↔ web `Request`/`Response` bridge in `src/mcp/http.js`, no `@modelcontextprotocol/node` dependency (it would make 5 of 6 runtime dependencies for about 60 lines); `createMcpHandler` with `legacy: "stateless"`, so 2026-07-28 clients and 2025-era clients are both served from one factory. | Should (0.13) |
+| I-2a | Principals and auth modes. Every MCP call runs for a principal `{ subject, actor, scopes, name?, email? }`. Scopes: `okf.read` (required for any call), `okf.write` (live write tools and producer runs); `odoo.read` is reserved. Over stdio the principal comes from the flags: `actor` = `--actor`, `okf.write` only with `--write`. Over HTTP: without `--auth` an anonymous read-only principal, and only on a loopback address; `--auth tokens:<file>` reads a YAML list of SHA-256 token hashes with `subject`, `actor` and `scopes` (plaintext tokens are never stored); `--auth introspect:<url>` checks opaque bearer tokens by RFC 7662 introspection against an external authorization server with HTTP Basic client credentials from `OKF_INTROSPECTION_CLIENT_ID` / `OKF_INTROSPECTION_CLIENT_SECRET`, accepts a token when `active` is true, `aud` equals the public MCP URL, `exp` is in the future and `scope` holds `okf.read`, takes the actor `human:<username>` (characters outside the actor syntax replaced by `-`), and caches each answer by token hash until the earlier of `exp` and 60 s. okf-mcp never issues tokens: it is a resource server, serving RFC 9728 protected-resource metadata that names the configured issuer. Introspection URL and issuer come only from flags (B-3); credentials only from the environment; token values never appear in errors, logs or responses (B-6). | Should (0.13) |
+| I-2b | Actor per request. Live writes take the call's actor for `generated.by` and for the write policy; when the principal carries `name` and `email`, the git commit's author is the principal and the committer stays the repository's configured identity. Proposals record the call's actor as `proposedBy`. Producer runs keep `process:<producer>`. Tool availability (`tools/list` and direct calls) is decided per principal. | Should (0.13) |
+| I-2c | Index refresh while serving. Before handling an HTTP request, when more than `--refresh-interval` (default 2,000 ms) has passed since the last check, the server runs `refreshIndex` (size and `mtimeNs`, W-6) inside the call queue and hands a changed index to live authoring as a write would, so files edited outside okf-mcp become visible without a restart. Stdio keeps today's behaviour. | Should (0.13) |
 | I-3 | CLI exit codes and JSON shapes unchanged except additive fields; the REST authoring API (`src/http-server.js`) and `.okf-proposals` JSON gain a `schemaVersion` and enter the freeze. | Must |
 
 ### 4.6 Non-functional
@@ -105,7 +108,7 @@ Performance budgets at 5,000 concepts (about 5 MB of Markdown) with two stemming
 | Cold index build | ≤ 2.0 s (≤ 8 s); stemmed ÷ unstemmed ≤ 2.5× | WP1 at 5k: 1.16 s stemmed vs 0.81 s unstemmed (1.44×; search-index part 786 vs 437 ms, 1.80×); 4.7 s stemmed at 20k |
 | Lexical search p95 | ≤ 25 ms (≤ 120 ms) | WP1 at 5k: 17.7 ms stemmed vs 13.0 ms unstemmed; at 20k 124.7 vs 91.1 ms (stretch ceiling missed by 4%, not gated) |
 | Hybrid search p95, 20k vectors, excluding query encoding | ≤ 60 ms; query encoding reported separately. "20k vectors" means 5,000 concepts × 4 section units, the 1.0 tenant size | WP3c: 35.3 ms at 5,000 concepts × 4 units (lexical alone 21.1 ms) ✔; 199 ms at 20,000 concepts × 1 unit where lexical alone is already 124 ms (the 20k stretch tier, not gated). Query encoding p50/p95 ≈ 143/168 ms through the remote API, reported separately |
-| Write batch of 5 concepts: validate + apply + index update, git commit on | ≤ 500 ms (≤ 2 s); incremental ÷ full ≤ 0.3× | WP2 at 5k after the review fixes (mixed create/update batches, one external removal per batch, two refreshes per batch): incremental ÷ full 0.032 (updateIndex ≈ 13 ms vs full ≈ 400 ms); batch p95 217 ms with git off, 628 ms with git on. Git subprocesses are 64% of the git-on batch (69 calls; `check-attr` over all ~5,100 tracked files ≈ 134 ms). The 500 ms git-on budget is therefore not met by WP2 and is owed by WP6: narrowing `check-attr` to candidate paths (≈ −130 ms) and sharing the planning walk with the persisted-state refresh when it is milliseconds old (≈ −45 ms) |
+| Write batch of 5 concepts: validate + apply + index update, git commit on | ≤ 500 ms (≤ 2 s); incremental ÷ full ≤ 0.3× | WP2 at 5k after the review fixes (mixed create/update batches, one external removal per batch, two refreshes per batch): incremental ÷ full 0.032 (updateIndex ≈ 13 ms vs full ≈ 400 ms); batch p95 217 ms with git off, 628 ms with git on. Git subprocesses are 64% of the git-on batch (69 calls; `check-attr` over all ~5,100 tracked files ≈ 134 ms). The 500 ms git-on budget is therefore not met by WP2 and is owed by WP6b: narrowing `check-attr` to candidate paths (≈ −130 ms) and sharing the planning walk with the persisted-state refresh when it is milliseconds old (≈ −45 ms) |
 | Incremental embed on write, changed sections only | local model ≤ 2 s per batch; remote client one request per batch when the inputs fit, latency reported and not gated | WP3b live run against api.openai.com, `text-embedding-3-small`: alpinaria 228 concept units in one request, 42,765 prompt tokens (188 per concept), 0.57 s at 512 dims and 0.79 s at 1,536 (2.7 s on the first cold connection), 0.0009 USD; atlas 167 units, 39,641 tokens, 0.50 s; the second run reuses the cache with zero requests |
 | RSS without embedder | ≤ 300 MB (≤ 600 MB) | WP1 at 5k: 271 MB stemmed, 251 MB unstemmed; at 20k 1,167 MB stemmed, 835 MB unstemmed. The 20k stretch is missed before stemming is involved; index memory at 20k becomes a named follow-up (WP2 report or post-1.0), not a 1.0 gate |
 | Test suite | ≤ 60 s | ≈ 9 s (195 tests, of which the retrieval eval takes 4.5 s) |
@@ -114,7 +117,7 @@ Code quality:
 
 | ID | Rule |
 |---|---|
-| Q-1 | No new or split source file above 800 lines. WP7 split the two largest; files still above the cap after formatting are grandfathered by a shrink-only ratchet test (`test/source-size`) and have split owners: `indexer.js` 1,221 → WP2; `authoring.js` 1,092 → `authoring/proposals.js` in WP4; `cli.js` 996 → WP6; `migration.js` 865 → WP5. |
+| Q-1 | No new or split source file above 800 lines. WP7 split the two largest; files still above the cap after formatting are grandfathered by a shrink-only ratchet test (`test/source-size`) and have split owners: `indexer.js` 1,221 → WP2; `authoring.js` 1,092 → `authoring/proposals.js` in WP4; `cli.js` 996 → WP6a (split into `src/cli/`); `migration.js` 865 → WP5. |
 | Q-2 | Tools grouped by area (`mcp/tools/search.js`, `graph.js`, `authoring.js`, `producers.js`, ...), each exporting schema plus handler; the server composes a registry. |
 | Q-3 | `src/index.js` keeps every 0.9.1 export (B-9); internals get JSDoc `@internal`; a test asserts the 0.9.1 list is a subset. |
 | Q-4 | Lint and format in CI with Biome 2.5.15 (single binary, no dependency tree); no new runtime dependency. Rules that would need code changes are warnings for now (useOptionalChain 267, useNodejsImportProtocol 36, useIterableCallbackReturn 19, noPrototypeBuiltins 18, others 32); each WP leaves the files it owns warning-free, and the formatter carve-out for `src/search*` and `scripts/search-benchmark.js` is removed by WP1 and WP0. The formatting commit is listed in `.git-blame-ignore-revs`. |
@@ -139,7 +142,8 @@ Full-text search over external document stores; live data proxying; agent scratc
 ```
 src/
   index.js                 all 0.9.1 exports + new public API (Q-3)
-  cli.js                   argument parsing + dispatch only
+  cli.js                   entry: argument parsing + dispatch only
+  cli/       options.js  usage.js  commands.js  http-options.js     split of cli.js (WP6a)
   parser.js  markdown.js  v02.js  validation.js            unchanged roles
   indexer/   build.js  update.js  resolve.js               split of indexer.js; functional update (W-6)
   search/    lexical.js  query.js  fusion.js  dense.js      R-1..R-10
@@ -152,10 +156,10 @@ src/
   context/   sections.js  assemble.js                       R-7, C-1, C-2
   policy/    write-policy.js  duplicates.js  suggest.js     W-1..W-5
   authoring/ live.js  git-publish.js  git-preflight.js  candidates.js  receipts.js  staging.js  shared.js   (WP7, done)
-             proposals.js (split of authoring.js, WP4)   sync.js (W-7, WP6)
+             proposals.js (split of authoring.js, WP4)   sync.js (W-7, WP6b)
   mcp/       server.js  registry.js  resources.js                                                            (WP7, done)
              tools/{catalog,search,graph,provenance,computation,migration,remote,proposals,live-authoring,producers}.js
-             http.js (I-2, WP6)
+             http.js (I-2, I-2c, WP6a)  auth.js (I-2a, WP6a)
   mcp-server.js  live-authoring.js                        one-line shims at the old paths (kept through 1.0)
   producers/ host.js  publisher.js                           unchanged roles
   http-server.js                                             existing REST authoring API
@@ -194,7 +198,7 @@ Sizes: S ≤ 1 day of agent work, M ≤ 3, L ≤ 6. All Must for 1.0 unless mark
 
 ### WP2 Functional index update and write-path performance (M; done)
 
-- Done on branch `wp2/index-update-final` (14 commits, merged as `5240904`): `src/indexer/{build,assemble,update,resolve,paths,cache,index}.js` with shim, `updateIndex` with dependency tracking and a 0.2 change-ratio fallback, `refreshIndex` over Markdown and referenced assets (size + `mtimeNs`), `IndexCache` keyed by snapshot identity, `indexInputs` for server/service compatibility, one write-path bug found and fixed by the property test (create + replace in one batch), `scripts/write-benchmark.js` (`npm run bench:write`). Measured: incremental ÷ full 0.04; git-off batch p95 ≈ 180–220 ms; git-on p95 ≈ 630–730 ms, owed to WP6 (git preflight). Two independent reviews; all findings closed or documented (W-6). The original specification follows for reference.
+- Done on branch `wp2/index-update-final` (14 commits, merged as `5240904`): `src/indexer/{build,assemble,update,resolve,paths,cache,index}.js` with shim, `updateIndex` with dependency tracking and a 0.2 change-ratio fallback, `refreshIndex` over Markdown and referenced assets (size + `mtimeNs`), `IndexCache` keyed by snapshot identity, `indexInputs` for server/service compatibility, one write-path bug found and fixed by the property test (create + replace in one batch), `scripts/write-benchmark.js` (`npm run bench:write`). Measured: incremental ÷ full 0.04; git-off batch p95 ≈ 180–220 ms; git-on p95 ≈ 630–730 ms, owed to WP6b (git preflight). Two independent reviews; all findings closed or documented (W-6). The original specification follows for reference.
 
 - Owns `src/indexer/` and the write paths in `authoring/live.js` after WP7. Implements W-6 per section 6; replaces `buildIndex` calls at `live-authoring.js:1958, 2029, 2214, 2277` and the `rebuildStateIndex` calls in the server; producers and `load_remote_bundle` keep full builds through the change-ratio fallback.
 - `applyFilters`: memoise link sets per index in a `WeakMap`, compute lazily, index edges by source (the `relationType` filter is O(concepts × edges) at `search.js:170`; after WP1 the function lives in `src/search/query.js`).
@@ -257,15 +261,22 @@ Benchmarks and gates for the whole package: `npm run eval:search -- --embedder �
 
 ### WP5 Integrity and advice (M)
 
-- W-3, W-4, G-1 (W-5 if time allows) in `src/policy/duplicates.js`, `suggest.js`, and `catalog_report`. Advice attaches to validate and apply receipts after WP6's sync code has landed in `authoring/sync.js` (file-ownership rule, section 12).
+- W-3, W-4, G-1 (W-5 if time allows) in `src/policy/duplicates.js`, `suggest.js`, and `catalog_report`. Advice attaches to validate and apply receipts after WP6b's sync code has landed in `authoring/sync.js` (file-ownership rule, section 12).
 - Tests: the fixture's near-duplicate pairs are detected lexically and, with an embedder, semantically; no false positive among verified distinct concepts; suggestions use declared relation types only.
 
-### WP6 Deployment surface (M)
+### WP6a MCP over HTTP with per-user principals (M; ships as 0.13.0-rc.1)
 
-- O-1, O-2, I-2, W-7. HTTP transport per I-2 with the adapter decision recorded (shim versus `@modelcontextprotocol/node`, which would make 5 of 6 dependencies); `server.json` gains the HTTP transport entry; git sync in `authoring/sync.js`.
+- I-2, I-2a, I-2b, I-2c. Owns `src/mcp/http.js`, `src/mcp/auth.js`, `src/cli/` (the split of `src/cli.js` comes first, because new flags would grow a file held by the Q-1 ratchet), and the principal plumbing in `mcp/server.js`, `mcp/registry.js` and the tool modules.
+- Order: split `src/cli.js` into `src/cli/{options,usage,commands}.js` with no behaviour change; one tool-call queue per process (`state.callQueue`); actor and git author per call in `LiveAuthoringService`; gates and handlers receive the principal; the HTTP transport (`okf mcp --http [--host 127.0.0.1] [--port 8766] [--public-url URL] [--allowed-host H]... [--allowed-origin O]...`; a non-loopback host without `--auth` is a usage error); authentication; refresh while serving.
+- Tests: an HTTP contract test against a server on an ephemeral port with the SDK HTTP client (`tools/list` equals the stdio listing for the same flags, reads answer, a 2026-07-28 request and a 2025-11-25 `initialize` both succeed, wrong Host and foreign Origin rejected, a 2 MiB body gets 413); two servers on one state serialise concurrent writes to one concept; one service judging two actors by path; the commit author is the principal and the committer the configured identity; a fake introspection server on `node:http` covering missing, inactive and wrong-audience tokens, read-only and write scopes, the 60 s cache, an unreachable server (503 without detail), and a sentinel token that never appears in a response, error or log line; a concept written directly on disk becomes searchable after the refresh interval. The stdio MCP contract snapshots stay byte-identical.
+- Acceptance: all of the above green with stdio unchanged; the cost of an unchanged refresh at 5k concepts is recorded here from `npm run bench:index`.
+
+### WP6b Deployment surface, remainder (M)
+
+- O-1, O-2, W-7. Git sync in `authoring/sync.js`.
 - Portable vector cache: `okf embeddings export <file>` / `import <file>` (the manifest, units and vectors of the current generation, self-describing by embedder id and digests) so a new machine, a CI job or a second replica starts warm without re-embedding; documentation for keeping the XDG cache directory across CI runs keyed by embedder id. The cache stays outside the bundle (B-5); an opted-in, git-ignored in-root location remains possible through `cacheDir` + `allowInsideRoot` and is documented as such.
 - Git preflight cost (from WP2): narrow `check-attr` to candidate paths or cache the attribute scan per HEAD, and share the planning walk with the persisted-state refresh when it is milliseconds old, to bring the git-on write batch under 500 ms.
-- Tests: HTTP contract test mirroring `test/live-mcp-contract.test.js`; two concurrent sessions serialise writes; Origin/Host rejection; git sync against a temporary bare remote (pull, push, push failure reported, index refreshed after pull).
+- Tests: git sync against a temporary bare remote (pull, push, push failure reported, index refreshed after pull).
 - Acceptance: an example agent loop using the library runs read, write, re-read on the fixture in under 1 s.
 
 ### WP7 Code structure and quality (M; starts first)
@@ -283,7 +294,7 @@ Benchmarks and gates for the whole package: `npm run eval:search -- --embedder �
 - Freeze: tool names and schemas, CLI commands, exit codes and JSON shapes, project config keys, policy schema, Producer API v1, embedder interface, library exports, REST authoring API, `.okf-proposals` schema, `server.json`. Deprecation list (section 10), SemVer policy, migration note; tag.
 - Acceptance: 0.9.1's MCP and CLI contract tests run against 1.0 and pass except for section 10 entries; the export-subset test passes.
 
-Release mapping: 0.10 = WP7, WP0, WP1; 0.11 = WP2, WP3a, WP3b, WP3c; 0.12 = WP4, WP5; 0.13 = WP6, WP8, WP3d (if taken); 1.0 = WP9.
+Release mapping: 0.10 = WP7, WP0, WP1; 0.11 = WP2, WP3a, WP3b, WP3c; 0.12 = WP4, WP5; 0.13 = WP6a (rc.1), then WP6b, WP8, WP3d (if taken); 1.0 = WP9.
 
 ## 8. Test strategy
 
@@ -312,7 +323,7 @@ Rules: thresholds are written down before the change that targets them; fixture 
 | Agents over-write and fragment the graph | W-1 batch caps, W-3 duplicates, `catalog_report` in the knowledge repo's CI, soak test |
 | Process-local locking insufficient when a replica appears | B-4; W-7 ff-only pull; single-writer rule documented |
 | Parallel WPs collide on the two large files | WP7 lands before Group B; file ownership in section 12 |
-| HTTP transport needs an extra dependency | decision recorded in WP6; budget allows one |
+| HTTP transport needs an extra dependency | decided in WP6a (I-2): a small `node:http` bridge, no new dependency |
 | Optional packages drift from core | embedder interface versioned like Producer API; contract test in core |
 | Small query sets make thresholds noisy | ≥ 150 queries before held-out gating; bootstrap CIs; second fixture |
 
@@ -340,11 +351,11 @@ Known issues carried into the milestone:
 - Paraphrase queries on the real catalog stay unsolved (hybrid Recall@5 0.10 on 5 queries), consistent with the synonym shortfall below.
 - Synonym-category Recall@5 0.542 on alpinaria (target 0.70; section units reach 0.594; embeddings alone reach 0.81 on dev synonyms, so fusion is the gap): per-query adaptive alpha is the follow-up (WP3c-2).
 - Atlas section-anchor hit 0.791 at the default budget (target 0.80): 4 of 9 misses are candidate-step misses, 3 share no token with the query, 2 do not fit the budget; the acceptance test records the value instead of relaxing the threshold.
-- Git-on write batch p95 ≈ 630–730 ms at 5k against a 500 ms budget (git preflight; WP6).
+- Git-on write batch p95 ≈ 630–730 ms at 5k against a 500 ms budget (git preflight; WP6b).
 - 20k stretch tier: search p95 and RSS above the stretch ceilings (index memory item, post-milestone).
-- Vector cache is machine-local; export/import and CI caching are WP6.
+- Vector cache is machine-local; export/import and CI caching are WP6b.
 - Lock and directory races in the vector cache are narrowed, not closed (documented in the file headers).
-- HTTP MCP transport, git sync, CI ratio gates, soak test and the 1.0 freeze are WP6, WP8, WP9.
+- HTTP MCP transport is WP6a; git sync is WP6b; CI ratio gates, soak test and the 1.0 freeze are WP8, WP9.
 
 ## 12. Running the plan with multiple agents
 
@@ -355,21 +366,21 @@ File ownership while a WP is open: a file has one owner; others wait or send a p
 | A | WP7 (done), WP0 (done), WP8 scaffolding | now | WP7: both large files, `test/mcp-contract-snapshot.test.js`, `test/snapshots/`; WP0: `test/fixtures/`, `scripts/`, `eval:search` |
 | B | WP1 (done), WP2 (done), WP3b (in review) | WP7 merged, WP0 baseline committed | WP1: `src/search/`, `src/search-index.js`, `src/search.js`, `mcp/tools/search.js`; WP2: `src/indexer/`, `authoring/live.js`, `mcp/server.js` state; WP3b: `src/embed/`, `src/cache/`, `scripts/embed-smoke.js`, its tests (no `project.js`, no search files) |
 | C | WP3a, WP3c, WP4 | WP1, WP2 and WP3b merged | WP3a: `src/context/`; WP3c: `src/search/dense.js`, `fusion.js`, `scripts/eval-search.js --embedder`; WP4: `src/policy/write-policy.js` |
-| D | WP6, then WP5 | Group C merged | WP6: `mcp/http.js`, `authoring/sync.js`; WP5 (after WP6): `src/policy/duplicates.js`, `suggest.js`, receipts |
+| D | WP6a, WP6b, then WP5 | Group C merged | WP6a: `mcp/http.js`, `mcp/auth.js`, `src/cli/`; WP6b: `authoring/sync.js`; WP5 (after WP6b): `src/policy/duplicates.js`, `suggest.js`, receipts |
 | E | WP9 | everything merged | release files |
 
 Shared files have one owner per group; everyone else sends a patch to the owner's branch:
 
 | File | Group A | Group B | Group C | Group D |
 |---|---|---|---|---|
-| `src/cli.js` | WP7 | WP1 (`search` output) | WP4 (`--policy`) | WP6 (`serve`, `--git-sync`); WP5's `report` goes in after WP6 |
-| `src/project.js` | WP7 | WP1 (`languages`) | WP3c (`embedder`, `cacheDir`, `fusion`) first, then WP4 (`policy`) | WP6 |
+| `src/cli.js`, `src/cli/` | WP7 | WP1 (`search` output) | WP4 (`--policy`) | WP6a (split, `mcp --http`), WP6b (`--git-sync`); WP5's `report` goes in after WP6b |
+| `src/project.js` | WP7 | WP1 (`languages`) | WP3c (`embedder`, `cacheDir`, `fusion`) first, then WP4 (`policy`) | WP6b |
 | `.github/workflows/ci.yml` | WP7 first, WP8 after WP7 merges | WP0 (`eval:search` job) | — | WP8 (ratio gates) |
 | `mcp/tools/search.js` | WP7 (move only) | WP1 | WP3c (hybrid options) | — |
 | `mcp/tools/context.js` | — | — | WP3a | — |
-| `mcp/tools/live-authoring.js`, `mcp/tools/proposals.js` | WP7 (done) | WP2 (index refresh) | WP4 (error shapes) | WP5 (advice) after WP6 |
-| `mcp/server.js` | WP7 | WP2 (state) | — | WP6 (HTTP, call queue) |
-| `package.json` (scripts, devDependencies; append-only, the later merger resolves conflicts) | WP7, WP0 (test glob `test/*.test.js`, eval and bench scripts) | WP1, WP2, WP3b | WP3c, WP4 | WP6 |
+| `mcp/tools/live-authoring.js`, `mcp/tools/proposals.js` | WP7 (done) | WP2 (index refresh) | WP4 (error shapes) | WP5 (advice) after WP6b |
+| `mcp/server.js` | WP7 | WP2 (state) | — | WP6a (HTTP, call queue, principals) |
+| `package.json` (scripts, devDependencies; append-only, the later merger resolves conflicts) | WP7, WP0 (test glob `test/*.test.js`, eval and bench scripts) | WP1, WP2, WP3b | WP3c, WP4 | WP6a, WP6b |
 
 Brief template for an agent:
 
@@ -395,3 +406,5 @@ Revision 4 records WP7 as landed (branch `wp7/code-structure`, 11 commits, 193 t
 Revision 5 records WP0 as landed and fills in the measured scaling numbers (section 4.6). The enlarged query sets lowered the 0.9.1 baseline to Recall@5 0.29 (alpinaria) and 0.27 (atlas) while the lexical prototype still measures 0.76 and 0.77, so the WP1 targets stand. The `lowConfidence` acceptance moved from "zero answerable flags" to "≤ 3% of answerable queries with a relevant top-1", because the strict rule flags 5/181 and 1/84 on the larger sets; this was changed before WP1 started (R-4, WP1).
 
 Revision 6 re-sequences embeddings at the maintainer's request: the first embedder is an OpenAI-compatible client that ships in core with zero dependencies (R-8, R-8a), which also serves local OpenAI-compatible servers; the former WP3b is split into WP3b (client and cache, may start in Group B because it touches no search or config file), WP3c (hybrid retrieval and config wiring) and WP3d (local ONNX package, Should). Sections 4.6, 6, 8 and 12 updated accordingly.
+
+Revision 10 (2026-11-14) splits WP6 so the HTTP transport can ship before git sync and the vector-cache export: WP6a covers I-2 and the new I-2a (principals and auth modes), I-2b (actor per request) and I-2c (index refresh while serving); WP6b keeps O-1, O-2, W-7, the cache export and the git preflight cost. The I-2 adapter decision is recorded: a small `node:http` bridge instead of `@modelcontextprotocol/node`.
