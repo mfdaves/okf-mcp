@@ -100,3 +100,65 @@ test("over HTTP, pending proposals are readable only with okf.write", async (t) 
   const stdioNames = await names(client);
   for (const name of PROPOSAL_READS) assert.equal(stdioNames.includes(name), true, name);
 });
+
+test("over HTTP, listing and previewing producers require okf.write", async (t) => {
+  const root = makeRoot(t);
+  const previews = [];
+  // A stand-in producer service: previews would run the producer with the
+  // server's own source credentials.
+  const producerService = {
+    list: () => [{ name: "erp", type: "fake", package: "@fixture/p", bundle: "notes" }],
+    preview: async (name) => {
+      previews.push(name);
+      return { valid: true, readyToApply: true, instance: { name } };
+    },
+  };
+  const file = writeTokenFile(t, [
+    { token: "tok-reader", subject: "reader", actor: "human:reader", scopes: ["okf.read"] },
+    {
+      token: "tok-writer",
+      subject: "writer",
+      actor: "human:writer",
+      scopes: ["okf.read", "okf.write"],
+    },
+  ]);
+  const server = await runMcpHttpServer([], {
+    rootPath: root,
+    producerService,
+    http: { port: 0, auth: { mode: "tokens", file } },
+  });
+  t.after(() => server.close());
+  const anonymousServer = await runMcpHttpServer([], {
+    rootPath: root,
+    producerService,
+    http: { port: 0 },
+  });
+  t.after(() => anonymousServer.close());
+  const PRODUCER_READS = ["okf_list_producers", "okf_preview_producer"];
+  for (const client of [
+    await connectHttp(t, server.url, { token: "tok-reader" }),
+    await connectHttp(t, anonymousServer.url),
+  ]) {
+    const listed = await names(client);
+    for (const name of PRODUCER_READS) assert.equal(listed.includes(name), false, name);
+    assert.equal((await callOutcome(client, "okf_list_producers", {})).code, -32602);
+    assert.equal(
+      (await callOutcome(client, "okf_preview_producer", { producer: "erp" })).code,
+      -32602,
+    );
+  }
+  assert.deepEqual(previews, []);
+
+  const writer = await connectHttp(t, server.url, { token: "tok-writer" });
+  const writerNames = await names(writer);
+  for (const name of PRODUCER_READS) assert.equal(writerNames.includes(name), true, name);
+  assert.equal((await callJson(writer, "okf_list_producers", {})).payload[0].name, "erp");
+  const preview = await callJson(writer, "okf_preview_producer", { producer: "erp" });
+  assert.equal(preview.payload.valid, true);
+  assert.deepEqual(previews, ["erp"]);
+
+  // Stdio is unchanged: the flag-less operator lists and previews producers.
+  const { client } = await connectMcp(t, [], { rootPath: root, producerService });
+  const stdioNames = await names(client);
+  for (const name of PRODUCER_READS) assert.equal(stdioNames.includes(name), true, name);
+});

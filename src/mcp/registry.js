@@ -162,7 +162,11 @@ function defineTool(description, annotations, properties, required, schemaExtras
 // running server state and the principal the call runs for (plan I-2a).
 const GATES = {
   always: () => true,
-  producer: (state) => Boolean(state?.producerService),
+  // Listing and previewing producers run them with the server's own source
+  // credentials (an administrator key, for instance). Over stdio the
+  // process's one principal does so as before; over HTTP it needs okf.write.
+  producer: (state, principal) =>
+    Boolean(state?.producerService && (state.transport !== "http" || canWrite(principal))),
   producerWrite: (state, principal) =>
     Boolean(state?.producerService && state.allowWrite && state.actor && canWrite(principal)),
   projectHelper: (state) => Boolean(state?.authoringService),
