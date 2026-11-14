@@ -9,7 +9,9 @@ const path = require("node:path");
 const test = require("node:test");
 
 const { createMcpServer, createStateAsync, registerMcpInterface } = require("../src/mcp/server");
+const { runMcpHttpServer } = require("../src/mcp/http");
 const { loadToolPacks } = require("../src/tool-packs");
+const { startFakeIntrospectionServer } = require("./fake-introspection-server");
 const {
   INITIALIZE_BODY,
   MCP_POST_HEADERS,
@@ -193,6 +195,49 @@ test("over HTTP a principal sees pack tools by scope and passes its token as the
     assert.equal(entry.includes(ENV.FAKE_KEY), false, entry.slice(0, 200));
   }
   assert.equal(logs.includes(SENTINEL), false, logs);
+});
+
+test("over HTTP the server advertises the core scopes and every scope its packs declare", async (t) => {
+  const client = { clientId: "okf-mcp", clientSecret: "secret" };
+  const fake = await startFakeIntrospectionServer(client);
+  t.after(() => fake.close());
+  const publicUrl = "https://mcp.example.com/mcp";
+  const start = async (entries) => {
+    const server = await runMcpHttpServer([], {
+      projectPath: makeProject(t, entries).projectPath,
+      toolPackEnv: ENV,
+      http: {
+        port: 0,
+        mcpPath: "/mcp",
+        publicUrl,
+        auth: { mode: "introspect", url: fake.url, issuer: "https://auth.example.com" },
+        env: {
+          OKF_INTROSPECTION_CLIENT_ID: client.clientId,
+          OKF_INTROSPECTION_CLIENT_SECRET: client.clientSecret,
+        },
+      },
+    });
+    t.after(() => server.close());
+    const metadata = await httpExchange(server.port, {
+      path: "/.well-known/oauth-protected-resource/mcp",
+    });
+    const challenge = await httpExchange(server.port, {
+      method: "POST",
+      headers: MCP_POST_HEADERS,
+      body: INITIALIZE_BODY,
+    });
+    assert.equal(challenge.status, 401);
+    return {
+      supported: JSON.parse(metadata.body).scopes_supported,
+      challenge: challenge.headers["www-authenticate"],
+    };
+  };
+  const withPack = await start([FAKE_ENTRY]);
+  assert.deepEqual(withPack.supported, ["okf.read", "okf.write", "fake.read", "fake.admin"]);
+  assert.ok(withPack.challenge.includes('scope="okf.read okf.write fake.read fake.admin"'));
+  const without = await start(null);
+  assert.deepEqual(without.supported, ["okf.read", "okf.write"]);
+  assert.ok(without.challenge.includes('scope="okf.read okf.write"'));
 });
 
 test("a pack call is bounded by its timeout and by the request's abort signal", async (t) => {

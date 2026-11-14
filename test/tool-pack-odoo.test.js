@@ -12,7 +12,15 @@ const path = require("node:path");
 const test = require("node:test");
 
 const { runMcpHttpServer } = require("../src/mcp/http");
-const { callJson, callOutcome, connectHttp, writeTokenFile } = require("./mcp-client");
+const {
+  INITIALIZE_BODY,
+  MCP_POST_HEADERS,
+  callJson,
+  callOutcome,
+  connectHttp,
+  httpExchange,
+  writeTokenFile,
+} = require("./mcp-client");
 
 const ODOO = process.env.OKF_ODOO_PATH || path.resolve(__dirname, "..", "..", "okf-odoo");
 const SKIP = fs.existsSync(path.join(ODOO, "src", "tool-pack.js"))
@@ -48,7 +56,17 @@ async function startDataApi(t) {
     },
     search: { records: [{ id: 1, name: "Azure Interior" }], count: 1, truncated: false },
     read: { records: [{ id: 1, name: "Azure Interior" }] },
-    group: { groups: [{ partner_id: [1, "Azure Interior"], __count: 2 }] },
+    // Group values in the web client's format: [id, name] for a relation,
+    // [start, label] for a date bucket.
+    group: {
+      groups: [
+        {
+          partner_id: [1, "Azure Interior"],
+          "date:month": ["2026-01-01", "January 2026"],
+          __count: 2,
+        },
+      ],
+    },
   };
   const server = http.createServer((request, response) => {
     const chunks = [];
@@ -132,6 +150,15 @@ test("the okf-odoo tool pack answers over HTTP for odoo.read principals with the
   });
   t.after(() => server.close());
 
+  // A client signing in is told to ask for the pack's scope too.
+  const challenge = await httpExchange(server.port, {
+    method: "POST",
+    headers: MCP_POST_HEADERS,
+    body: INITIALIZE_BODY,
+  });
+  assert.equal(challenge.status, 401);
+  assert.ok(challenge.headers["www-authenticate"].includes('scope="okf.read okf.write odoo.read"'));
+
   // Without odoo.read the tools are neither listed nor callable.
   const plain = await connectHttp(t, server.url, { token: "tok-plain-user" });
   const plainNames = (await plain.listTools()).tools.map((tool) => tool.name);
@@ -164,9 +191,17 @@ test("the okf-odoo tool pack answers over HTTP for odoo.read principals with the
     ],
     [
       "odoo_group",
-      { model: "res.partner", groupby: ["partner_id"], aggregates: ["__count"], domain },
+      {
+        model: "sale.order",
+        groupby: ["partner_id", "date:month"],
+        aggregates: ["amount_total:sum", "__count"],
+        domain,
+      },
       "group",
-      (payload) => payload.groups[0].__count === 2,
+      (payload) =>
+        payload.groups[0].__count === 2 &&
+        payload.groups[0]["date:month"][1] === "January 2026" &&
+        payload.groups[0].partner_id[0] === 1,
     ],
   ];
   for (const [name, args, op, check] of calls) {

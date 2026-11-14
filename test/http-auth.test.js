@@ -273,6 +273,8 @@ test("introspection gates MCP over HTTP: challenge, metadata, scopes, writes and
   assert.equal(missing.status, 401);
   assert.match(missing.headers["www-authenticate"], /^Bearer /);
   assert.ok(missing.headers["www-authenticate"].includes(`resource_metadata="${METADATA_URL}"`));
+  // Without tool packs, the core scopes are what a client asks for at sign-in.
+  assert.ok(missing.headers["www-authenticate"].includes('scope="okf.read okf.write"'));
   for (const location of [
     new URL(METADATA_URL).pathname,
     "/.well-known/oauth-protected-resource",
@@ -299,6 +301,7 @@ test("introspection gates MCP over HTTP: challenge, metadata, scopes, writes and
   const writeOnly = await post(server, "tok-write-only");
   assert.equal(writeOnly.status, 403);
   assert.match(writeOnly.headers["www-authenticate"], /insufficient_scope/);
+  assert.ok(writeOnly.headers["www-authenticate"].includes('scope="okf.read"'));
 
   // okf.read only: reads work, write tools are neither listed nor callable.
   fake.answer("tok-reader", activeAnswer({ scope: "okf.read", username: "reader" }));

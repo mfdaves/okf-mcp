@@ -236,6 +236,19 @@ async function loadToolPacks(project, options) {
   return packs;
 }
 
+// Every scope a client may need: okf.read and okf.write, then the scopes
+// the pack tools declare, in config and declaration order, each once. It is
+// what an HTTP server advertises, so that a client signing in asks for them.
+function advertisedScopes(packs) {
+  return [
+    ...new Set(
+      ["okf.read", "okf.write"].concat(
+        (packs || []).flatMap((pack) => pack.tools.map((tool) => tool.scope)),
+      ),
+    ),
+  ];
+}
+
 // The scopes the pack tools declare beyond okf.*, which the stdio
 // principal, the process's own operator, holds.
 function toolPackScopes(packs) {
@@ -312,4 +325,10 @@ async function callPackTool(pack, tool, args, principal, options) {
   }
 }
 
-module.exports = { ToolPackError, callPackTool, loadToolPacks, toolPackScopes };
+module.exports = {
+  ToolPackError,
+  advertisedScopes,
+  callPackTool,
+  loadToolPacks,
+  toolPackScopes,
+};

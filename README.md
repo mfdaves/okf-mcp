@@ -525,6 +525,13 @@ exports.okfToolPack = {
 - **Concurrency.** Pack tools are read tools and run outside the call queue
   that serialises knowledge reads and writes, so a slow pack never blocks a
   write. A pack that needs the queue sets `serialize: true`.
+- **Scopes over HTTP.** The server advertises `okf.read`, `okf.write` and
+  every scope its packs declare, each once, in config and declaration order:
+  in the protected-resource metadata's `scopes_supported` and in the `scope`
+  of the `401` challenge, so a client signing in asks for all of them. An
+  authorization server puts into a token only the scopes asked for at sign-in,
+  so users who signed in before a pack was added must sign in again to obtain
+  its scope.
 
 ## MCP Registry Metadata
 

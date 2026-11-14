@@ -301,6 +301,9 @@ function introspectionVerifier(options) {
 function createHttpAuth(auth, options) {
   const config = options || {};
   const env = config.env || process.env;
+  // The scopes to advertise: okf.read, okf.write and the tool packs' (see
+  // advertisedScopes in src/tool-packs.js).
+  const scopes = config.scopes || [...KNOWN_SCOPES];
   let verifier;
   let resourceMetadataUrl;
   let metadata = null;
@@ -318,7 +321,7 @@ function createHttpAuth(auth, options) {
     metadata = buildOAuthProtectedResourceMetadata({
       oauthMetadata: { issuer: auth.issuer },
       resourceServerUrl: resource,
-      scopesSupported: [...KNOWN_SCOPES],
+      scopesSupported: scopes,
     });
     resourceMetadataUrl = getOAuthProtectedResourceMetadataUrl(resource);
     verifier = introspectionVerifier({
@@ -333,6 +336,10 @@ function createHttpAuth(auth, options) {
     });
   }
   const bearer = { verifier, requiredScopes: [READ_SCOPE], resourceMetadataUrl };
+  // A missing or refused token is answered with every scope the server
+  // offers, so a client signing in asks for all of them; a token lacking
+  // okf.read is told that it needs okf.read.
+  const signIn = { requiredScopes: scopes, resourceMetadataUrl };
   const metadataPaths = metadata
     ? new Set([new URL(resourceMetadataUrl).pathname, "/.well-known/oauth-protected-resource"])
     : new Set();
@@ -351,7 +358,10 @@ function createHttpAuth(auth, options) {
             { status: 503, headers: { "retry-after": "5" } },
           );
         }
-        return bearerAuthChallengeResponse(error, bearer);
+        return bearerAuthChallengeResponse(
+          error,
+          error?.code === OAuthErrorCode.InvalidToken ? signIn : bearer,
+        );
       }
     },
     routes(request) {

@@ -19,6 +19,7 @@ const {
   originValidationResponse,
 } = require("@modelcontextprotocol/server");
 
+const { advertisedScopes } = require("../tool-packs");
 const { createHttpAuth } = require("./auth");
 const { anonymousPrincipal } = require("./principal");
 const { MAX_MCP_MESSAGE_BYTES, createStateAsync, registerMcpInterface } = require("./server");
@@ -269,16 +270,18 @@ function createMcpHttpHandler(state, options) {
 async function runMcpHttpServer(bundleArgs, options) {
   const config = options || {};
   const httpOptions = Object.assign({}, config.http);
+  // The state first: the tool packs it loads add to the advertised scopes.
+  const state = await createStateAsync(bundleArgs, config);
   if (httpOptions.auth) {
     const auth = createHttpAuth(httpOptions.auth, {
       publicUrl: httpOptions.publicUrl,
       env: httpOptions.env,
       fetch: httpOptions.fetch,
+      scopes: advertisedScopes(state.toolPacks),
     });
     httpOptions.authenticate = auth.authenticate;
     httpOptions.routes = auth.routes;
   }
-  const state = await createStateAsync(bundleArgs, config);
   const handler = createMcpHttpHandler(state, httpOptions);
   const server = http.createServer((req, res) => {
     handler.handle(req, res).catch(() => res.destroy());
