@@ -298,7 +298,7 @@ okf --root /path/to/okf mcp --http
 | `--http` | Serve MCP over Streamable HTTP. |
 | `--host <host>` | Address to bind (default `127.0.0.1`). A non-loopback address requires `--auth`. |
 | `--port <port>` | Port (default `8766`; `0` picks a free one). |
-| `--public-url <url>` | The URL clients use for the MCP endpoint. Its path is the endpoint path (default `/mcp`), its host is accepted in `Host` headers, and with introspection it is the token audience. |
+| `--public-url <url>` | The URL clients use for the MCP endpoint. Its path is the endpoint path (default `/mcp`; served with and without one trailing slash), its host is accepted in `Host` headers, and with introspection it is the token audience and the advertised `resource`, as written. |
 | `--allowed-host <host>` | Another accepted `Host` header (hostname; the port is ignored); repeatable. `localhost`, `127.0.0.1` and `[::1]` are always accepted. |
 | `--allowed-origin <origin>` | Another accepted browser `Origin` (hostname or origin URL); repeatable. Requests without an `Origin` header are not affected. |
 | `--auth tokens:<file>`, `--auth introspect:<url>` | Bearer authentication, see below. |

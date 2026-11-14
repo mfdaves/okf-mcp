@@ -372,6 +372,53 @@ test("introspection gates MCP over HTTP: challenge, metadata, scopes, writes and
   assert.equal((await post(server, "tok-writer")).status, 200);
 });
 
+test("a --public-url with a trailing slash is served and advertised as written", async (t) => {
+  const fake = await startFakeIntrospectionServer(CLIENT);
+  t.after(() => fake.close());
+  const advertised = `${PUBLIC_URL}/`;
+  const server = await runMcpHttpServer([], {
+    rootPath: makeRepo(t),
+    http: {
+      port: 0,
+      mcpPath: "/mcp",
+      publicUrl: advertised,
+      allowedHosts: ["mcp.example.com"],
+      auth: { mode: "introspect", url: fake.url, issuer: ISSUER },
+      env: ENV,
+    },
+  });
+  t.after(() => server.close());
+  const metadata = await httpExchange(server.port, { path: new URL(METADATA_URL).pathname });
+  assert.equal(JSON.parse(metadata.body).resource, advertised);
+  const challenge = await httpExchange(server.port, {
+    method: "POST",
+    path: "/mcp/",
+    headers: MCP_POST_HEADERS,
+    body: INITIALIZE_BODY,
+  });
+  assert.equal(challenge.status, 401);
+  assert.ok(challenge.headers["www-authenticate"].includes(`resource_metadata="${METADATA_URL}"`));
+  // Tokens issued for the URL with or without the slash both work, on both paths.
+  fake.answer("tok-slash", activeAnswer({ aud: advertised }));
+  fake.answer("tok-bare", activeAnswer({ aud: PUBLIC_URL }));
+  for (const token of ["tok-slash", "tok-bare"]) {
+    for (const location of ["/mcp/", "/mcp"]) {
+      const answer = await httpExchange(server.port, {
+        method: "POST",
+        path: location,
+        headers: Object.assign({ authorization: `Bearer ${token}` }, MCP_POST_HEADERS),
+        body: INITIALIZE_BODY,
+      });
+      assert.equal(answer.status, 200, `${token} ${location}`);
+    }
+  }
+  const client = await connectHttp(t, `http://127.0.0.1:${server.port}/mcp/`, {
+    token: "tok-slash",
+  });
+  assert.ok((await client.listTools()).tools.length > 0);
+  assert.equal((await httpExchange(server.port, { method: "POST", path: "/mcp//" })).status, 404);
+});
+
 test("a token file grants the principals it lists", async (t) => {
   const root = makeRepo(t);
   const file = path.join(os.tmpdir(), `okf-tokens-${process.pid}-${Date.now()}.yaml`);

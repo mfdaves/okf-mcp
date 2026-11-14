@@ -151,6 +151,9 @@ function createMcpHttpHandler(state, options) {
     config.refreshIntervalMs ?? DEFAULT_REFRESH_INTERVAL_MS,
   );
   const mcpPath = config.mcpPath || DEFAULT_MCP_PATH;
+  // The endpoint answers with and without one trailing slash, so a
+  // --public-url written either way reaches it.
+  const mcpPaths = new Set([mcpPath, mcpPath === "/" ? "/" : `${mcpPath}/`]);
   // GET /health, and beside the endpoint as well (/okf/mcp → /okf/health),
   // where a client deriving it from the MCP URL looks for it.
   const healthPaths = new Set(["/health", `${mcpPath.replace(/\/[^/]*$/, "")}/health`]);
@@ -172,7 +175,7 @@ function createMcpHttpHandler(state, options) {
     }
     const extra = config.routes ? await config.routes(probe) : undefined;
     if (extra) return extra;
-    if (pathname !== mcpPath) {
+    if (!mcpPaths.has(pathname)) {
       return Response.json({ error: "not_found" }, { status: 404 });
     }
     const foreign = originValidationResponse(probe, allowedOrigins);
