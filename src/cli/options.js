@@ -14,6 +14,7 @@ const embeddingCli = require("../search/embedding-cli");
 const { createSearchOptions } = require("../search/cli-options");
 const contextCli = require("../context/cli-options");
 const { validActor } = require("../v02");
+const { createHttpOptions, parseHttpOption } = require("./http-options");
 
 const COMMANDS = new Set([
   "mcp",
@@ -89,6 +90,7 @@ function parseArgs(argv) {
   let help = false;
   let host = "127.0.0.1";
   let port = 8765;
+  let portGiven = false;
   let writeToken = "";
   let proposalRoot = "";
   let version = false;
@@ -108,6 +110,7 @@ function parseArgs(argv) {
   let maxContentBytes = 65536;
   const generatedPaths = [];
   const search = createSearchOptions();
+  const http = createHttpOptions();
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     if (arg === "--root" || arg === "-r") {
@@ -304,6 +307,11 @@ function parseArgs(argv) {
       index += 1;
       continue;
     }
+    const httpConsumed = parseHttpOption(arg, argv, index, http, usageError);
+    if (httpConsumed >= 0) {
+      index += httpConsumed;
+      continue;
+    }
     const consumed = contextCli.parseCommandOption(arg, argv, index, search, usageError);
     if (consumed >= 0) {
       index += consumed;
@@ -326,11 +334,13 @@ function parseArgs(argv) {
         throw usageError(`${arg} requires a value.`);
       }
       port = Number(argv[index + 1]);
+      portGiven = true;
       index += 1;
       continue;
     }
     if (arg.startsWith("--port=")) {
       port = Number(arg.slice("--port=".length));
+      portGiven = true;
       continue;
     }
     if (arg === "--write-token") {
@@ -418,6 +428,8 @@ function parseArgs(argv) {
     generatedPaths,
     host,
     port,
+    portGiven,
+    http,
     writeToken,
     proposalRoot,
     search,

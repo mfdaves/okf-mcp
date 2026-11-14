@@ -21,6 +21,7 @@ const { generateProject } = require("../plugins");
 const { ProducerService, producerReceipt } = require("../producers");
 const { FileConceptStore } = require("../store");
 const { runStdioServer } = require("../mcp-server");
+const { runMcpHttpServer } = require("../mcp/http");
 const { fetchRemoteBundles } = require("../remote");
 const { runHttpServer } = require("../http-server");
 const {
@@ -32,6 +33,7 @@ const {
 } = require("../computation");
 const { buildV02MigrationPlan, checkV02Migration } = require("../migration");
 const { describeConceptGitSources, readConceptGitSource } = require("../git-source");
+const { httpServerOptions } = require("./http-options");
 const {
   COMMANDS,
   PRODUCER_ACTIONS,
@@ -91,6 +93,18 @@ function requireValidConcept(index, locator) {
 
 async function runMcp(args, runtime) {
   const bundles = resolveLegacyBundles(args);
+  const http = httpServerOptions(args, usageError);
+  if (http) {
+    if (!args.project && !bundles.length && !args.remoteBundles.length) {
+      throw usageError("An OKF --root, --bundle, or --project source is required.");
+    }
+    const started = await (runtime?.runMcpHttpServer || runMcpHttpServer)(
+      args.project ? [] : bundles,
+      Object.assign(stdioServerOptions(args), { http }),
+    );
+    process.stderr.write(`OKF MCP HTTP server listening on ${started.url}\n`);
+    return;
+  }
   if (args.project) {
     await (runtime?.runStdioServer || runStdioServer)(
       [],
@@ -414,6 +428,9 @@ async function runCommand(args, runtime) {
   }
   if (command === "producer" && args.policy) {
     throw usageError("--policy is available only with the mcp command.");
+  }
+  if (command !== "mcp" && args.http.enabled) {
+    throw usageError("--http is available only with the mcp command.");
   }
   if (SOURCE_COMMANDS[command]) {
     await SOURCE_COMMANDS[command](args, runtime);

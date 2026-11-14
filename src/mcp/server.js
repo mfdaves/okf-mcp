@@ -473,6 +473,7 @@ async function runStdioServer(bundleArgs, input, output, options) {
 }
 
 module.exports = {
+  MAX_MCP_MESSAGE_BYTES,
   createMcpServer,
   runStdioServer,
   /** @internal Exposed for tests that need the server state behind a tool call. */
