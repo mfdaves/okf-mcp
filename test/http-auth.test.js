@@ -20,6 +20,7 @@ const {
   callJson,
   connectHttp,
   httpExchange,
+  writeTokenFile,
 } = require("./mcp-client");
 
 const ACTIVE = require("./fixtures/introspection/active.json");
@@ -417,6 +418,28 @@ test("a --public-url with a trailing slash is served and advertised as written",
   });
   assert.ok((await client.listTools()).tools.length > 0);
   assert.equal((await httpExchange(server.port, { method: "POST", path: "/mcp//" })).status, 404);
+});
+
+test("only principals that may write see absolute server paths in list_bundles", async (t) => {
+  const root = makeRepo(t);
+  const file = writeTokenFile(t, [
+    { token: "tok-reader", subject: "reader", actor: "human:reader", scopes: ["okf.read"] },
+    {
+      token: "tok-writer",
+      subject: "writer",
+      actor: "human:writer",
+      scopes: ["okf.read", "okf.write"],
+    },
+  ]);
+  const server = await startServer(t, root, { mode: "tokens", file });
+  const reader = await connectHttp(t, server.url, { token: "tok-reader" });
+  const readerBundles = await callJson(reader, "list_bundles", {});
+  assert.equal(readerBundles.result.content[0].text.includes(fs.realpathSync(root)), false);
+  assert.equal(readerBundles.result.content[0].text.includes(root), false);
+  assert.equal(Object.hasOwn(readerBundles.payload[0], "absoluteRoot"), false);
+  const writer = await connectHttp(t, server.url, { token: "tok-writer" });
+  const writerBundles = await callJson(writer, "list_bundles", {});
+  assert.equal(writerBundles.payload[0].absoluteRoot, fs.realpathSync(root));
 });
 
 test("a token file grants the principals it lists", async (t) => {

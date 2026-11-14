@@ -10,6 +10,7 @@ const {
   validateIndex,
 } = require("../../indexer");
 const { describeConceptGitSources } = require("../../git-source");
+const { canWrite } = require("../principal");
 const {
   READ_ONLY,
   ToolExecutionError,
@@ -166,10 +167,12 @@ const tools = {
       "List the local and remote OKF bundles currently loaded by the server.",
       READ_ONLY,
     ),
-    handler: (state) =>
+    // Absolute server paths are for principals that may write (over stdio,
+    // --write); a read-only HTTP caller gets bundle-relative ones only.
+    handler: (state, _args, principal) =>
       jsonContent(
         publicBundles(state.index, {
-          includeAbsolutePaths: Boolean(state.allowWrite),
+          includeAbsolutePaths: canWrite(principal),
         }),
       ),
   },
