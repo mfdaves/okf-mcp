@@ -14,7 +14,6 @@ const LINE_CAP = 800;
 // its file is under the cap.
 const GRANDFATHERED = {
   "authoring.js": 1010,
-  "cli.js": 996,
   "migration.js": 865,
 };
 

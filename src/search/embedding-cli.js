@@ -1,7 +1,7 @@
 "use strict";
 
 // Command-line flags for hybrid search in --root mode (WP3c), kept out of
-// src/cli.js (Q-1 shrink-only cap): --embedder-config <file> names the
+// the main option parser (src/cli/options.js): --embedder-config <file> names the
 // trusted embedder settings (src/search/embedding-config.js) and --cache-dir
 // <dir> overrides the vector cache location. They are taken out of argv
 // before the main parser runs and handed to the stdio server untouched.

@@ -1,9 +1,9 @@
 "use strict";
 
-// The `context` command of the CLI (plan WP3a, section 12), kept out of
-// src/cli.js so its line ratchet only shrinks: the token budget, section cap
+// The `context` command of the CLI (plan WP3a, section 12), kept out of the
+// main option parser (src/cli/options.js): the token budget, section cap
 // and provenance flags, plus the dispatch. `parseCommandOption` is the one
-// flag hook src/cli.js calls for both commands: it tries the `search` flag
+// flag hook the parser calls for both commands: it tries the `search` flag
 // parser (whose filters `context` shares) and then the context flags, and
 // returns how many extra arguments it used, or -1 when the flag is neither.
 // Context flags are kept on the parsed search options as a non-enumerable
