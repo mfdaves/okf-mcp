@@ -327,7 +327,10 @@ origin, `Vary: Origin`), `Access-Control-Allow-Methods: GET, POST, DELETE,
 OPTIONS` and `Access-Control-Allow-Headers: Authorization, Content-Type,
 Mcp-Session-Id, MCP-Protocol-Version, Last-Event-ID`; every other answer,
 `401` and `403` included, carries the same `Access-Control-Allow-Origin` and
-`Access-Control-Expose-Headers: WWW-Authenticate, Mcp-Session-Id`. Each request builds its MCP
+`Access-Control-Expose-Headers: WWW-Authenticate, Mcp-Session-Id`. The
+protected-resource metadata is answered the same way (its preflight allows
+`GET, HEAD, OPTIONS`), so a browser client can discover the authorization
+server. Each request builds its MCP
 server over the one shared catalog state, and tool calls from all clients run
 one at a time through one queue.
 

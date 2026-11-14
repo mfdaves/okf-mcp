@@ -199,13 +199,13 @@ function createMcpHttpHandler(state, options) {
       return { response: Response.json({ status: "ok" }) };
     }
     const extra = config.routes ? await config.routes(probe) : undefined;
-    if (extra) return { response: extra };
-    if (!mcpPaths.has(pathname)) {
+    if (!extra && !mcpPaths.has(pathname)) {
       return { response: Response.json({ error: "not_found" }, { status: 404 }) };
     }
-    // A foreign origin gets 403 and no CORS headers; an accepted one gets
-    // them on every answer, refusals included, and a preflight is answered
-    // before authentication.
+    // The MCP endpoint and the documents beside it (the protected-resource
+    // metadata): a foreign origin gets 403 and no CORS headers; an accepted
+    // one gets them on every answer, refusals included, and a preflight is
+    // answered before authentication.
     const foreign = originValidationResponse(probe, allowedOrigins);
     if (foreign) return { response: foreign };
     const origin = probe.headers.get("origin");
@@ -214,12 +214,13 @@ function createMcpHttpHandler(state, options) {
       const preflight = new Response(null, {
         status: 204,
         headers: {
-          "access-control-allow-methods": CORS_ALLOW_METHODS,
+          "access-control-allow-methods": extra ? "GET, HEAD, OPTIONS" : CORS_ALLOW_METHODS,
           "access-control-allow-headers": CORS_ALLOW_HEADERS,
         },
       });
       return { response: preflight, headers };
     }
+    if (extra) return { response: extra, headers };
     const verified = config.authenticate
       ? await config.authenticate(probe)
       : { principal: anonymousPrincipal() };

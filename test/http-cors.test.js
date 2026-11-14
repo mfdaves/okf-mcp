@@ -6,6 +6,7 @@ const test = require("node:test");
 
 const { runMcpHttpServer } = require("../src/mcp/http");
 const { INITIALIZE_BODY, MCP_POST_HEADERS, httpExchange, writeTokenFile } = require("./mcp-client");
+const { startFakeIntrospectionServer } = require("./fake-introspection-server");
 
 const ROOT = path.join(__dirname, "..", "okf", "okf-mcp");
 const APP = "https://app.example.test";
@@ -103,5 +104,55 @@ test("disallowed origins keep getting 403 without CORS headers", async (t) => {
     const refused = await post(server, { origin, authorization: "Bearer tok-reader" });
     assert.equal(refused.status, 403, origin);
     assertNoCors(refused, origin);
+  }
+});
+
+test("the protected-resource metadata answers allowed origins with CORS like the endpoint", async (t) => {
+  const client = { clientId: "okf-mcp", clientSecret: "secret" };
+  const fake = await startFakeIntrospectionServer(client);
+  t.after(() => fake.close());
+  const server = await runMcpHttpServer([], {
+    rootPath: ROOT,
+    http: {
+      port: 0,
+      mcpPath: "/mcp",
+      publicUrl: "https://mcp.example.com/mcp",
+      allowedOrigins: [new URL(APP).hostname],
+      auth: { mode: "introspect", url: fake.url, issuer: "https://auth.example.com" },
+      env: {
+        OKF_INTROSPECTION_CLIENT_ID: client.clientId,
+        OKF_INTROSPECTION_CLIENT_SECRET: client.clientSecret,
+      },
+    },
+  });
+  t.after(() => server.close());
+  for (const location of [
+    "/.well-known/oauth-protected-resource/mcp",
+    "/.well-known/oauth-protected-resource",
+  ]) {
+    const answer = await httpExchange(server.port, {
+      method: "OPTIONS",
+      path: location,
+      headers: { origin: APP, "access-control-request-method": "GET" },
+    });
+    assert.equal(answer.status, 204, location);
+    assertCors(answer, APP, location);
+    assert.equal(answer.headers["access-control-allow-methods"], "GET, HEAD, OPTIONS");
+    assert.equal(answer.headers["access-control-allow-headers"], ALLOW_HEADERS);
+
+    const read = await httpExchange(server.port, { path: location, headers: { origin: APP } });
+    assert.equal(read.status, 200, location);
+    assertCors(read, APP, location);
+    assert.equal(JSON.parse(read.body).resource, "https://mcp.example.com/mcp");
+
+    const plain = await httpExchange(server.port, { path: location });
+    assert.equal(plain.status, 200, location);
+    assertNoCors(plain, location);
+
+    for (const origin of ["https://attacker.example", "null"]) {
+      const refused = await httpExchange(server.port, { path: location, headers: { origin } });
+      assert.equal(refused.status, 403, `${location} ${origin}`);
+      assertNoCors(refused, `${location} ${origin}`);
+    }
   }
 });

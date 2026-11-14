@@ -391,7 +391,9 @@ function createHttpAuth(auth, options) {
           { status: 405, headers: { allow: "GET, HEAD" } },
         );
       }
-      return Response.json(metadata, { headers: { "access-control-allow-origin": "*" } });
+      // CORS for browser origins is added by the HTTP handler, as for the
+      // MCP endpoint.
+      return Response.json(metadata);
     },
   };
 }
