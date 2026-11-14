@@ -30,7 +30,7 @@ const {
   verifyBearerToken,
 } = require("@modelcontextprotocol/server");
 
-const { validAuthorField } = require("../authoring/candidates");
+const { authorEmail, authorName } = require("../authoring/candidates");
 const { validActor } = require("../v02");
 const { KNOWN_SCOPES, READ_SCOPE } = require("./principal");
 
@@ -144,8 +144,8 @@ function sameAudience(aud, audience) {
 
 // The principal an introspection answer grants, or null when the token is
 // not accepted (shared contract, plan I-2a). `name` and `email` are each
-// optional; one that is absent or unusable leaves that git author field to
-// the configured identity.
+// optional and cleaned (authorName, authorEmail); one that is absent or
+// unusable leaves that git author field to the configured identity.
 function introspectionPrincipal(answer, audience, nowSeconds) {
   if (answer?.active !== true || !sameAudience(answer.aud, audience)) return null;
   if (typeof answer.exp !== "number" || !(answer.exp > nowSeconds)) return null;
@@ -158,8 +158,10 @@ function introspectionPrincipal(answer, audience, nowSeconds) {
     actor,
     scopes: new Set(KNOWN_SCOPES.filter((scope) => scopes.includes(scope))),
   };
-  if (validAuthorField(answer.name)) principal.name = answer.name;
-  if (validAuthorField(answer.email)) principal.email = answer.email;
+  const name = authorName(answer.name);
+  const email = authorEmail(answer.email);
+  if (name) principal.name = name;
+  if (email) principal.email = email;
   return { principal, exp: answer.exp, clientId: answer.client_id };
 }
 

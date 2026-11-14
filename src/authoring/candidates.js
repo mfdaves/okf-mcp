@@ -314,36 +314,43 @@ function actorValue(value) {
   return actor;
 }
 
-// One git author field: a single-line string without angle brackets, which
-// git would strip or reject.
-function validAuthorField(text) {
-  return (
-    typeof text === "string" &&
-    text.trim() === text &&
-    text.length > 0 &&
-    text.length <= 256 &&
-    !/[\p{Cc}<>]/u.test(text)
-  );
+// Characters git trims from both ends of an ident and refuses an ident made
+// only of: whitespace, control characters and . , : ; < > " \ '.
+const GIT_IDENT_CRUD = /^[\s\p{Cc}.,:;<>"\\']*$/u;
+const AUTHOR_EMAIL = /^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*$/;
+
+// Author data comes from a principal and must never fail or block a write:
+// angle brackets and control characters are removed and surrounding
+// whitespace trimmed; a name made only of what git refuses is dropped.
+function authorName(value) {
+  if (typeof value !== "string") return null;
+  const text = value
+    .replace(/[<>\p{Cc}]/gu, "")
+    .trim()
+    .slice(0, 256)
+    .trim();
+  return text && !GIT_IDENT_CRUD.test(text) ? text : null;
 }
 
-// The git author a batch is committed for: `name` and `email`, each
-// optional (a missing one falls back to the repository's configured
-// identity), or null when neither is given.
+// The same cleaning for an email, kept only when it is a plausible address.
+function authorEmail(value) {
+  if (typeof value !== "string") return null;
+  const text = value.replace(/[<>\p{Cc}]/gu, "").trim();
+  return text.length <= 256 && AUTHOR_EMAIL.test(text) ? text : null;
+}
+
+// The git author a batch is committed for: the cleaned `name` and `email`,
+// each kept only when usable (a missing one falls back to the repository's
+// configured identity), or null when neither is.
 function authorValue(value) {
-  if (value === undefined || value === null) {
+  if (!isPlainObject(value)) {
     return null;
   }
-  if (!isPlainObject(value)) {
-    throw new Error("author must be an object with name and email.");
-  }
   const author = {};
-  for (const key of ["name", "email"]) {
-    if (value[key] === undefined || value[key] === null) continue;
-    if (!validAuthorField(value[key])) {
-      throw new Error("author name and email must be single-line text without angle brackets.");
-    }
-    author[key] = value[key];
-  }
+  const name = authorName(value.name);
+  const email = authorEmail(value.email);
+  if (name) author.name = name;
+  if (email) author.email = email;
   return Object.keys(author).length ? author : null;
 }
 
@@ -404,8 +411,9 @@ function staleUpdateDetails(index, uri, bundle, project) {
 module.exports = {
   MANAGED_METADATA_KEYS,
   actorValue,
+  authorEmail,
+  authorName,
   authorValue,
-  validAuthorField,
   applyRelationPatch,
   applySourcePatch,
   applyTagPatch,

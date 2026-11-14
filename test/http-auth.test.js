@@ -11,6 +11,7 @@ const test = require("node:test");
 const { main } = require("../src/cli");
 const { introspectionPrincipal, loadTokenFile } = require("../src/mcp/auth");
 const { runMcpHttpServer } = require("../src/mcp/http");
+const { callTool, createStateAsync } = require("../src/mcp/server");
 const { evaluateWritePolicy, parseWritePolicy } = require("../src/policy/write-policy");
 const { startFakeIntrospectionServer } = require("./fake-introspection-server");
 const {
@@ -211,6 +212,48 @@ test("introspected usernames become human actors that policy rules cannot be foo
     introspectionPrincipal(Object.assign({}, ACTIVE, { username: "" }), PUBLIC_URL, before),
     null,
   );
+});
+
+test("a principal's display name or email never blocks a git-committed write", async (t) => {
+  const root = makeRepo(t);
+  const state = await createStateAsync([], {
+    rootPath: root,
+    allowWrite: true,
+    actor: SERVICE_ACTOR,
+    gitCommit: true,
+  });
+  state.transport = "http";
+  const later = ACTIVE.exp - 60;
+  const principalOf = (username, name, email) =>
+    introspectionPrincipal(
+      Object.assign({}, ACTIVE, { username, sub: username, name, email }),
+      PUBLIC_URL,
+      later,
+    ).principal;
+  const write = async (principal, file) => {
+    const result = await callTool(
+      state,
+      "okf_apply_changes",
+      create(file, path.basename(file, ".md")),
+      principal,
+    );
+    return JSON.parse(result.content[0].text);
+  };
+  const cases = [
+    [principalOf("eve", "'", "eve@example.com"), "Repo Committer <eve@example.com>"],
+    [principalOf("dan", "<x>", "dan@example.com>"), "x <dan@example.com>"],
+    [principalOf("quo", '"', "not an address>"), "Repo Committer <committer@example.invalid>"],
+  ];
+  for (const [index, [principal, expected]] of cases.entries()) {
+    const receipt = await write(principal, `notes/crud-${index}.md`);
+    assert.equal(receipt.applied, true);
+    assert.equal(receipt.git.committed, true);
+    assert.equal(git(root, ["log", "-1", "--format=%an <%ae>"]), expected);
+    assert.equal(git(root, ["status", "--porcelain"]), "");
+  }
+  const next = await write(principalOf("mrossi", "Mario Rossi", "mrossi@example.com"), "b.md");
+  assert.equal(next.git.committed, true);
+  assert.equal(git(root, ["log", "-1", "--format=%an <%ae>"]), "Mario Rossi <mrossi@example.com>");
 });
 
 test("introspection gates MCP over HTTP: challenge, metadata, scopes, writes and cache", async (t) => {

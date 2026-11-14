@@ -339,7 +339,11 @@ tools in `tools/list`, and calling one fails as calling a disabled tool does.
 Writes made for a principal stamp its actor in `generated.by` and are judged
 by the write policy for that actor. With `--git-commit`, the principal's name
 and email become the commit author; a missing one falls back to the
-repository's configured Git identity, which also stays the committer.
+repository's configured Git identity, which also stays the committer. Author
+data never fails or blocks a write: `<`, `>`, control characters and
+surrounding whitespace are removed, a name made only of characters git
+refuses (such as `'` or `"`) and an email that is not a plausible address are
+dropped, and the dropped field falls back to the configured identity.
 Producer runs keep
 `process:<producer>`. `--write` still requires `--actor`, which names the
 server process as over stdio; every authenticated HTTP principal writes as

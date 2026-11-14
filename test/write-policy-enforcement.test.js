@@ -605,16 +605,35 @@ test("a call's author signs the git commit while the configured identity commits
     git(root, ["log", "-1", "--format=%an <%ae>/%cn"]),
     "Mario Rossi <committer@example.invalid>/Repo Committer",
   );
-  for (const malformed of [
-    "Mario Rossi",
-    { name: "Mario\nRossi", email: "mrossi@example.com" },
-    { name: "Mario <Rossi>" },
-    { email: " mrossi@example.com" },
-  ]) {
-    await assert.rejects(
-      service.applyChanges(note("notes/bad.md", "Bad"), { actor: "human:x", author: malformed }),
-      /author (must be an object|name and email must be)/,
-    );
+  // Author data never fails or blocks a write: it is cleaned, and a field
+  // git would refuse falls back to the configured identity. Each batch
+  // commits, and so does the next writer.
+  const cases = [
+    [{ name: "'" }, "Repo Committer <committer@example.invalid>"],
+    [{ name: '"', email: "eve@example.com" }, "Repo Committer <eve@example.com>"],
+    [{ name: "<x>", email: "mrossi@example.com>" }, "x <mrossi@example.com>"],
+    [{ name: "Mario\nRossi", email: "a>b" }, "MarioRossi <committer@example.invalid>"],
+    [
+      { name: " Mario <Rossi> ", email: " mrossi@example.com " },
+      "Mario Rossi <mrossi@example.com>",
+    ],
+    ["Mario Rossi", "Repo Committer <committer@example.invalid>"],
+  ];
+  for (const [index, [author, expected]] of cases.entries()) {
+    const written = await service.applyChanges(note(`notes/author-${index}.md`, `A${index}`), {
+      actor: "human:x",
+      author,
+    });
+    assert.equal(written.applied, true, JSON.stringify(author));
+    assert.equal(written.git.committed, true, JSON.stringify(author));
+    assert.equal(git(root, ["log", "-1", "--format=%an <%ae>"]), expected);
+    assert.equal(git(root, ["status", "--porcelain"]), "");
   }
+  const next = await service.applyChanges(note("notes/next.md", "Next"), {
+    actor: "human:mrossi",
+    author: { name: "Mario Rossi", email: "mrossi@example.com" },
+  });
+  assert.equal(next.git.committed, true);
+  assert.equal(git(root, ["log", "-1", "--format=%an <%ae>"]), "Mario Rossi <mrossi@example.com>");
   assert.equal(git(root, ["status", "--porcelain"]), "");
 });
