@@ -3,7 +3,11 @@ id: okf://okf-mcp/policies/authoring-safety
 type: OKF Policy
 title: Authoring Safety
 description: Invariants protecting project boundaries, concept identity, review state, and concurrent edits.
-tags: [policy, safety, authoring, filesystem]
+tags:
+  - policy
+  - safety
+  - authoring
+  - filesystem
 relations:
   - type: related_to
     target: okf://okf-mcp/runtime/file-concept-store
@@ -39,11 +43,20 @@ relations:
     target: repo://test/write-policy-enforcement.test.js
   - type: checked_by
     target: repo://test/content-boundary.test.js
+  - type: related_to
+    target: okf://okf-mcp/interfaces/mcp-http
+  - type: configured_by
+    target: repo://src/mcp/auth.js
+  - type: checked_by
+    target: repo://test/http-auth.test.js
+generated:
+  by: anthropic/claude-code
+  at: 2026-11-14T17:33:39.682Z
 ---
 
 # Authoring Safety
 
-Authoring is allowed for an explicit local `--root` or local roots declared by `okf.project.yaml`. MCP proposal mutations require `--authoring`; coordinated computation proposals also require `--allow-computation-authoring`. Direct authoring requires `--write` and a configured actor. Remote roots are read only.
+Authoring is allowed for an explicit local `--root` or local roots declared by `okf.project.yaml`. MCP proposal mutations require `--authoring`; coordinated computation proposals also require `--allow-computation-authoring`. Direct authoring requires `--write` and a configured actor; over HTTP the calling principal also needs the `okf.write` scope, and `--authoring` is not available. Remote roots are read only.
 
 Concept paths must be safe relative `.md` paths inside the selected bundle. Absolute paths, parent traversal, hidden/control-plane segments such as `.git`, case-insensitive reserved `index.md` and `log.md` targets, Markdown-file ancestor segments, symbolic-link traversal, and non-directory parents are rejected.
 
@@ -53,18 +66,18 @@ Candidates must satisfy the concept format, configured relation vocabulary, and 
 
 Proposal creation never writes a concept file. Acceptance repeats validation. Updates also compare the source revision immediately before replacement and return conflicts for detected concurrent changes. After acceptance, the MCP index is rebuilt without discarding configured or runtime-loaded remote bundle state.
 
-Direct authoring exposes a read-only batch validator and one destructive apply tool with the same structured grammar. They share the combined-future-graph planner, while apply repeats the plan under one process-local writer lock, stamps generation metadata at the server boundary, stages every file before publication, and validates persisted state. It rejects generated-file flags, `process:*` generation owners, configured generator outputs, and computation contracts.
+Direct authoring exposes a read-only batch validator and one destructive apply tool with the same structured grammar. They share the combined-future-graph planner, while apply repeats the plan under one process-local writer lock, stamps generation metadata with the call's actor at the server boundary, stages every file before publication, and validates persisted state. It rejects generated-file flags, `process:*` generation owners, configured generator outputs, and computation contracts.
 
-An optional write policy narrows direct authoring and proposals per actor. It is trusted configuration only (`writePolicy` in `okf.project.yaml`, or `--policy <file>` with `--root`), never a tool or HTTP argument. Proposals are judged when stored, against the proposing actor, and again before acceptance writes them, against the recorded actor (else the accepting one), which publishes a create with the default status it was judged with; a write without an actor is judged as the literal actor `unknown`. Producers are judged under `process:<name>` only when the policy sets `applyToProducers: true`, and their output, which is never rewritten, must carry any required status itself. An ordered list of rules matches the configured actor and, optionally, bundle ids, concept paths (a fixed glob subset of `*`, `**`, and literal segments, never compiled to a regular expression, with traversal and absolute patterns rejected at load), and concept types. The first matching rule decides; otherwise `defaultEffect` (`allow` unless set to `deny`) does. Allow rules may require frontmatter fields, stamp a `defaultStatus` on creates that set none, and cap the concepts per batch. Only the concepts a batch creates or updates are judged; existing content is never retro-validated. Violations are structured `policy_violation` records carrying the deciding rule id, a reason (`actor_denied`, `bundle_denied`, `path_denied`, `type_denied`, `missing_required_field`, `batch_too_large`), and the path, bundle, URI, or field involved. The batch validator reports them read-only, and apply rejects the batch before staging or writing any file. Their messages, like every error message, name rules, paths, and URIs, never catalog text.
+An optional write policy narrows direct authoring and proposals per actor. It is trusted configuration only (`writePolicy` in `okf.project.yaml`, or `--policy <file>` with `--root`), never a tool or HTTP argument. Proposals are judged when stored, against the proposing actor, and again before acceptance writes them, against the recorded actor (else the accepting one), which publishes a create with the default status it was judged with; a write without an actor is judged as the literal actor `unknown`. Producers are judged under `process:<name>` only when the policy sets `applyToProducers: true`, and their output, which is never rewritten, must carry any required status itself. An ordered list of rules matches the call's actor (the configured actor over stdio, the principal's over HTTP) and, optionally, bundle ids, concept paths (a fixed glob subset of `*`, `**`, and literal segments, never compiled to a regular expression, with traversal and absolute patterns rejected at load), and concept types. The first matching rule decides; otherwise `defaultEffect` (`allow` unless set to `deny`) does. Allow rules may require frontmatter fields, stamp a `defaultStatus` on creates that set none, and cap the concepts per batch. Only the concepts a batch creates or updates are judged; existing content is never retro-validated. Violations are structured `policy_violation` records carrying the deciding rule id, a reason (`actor_denied`, `bundle_denied`, `path_denied`, `type_denied`, `missing_required_field`, `batch_too_large`), and the path, bundle, URI, or field involved. The batch validator reports them read-only, and apply rejects the batch before staging or writing any file. Their messages, like every error message, name rules, paths, and URIs, never catalog text.
 
 Configured producer bundle roots are also protected from direct authoring. A producer candidate must declare and emit OKF v0.2, carry valid native generation and source provenance on every concept, contain no producer-owned graph failures, and leave the complete future project conformant and valid. Secret values requested through the host are rejected if they appear in generated bytes. Invalid previews remain inspectable but are never publishable.
 
 Producer ownership is recorded in `.okf-producer.json` with relative paths and content digests. New unowned path collisions, modified owned files, corrupt or foreign manifests, path traversal, and symbolic-link traversal block publication. Only unchanged paths owned by the previous manifest may be removed. The manifest is written last after staged publication, and persisted validation failures trigger revision-aware rollback.
 
-Rollback revision-checks a published target immediately before restoring it. Detected external replacements are preserved and reported as rollback conflicts, but this is best-effort detection rather than a cross-process compare-and-swap primitive. Optional Git commits require a clean worktree before publication, reject active filter attributes and hidden `assume-unchanged`/`skip-worktree` index flags, and disable replace-object resolution. Untracked files count as a dirty worktree, so with `--git-commit` the proposal directory (`.okf-proposals/` by default, or the `--proposal-root` location) must be ignored by Git. They build an isolated index directly from validated Markdown bytes, create the exact tree without mutating the shared index, publish it through a compare-and-swap ref update, synchronize only affected ordinary-index paths afterward, and never push. Commit, target, index, and durability states remain explicit when a timeout or concurrent replacement cannot be classified safely.
+Rollback revision-checks a published target immediately before restoring it. Detected external replacements are preserved and reported as rollback conflicts, but this is best-effort detection rather than a cross-process compare-and-swap primitive. Optional Git commits require a clean worktree before publication, reject active filter attributes and hidden `assume-unchanged`/`skip-worktree` index flags, and disable replace-object resolution. Untracked files count as a dirty worktree, so with `--git-commit` the proposal directory (`.okf-proposals/` by default, or the `--proposal-root` location) must be ignored by Git. They build an isolated index directly from validated Markdown bytes, create the exact tree without mutating the shared index, publish it through a compare-and-swap ref update, synchronize only affected ordinary-index paths afterward, and never push. The commit's author is the calling principal's name and email when it carries them, a missing field falling back to the repository's configured identity; the committer is always that configured identity. Commit, target, index, and durability states remain explicit when a timeout or concurrent replacement cannot be classified safely.
 
 Computation, executor, and attester artifacts are always inert. Inspection and preflight never execute them, fetch external contract URIs, echo parameter or receipt values, persist receipts, or claim attestation. Migration adds no unverifiable provenance or trust claims and never accepts its own proposals.
 
-HTTP mutations require bearer authorization. Filesystem safeguards still apply after authentication.
+Authoring API mutations require its bearer token. MCP over HTTP authenticates every request, with a token file of SHA-256 hashes or RFC 7662 introspection, and never logs, echoes, or stores token values. Filesystem safeguards still apply after authentication.
 
 The local file store is designed for one trusted root or project workspace. Multiple independent authoring workers require an external coordination or locking strategy.

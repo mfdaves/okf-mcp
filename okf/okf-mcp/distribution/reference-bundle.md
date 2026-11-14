@@ -3,7 +3,11 @@ id: okf://okf-mcp/distribution/reference-bundle
 type: OKF Distribution
 title: Published okf-mcp Reference Bundle
 description: Canonical public OKF bundle describing the okf-mcp product and its durable contracts.
-tags: [distribution, reference, remote-bundle, dogfooding]
+tags:
+  - distribution
+  - reference
+  - remote-bundle
+  - dogfooding
 relations:
   - type: consumes
     target: okf://okf-mcp/specs/concept-format
@@ -23,6 +27,9 @@ relations:
     target: repo://.github/workflows/release.yml
   - type: configured_by
     target: repo://.agents/skills/okf-mcp-release/SKILL.md
+generated:
+  by: anthropic/claude-code
+  at: 2026-11-14T17:33:39.682Z
 ---
 
 # Published okf-mcp Reference Bundle
@@ -35,9 +42,9 @@ The latest public bundle can be loaded from:
 
 Consumers that need reproducibility should replace `main` with a release tag. Remote loading indexes only the Markdown tree and does not execute repository code.
 
-The public npm package is `@mfdaves/okf-mcp`. Its allowlist includes `okf.project.yaml`, `server.json`, and the `okf` directory so installed artifacts carry the same reference bundle and MCP Registry metadata. The package declares the Registry name `io.github.mfdaves/okf-mcp`.
+The public npm package is `@mfdaves/okf-mcp`. Its allowlist includes `okf.project.yaml`, `server.json`, and the `okf` directory so installed artifacts carry the same reference bundle and MCP Registry metadata. The package declares the Registry name `io.github.mfdaves/okf-mcp`, and `server.json` describes two transports of the same package: stdio, and Streamable HTTP at `http://127.0.0.1:8766/mcp` started with the extra `--http` argument.
 
-The package smoke gate verifies that package, lockfile, CLI, MCP server, and Registry versions and identities agree. It installs the generated tarball into a clean temporary project, executes both binaries, validates this bundle, and uses the official client SDK to exercise both modern `2026-07-28` and legacy `2025-11-25` stdio sessions through tool discovery, resource discovery, resource reads, and concept retrieval.
+The package smoke gate verifies that package, lockfile, CLI, MCP server, and Registry versions and identities agree. It installs the generated tarball into a clean temporary project, executes both binaries, validates this bundle, and uses the official client SDK to exercise both modern `2026-07-28` and legacy `2025-11-25` stdio sessions through tool discovery, resource discovery, resource reads, and concept retrieval. It also serves the installed package over Streamable HTTP and lists tools and searches in both revisions.
 
 The repository release skill defines the package identity, capability matrix, protocol, schema enforcement, self-validation, tarball, clean-install, prerelease, and registry synchronization gates. The trusted-publishing workflow repeats those checks against an exact Git release tag before publishing. Release-candidate metadata is not published to the MCP Registry; stable Registry publication follows successful npm and `npx` verification.
 

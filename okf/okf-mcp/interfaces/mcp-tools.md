@@ -3,7 +3,11 @@ id: okf://okf-mcp/interfaces/mcp-tools
 type: OKF Interface
 title: MCP Tool Catalog
 description: Agent-facing tool contract for discovery, graph navigation, validation, producer execution, remote loading, and authoring.
-tags: [mcp, tools, interface, agents]
+tags:
+  - mcp
+  - tools
+  - interface
+  - agents
 relations:
   - type: depends_on
     target: okf://okf-mcp/runtime/mcp-server
@@ -27,6 +31,15 @@ relations:
     target: repo://test/live-agent-workflow.test.js
   - type: checked_by
     target: repo://test/producer.test.js
+  - type: related_to
+    target: okf://okf-mcp/interfaces/mcp-http
+  - type: checked_by
+    target: repo://test/mcp-principal.test.js
+  - type: checked_by
+    target: repo://test/http-remote-load.test.js
+generated:
+  by: anthropic/claude-code
+  at: 2026-11-14T17:33:39.682Z
 ---
 
 # MCP Tool Catalog
@@ -43,17 +56,17 @@ Static computation tools inspect contracts, read indexed assets, prepare paramet
 
 `read_git_source` reads one pinned `sources[].git` entry from a checkout or bare repository explicitly mapped by the MCP host. It reads the Git object database rather than the working tree and never fetches. Oversized content errors include the observed size, active limit, maximum supported limit, and whether a bounded retry can succeed.
 
-An explicit local root or project workspace exposes candidate validation, path suggestion, and proposal inspection. Normal proposal mutations require `--authoring`; the coordinated computation proposal additionally requires `--allow-computation-authoring`. `--write --actor <actor>` exposes read-only `okf_validate_changes` plus destructive `okf_apply_changes`, both accepting the same structured create/update batch grammar without requiring agents to compose YAML. Runtime calls to `load_remote_bundle` require `--allow-remote-tool`.
+An explicit local root or project workspace exposes candidate validation, path suggestion, and proposal inspection. Normal proposal mutations require `--authoring`; the coordinated computation proposal additionally requires `--allow-computation-authoring`. `--write --actor <actor>` exposes read-only `okf_validate_changes` plus destructive `okf_apply_changes`, both accepting the same structured create/update batch grammar without requiring agents to compose YAML. Runtime calls to `load_remote_bundle` require `--allow-remote-tool`. Over HTTP the calling principal also needs the `okf.write` scope for the live batch tools, `okf_run_producer` and `load_remote_bundle`; without it they are neither listed nor callable, exactly as when the flag is missing.
 
 A project with configured producers exposes `okf_list_producers` and `okf_preview_producer`. Listing is static and does not execute producer packages. Preview loads only the package allowlisted by the selected project entry, reads source metadata, and validates a complete candidate graph without changing destination files. `--write --actor <actor>` additionally exposes destructive `okf_run_producer`. Producer tool inputs select only a configured instance and receipt detail; clients cannot supply packages, connection values, SQL, bundle IDs, configuration, or output paths.
 
-Producer receipts report configured identity, bounded numeric source summaries, relative-path diffs, publication counts, and validation. They omit generated contents, configuration, secrets, connection details, and absolute paths. Run repeats generation and strict OKF v0.2 validation under the shared writer queue, publishes only manifest-owned files, validates persisted state, and refreshes the index.
+Producer receipts report configured identity, bounded numeric source summaries, relative-path diffs, publication counts, and validation. They omit generated contents, configuration, secrets, connection details, and absolute paths. A producer that fails with its own bounded error code reports that code and its scalar details as one diagnostic; its error message is never forwarded. Run repeats generation and strict OKF v0.2 validation under the shared writer queue, publishes only manifest-owned files, validates persisted state, and refreshes the index.
 
-`okf_validate_changes` and `okf_apply_changes` plan 1–100 operations as one future graph, including cross-batch and loaded-remote references plus same-type/title conflicts. Validation returns a non-durable time-of-check receipt. Apply repeats planning under the process-local writer queue, stamps one server-owned `generated.at` with the configured `generated.by`, publishes the complete local batch, validates persisted state, and refreshes the index. Compact receipts are the default; `detail: "full"` retains the richer planning layout. Relation effects are structured, and generated provenance is separate from substantive changed fields.
+`okf_validate_changes` and `okf_apply_changes` plan 1–100 operations as one future graph, including cross-batch and loaded-remote references plus same-type/title conflicts. Validation returns a non-durable time-of-check receipt. Apply repeats planning under the process-local writer queue, stamps one server-owned `generated.at` with the call's actor as `generated.by` (`--actor` over stdio, the principal's actor over HTTP), publishes the complete local batch, validates persisted state, and refreshes the index. Compact receipts are the default; `detail: "full"` retains the richer planning layout. Relation effects are structured, and generated provenance is separate from substantive changed fields.
 
 Optional `--git-commit` policy rejects filter declarations and hidden `assume-unchanged`/`skip-worktree` index flags, disables replace-object resolution, pins the checked-out symbolic branch, constructs an isolated index from validated bytes, and publishes its exact tree with a compare-and-swap ref update from a clean worktree. The shared index is not used to assemble the commit, so unrelated concurrently staged paths cannot enter it; only affected index paths are synchronized after publication. Determinate failures preserve matching valid working-tree files. Ambiguous outcomes, checkout changes, target replacements, and best-effort revision-checked rollback conflicts are reported explicitly; the tool never pushes.
 
-Every tool supplies a purpose-specific description, descriptions for all input parameters, and MCP annotations for read behavior, destructive behavior, idempotency, and external access. Tool discovery and direct invocation use the same capability checks, so a hidden tool also fails when called by name. Annotations remain hints to clients; server-side validation is authoritative.
+Every tool supplies a purpose-specific description, descriptions for all input parameters, and MCP annotations for read behavior, destructive behavior, idempotency, and external access. Tool discovery and direct invocation use the same capability checks for the same principal, so a hidden tool also fails when called by name. Annotations remain hints to clients; server-side validation is authoritative.
 
 The official MCP SDK validates tool arguments against the advertised schema without coercion. Unknown or disabled tools are rejected by SDK dispatch. Argument-schema failures and expected validation, storage, network, read-only, and proposal-conflict failures from enabled tools are returned as tool results with `isError: true`. A validation operation that successfully reports invalid OKF remains a successful tool result.
 

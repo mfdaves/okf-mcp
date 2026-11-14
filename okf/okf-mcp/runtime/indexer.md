@@ -3,7 +3,11 @@ id: okf://okf-mcp/runtime/indexer
 type: OKF Runtime Component
 title: OKF Indexer
 description: Builds the validated in-memory document, concept, relation, and reference graph.
-tags: [indexer, graph, validation, runtime]
+tags:
+  - indexer
+  - graph
+  - validation
+  - runtime
 relations:
   - type: consumes
     target: okf://okf-mcp/specs/concept-format
@@ -19,6 +23,13 @@ relations:
     target: repo://test/conformance.test.js
   - type: checked_by
     target: repo://test/directory-links.test.js
+  - type: configured_by
+    target: repo://src/indexer/update.js
+  - type: checked_by
+    target: repo://test/http-refresh.test.js
+generated:
+  by: anthropic/claude-code
+  at: 2026-11-14T17:33:39.682Z
 ---
 
 # OKF Indexer
@@ -34,6 +45,8 @@ Markdown targets resolve to an exact document first. When no exact document exis
 Validation is layered. OKF conformance checks UTF-8, parseable mapping frontmatter, a non-empty string `type`, and reserved structures. Optional v0.2 family problems are advisories. Project validity covers path and identity integrity, relation vocabulary, and internal targets; broken Markdown links invalidate only under `strictLinks`.
 
 Remote loading is two-pass: selected Markdown is parsed first, then only referenced local assets are fetched. Revision and blob metadata, digests, counts, and unresolved references remain attached to the read-only bundle.
+
+An index can be brought up to date with its local roots without a rebuild: a refresh compares each Markdown file's and referenced asset's size and modification time with what the index recorded and applies the differences incrementally, returning the same index when nothing changed (about 35 ms at 5,000 concepts). Writes refresh before each batch, and the MCP server over HTTP refreshes before requests at most once per refresh interval. An edit that preserves both size and modification time is not seen.
 
 Results expose `conformant`, `validForProject`, and structured diagnostics. `valid` is a compatibility alias for `validForProject`. Valid concepts continue to be served even when other files produce diagnostics.
 
