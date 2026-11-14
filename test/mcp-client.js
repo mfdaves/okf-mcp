@@ -6,9 +6,11 @@ const { serveStdio } = require("@modelcontextprotocol/server/stdio");
 
 const { createMcpServer } = require("../src/mcp-server");
 
-async function connectMcp(t, bundleArgs, options, mode) {
+// Connects an SDK client over an in-memory pair to the servers a factory
+// builds (one per connection, as serveStdio calls it).
+async function connectFactory(t, factory, mode) {
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-  const handle = serveStdio(() => createMcpServer(bundleArgs || [], options || {}), {
+  const handle = serveStdio(factory, {
     legacy: "serve",
     transport: serverTransport,
   });
@@ -28,6 +30,10 @@ async function connectMcp(t, bundleArgs, options, mode) {
   return { client, close };
 }
 
+async function connectMcp(t, bundleArgs, options, mode) {
+  return connectFactory(t, () => createMcpServer(bundleArgs || [], options || {}), mode);
+}
+
 async function callJson(client, name, args) {
   const result = await client.callTool({ name, arguments: args || {} });
   return {
@@ -38,5 +44,6 @@ async function callJson(client, name, args) {
 
 module.exports = {
   callJson,
+  connectFactory,
   connectMcp,
 };

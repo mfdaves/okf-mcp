@@ -191,6 +191,10 @@ function createState(bundleArgs, options) {
     // Search stemming languages from --languages; the project config's value
     // travels on index.project (attachProject) and detection covers the rest.
     languages: options?.languages || undefined,
+    // One tool-call queue per process: every McpServer built on this state
+    // (one per stdio connection, one per HTTP request) runs its tool calls
+    // through it, so calls from different sessions never interleave.
+    callQueue: Promise.resolve(),
   };
   if (state.languages) {
     state.index.languages = state.languages;
@@ -401,7 +405,6 @@ function registerMcpInterface(state) {
       },
     },
   );
-  let pendingToolCall = Promise.resolve();
   const resources = new ResourceTemplate("okf://{+locator}", {
     list: async () => listResources(state.index),
   });
@@ -429,7 +432,7 @@ function registerMcpInterface(state) {
             : {}),
         },
         async (args) => {
-          const current = pendingToolCall.then(async () => {
+          const current = state.callQueue.then(async () => {
             try {
               return await callTool(state, name, args);
             } catch {
@@ -442,7 +445,7 @@ function registerMcpInterface(state) {
               );
             }
           });
-          pendingToolCall = current.catch(() => {});
+          state.callQueue = current.catch(() => {});
           return current;
         },
       );
@@ -469,4 +472,6 @@ module.exports = {
   callTool,
   /** @internal */
   createStateAsync,
+  /** @internal Builds one McpServer over an existing state (tests share one state). */
+  registerMcpInterface,
 };
