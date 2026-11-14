@@ -12,6 +12,8 @@ function createHttpOptions() {
     publicUrl: "",
     allowedHosts: [],
     allowedOrigins: [],
+    auth: "",
+    authorizationServer: "",
   };
 }
 
@@ -20,6 +22,8 @@ const VALUE_FLAGS = {
   "--public-url": { key: "publicUrl" },
   "--allowed-host": { key: "allowedHosts", repeat: true },
   "--allowed-origin": { key: "allowedOrigins", repeat: true },
+  "--auth": { key: "auth" },
+  "--authorization-server": { key: "authorizationServer" },
 };
 
 // Consumes one HTTP flag at argv[index]: returns how many extra arguments
@@ -63,6 +67,48 @@ function hostnameOf(value, name, fail) {
   throw fail(`${name} must be a hostname or an origin URL.`);
 }
 
+// --auth tokens:<file> | introspect:<url> (plan I-2a). The introspection
+// URL comes only from this flag (B-3): https, or http on a loopback host.
+function authOf(http, publicUrl, fail) {
+  const issuerOnly = () => fail("--authorization-server requires --auth introspect:<url>.");
+  if (!http.auth) {
+    if (http.authorizationServer) throw issuerOnly();
+    return null;
+  }
+  const colon = http.auth.indexOf(":");
+  const mode = colon > 0 ? http.auth.slice(0, colon) : "";
+  const target = colon > 0 ? http.auth.slice(colon + 1) : "";
+  if (mode === "tokens" && target) {
+    if (http.authorizationServer) throw issuerOnly();
+    return { mode, file: target };
+  }
+  if (mode !== "introspect" || !target) {
+    throw fail("--auth must be tokens:<file> or introspect:<url>.");
+  }
+  let url;
+  try {
+    url = new URL(target);
+  } catch {
+    throw fail("--auth introspect:<url> needs an absolute URL.");
+  }
+  const loopback = url.protocol === "http:" && isLoopback(url.hostname.replace(/^\[|\]$/g, ""));
+  if (!(url.protocol === "https:" || loopback) || url.username || url.password) {
+    throw fail(
+      "--auth introspect:<url> must be https (or http on a loopback host), without credentials.",
+    );
+  }
+  if (url.search || url.hash) {
+    throw fail("--auth introspect:<url> must not carry a query or fragment.");
+  }
+  if (!http.authorizationServer) {
+    throw fail("--auth introspect:<url> requires --authorization-server <issuer>.");
+  }
+  if (!publicUrl) {
+    throw fail("--auth introspect:<url> requires --public-url, the token audience.");
+  }
+  return { mode, url: url.href, issuer: http.authorizationServer };
+}
+
 function publicUrlOf(value, fail) {
   let url;
   try {
@@ -83,8 +129,17 @@ function publicUrlOf(value, fail) {
 function httpServerOptions(args, fail) {
   const http = args.http;
   if (!http.enabled) {
-    if (http.publicUrl || http.allowedHosts.length || http.allowedOrigins.length) {
-      throw fail("--public-url, --allowed-host and --allowed-origin require --http.");
+    const given = [
+      http.publicUrl,
+      http.allowedHosts.length,
+      http.allowedOrigins.length,
+      http.auth,
+      http.authorizationServer,
+    ];
+    if (given.some(Boolean)) {
+      throw fail(
+        "--public-url, --allowed-host, --allowed-origin, --auth and --authorization-server require --http.",
+      );
     }
     return null;
   }
@@ -93,17 +148,18 @@ function httpServerOptions(args, fail) {
   if (args.authoring) {
     throw fail("--authoring is not available with --http.");
   }
-  if (args.write) {
+  const publicUrl = http.publicUrl ? publicUrlOf(http.publicUrl, fail) : null;
+  const auth = authOf(http, publicUrl, fail);
+  if (args.write && !auth) {
     throw fail("--write with --http requires --auth: an unauthenticated HTTP caller is read-only.");
   }
-  if (!isLoopback(args.host)) {
+  if (!isLoopback(args.host) && !auth) {
     throw fail("--http on a non-loopback --host requires --auth.");
   }
   const port = args.portGiven ? args.port : DEFAULT_HTTP_PORT;
   if (!Number.isInteger(port) || port < 0 || port > 65535) {
     throw fail("--port must be an integer from 0 through 65535.");
   }
-  const publicUrl = http.publicUrl ? publicUrlOf(http.publicUrl, fail) : null;
   const mcpPath = publicUrl ? publicUrl.pathname.replace(/(.)\/+$/, "$1") : "/mcp";
   return {
     host: args.host,
@@ -114,6 +170,7 @@ function httpServerOptions(args, fail) {
       .map((value) => hostnameOf(value, "--allowed-host", fail))
       .concat(publicUrl ? [publicUrl.hostname] : []),
     allowedOrigins: http.allowedOrigins.map((value) => hostnameOf(value, "--allowed-origin", fail)),
+    auth,
   };
 }
 

@@ -2,14 +2,19 @@
 
 const assert = require("node:assert/strict");
 const { spawnSync } = require("node:child_process");
-const http = require("node:http");
 const path = require("node:path");
 const test = require("node:test");
-const { Client, StreamableHTTPClientTransport } = require("@modelcontextprotocol/client");
 
 const { main } = require("../src/cli");
 const { runMcpHttpServer } = require("../src/mcp/http");
-const { callJson, connectMcp } = require("./mcp-client");
+const {
+  INITIALIZE_BODY: INITIALIZE,
+  MCP_POST_HEADERS: MCP_HEADERS,
+  callJson,
+  connectHttp,
+  connectMcp,
+  httpExchange: exchange,
+} = require("./mcp-client");
 
 const repositoryRoot = path.resolve(__dirname, "..");
 const binary = path.join(repositoryRoot, "bin", "okf-mcp.js");
@@ -27,46 +32,6 @@ async function startHttp(t, options) {
   return server;
 }
 
-async function connectHttp(t, url, mode) {
-  const client = new Client(
-    { name: "okf-http-test", version: "1" },
-    { versionNegotiation: { mode: mode || "legacy" } },
-  );
-  await client.connect(new StreamableHTTPClientTransport(new URL(url)));
-  t.after(() => client.close());
-  return client;
-}
-
-// One raw HTTP exchange, so tests can set Host and Origin and oversize bodies.
-function exchange(port, options) {
-  return new Promise((resolve, reject) => {
-    const request = http.request(
-      {
-        host: "127.0.0.1",
-        port,
-        method: options.method || "GET",
-        path: options.path || "/mcp",
-        headers: options.headers || {},
-      },
-      (response) => {
-        const chunks = [];
-        response.on("data", (chunk) => chunks.push(chunk));
-        response.on("end", () =>
-          resolve({
-            status: response.statusCode,
-            headers: response.headers,
-            body: Buffer.concat(chunks).toString("utf8"),
-          }),
-        );
-      },
-    );
-    request.on("error", reject);
-    // `chunks` sends the body chunked, without a Content-Length.
-    for (const chunk of options.chunks || []) request.write(chunk);
-    request.end(options.body);
-  });
-}
-
 // The advertised fields as they travel as JSON (an unset field is absent).
 function contractTools(tools) {
   return tools.map((tool) =>
@@ -76,29 +41,14 @@ function contractTools(tools) {
   );
 }
 
-const INITIALIZE = JSON.stringify({
-  jsonrpc: "2.0",
-  id: 1,
-  method: "initialize",
-  params: {
-    protocolVersion: "2025-11-25",
-    capabilities: {},
-    clientInfo: { name: "raw", version: "1" },
-  },
-});
-const MCP_HEADERS = {
-  "content-type": "application/json",
-  accept: "application/json, text/event-stream",
-};
-
 test("MCP over HTTP lists the stdio tools and answers reads in both protocol eras", async (t) => {
   const server = await startHttp(t);
   assert.match(server.url, /^http:\/\/127\.0\.0\.1:\d+\/mcp$/);
   const stdio = await connectMcp(t, [], { rootPath: ROOT });
   const expected = contractTools((await stdio.client.listTools()).tools);
 
-  const legacy = await connectHttp(t, server.url, "legacy");
-  const modern = await connectHttp(t, server.url, { pin: "2026-07-28" });
+  const legacy = await connectHttp(t, server.url, { mode: "legacy" });
+  const modern = await connectHttp(t, server.url, { mode: { pin: "2026-07-28" } });
   assert.equal(legacy.getNegotiatedProtocolVersion(), "2025-11-25");
   assert.equal(modern.getNegotiatedProtocolVersion(), "2026-07-28");
   for (const client of [legacy, modern]) {
@@ -225,6 +175,7 @@ test("--http flags are parsed strictly and a non-loopback host needs --auth", as
     publicUrl: null,
     allowedHosts: [],
     allowedOrigins: [],
+    auth: null,
   });
   assert.deepEqual(calls[1].options.http, {
     host: "127.0.0.1",
@@ -233,6 +184,7 @@ test("--http flags are parsed strictly and a non-loopback host needs --auth", as
     publicUrl: "https://mcp.example.test/okf/mcp/",
     allowedHosts: ["proxy.internal", "mcp.example.test"],
     allowedOrigins: ["app.example.test"],
+    auth: null,
   });
 
   const refused = [

@@ -19,6 +19,7 @@ const {
   originValidationResponse,
 } = require("@modelcontextprotocol/server");
 
+const { createHttpAuth } = require("./auth");
 const { anonymousPrincipal } = require("./principal");
 const { MAX_MCP_MESSAGE_BYTES, createStateAsync, registerMcpInterface } = require("./server");
 
@@ -188,18 +189,30 @@ function createMcpHttpHandler(state, options) {
 }
 
 // Starts `okf mcp --http`: builds the server state like the stdio server does,
-// listens on host:port and resolves once listening with { url, port, close }.
+// sets up authentication (`http.auth`, see src/mcp/auth.js; `http.env` and
+// `http.fetch` stand in for the process's in tests), listens on host:port and
+// resolves once listening with { url, port, close }.
 async function runMcpHttpServer(bundleArgs, options) {
   const config = options || {};
+  const httpOptions = Object.assign({}, config.http);
+  if (httpOptions.auth) {
+    const auth = createHttpAuth(httpOptions.auth, {
+      publicUrl: httpOptions.publicUrl,
+      env: httpOptions.env,
+      fetch: httpOptions.fetch,
+    });
+    httpOptions.authenticate = auth.authenticate;
+    httpOptions.routes = auth.routes;
+  }
   const state = await createStateAsync(bundleArgs, config);
-  const handler = createMcpHttpHandler(state, config.http);
+  const handler = createMcpHttpHandler(state, httpOptions);
   const server = http.createServer((req, res) => {
     handler.handle(req, res).catch(() => res.destroy());
   });
-  const host = config.http?.host || "127.0.0.1";
+  const host = httpOptions.host || "127.0.0.1";
   await new Promise((resolve, reject) => {
     server.once("error", reject);
-    server.listen(config.http?.port ?? 0, host, () => {
+    server.listen(httpOptions.port ?? 0, host, () => {
       server.off("error", reject);
       resolve();
     });
@@ -209,7 +222,7 @@ async function runMcpHttpServer(bundleArgs, options) {
   return {
     state,
     port,
-    url: `http://${shown}:${port}${config.http?.mcpPath || DEFAULT_MCP_PATH}`,
+    url: `http://${shown}:${port}${httpOptions.mcpPath || DEFAULT_MCP_PATH}`,
     async close() {
       await handler.close();
       server.closeAllConnections();
