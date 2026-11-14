@@ -211,6 +211,8 @@ function createState(bundleArgs, options) {
     // Search stemming languages from --languages; the project config's value
     // travels on index.project (attachProject) and detection covers the rest.
     languages: options?.languages || undefined,
+    // "http" once an HTTP handler serves the state to many principals.
+    transport: "stdio",
     // One tool-call queue per process: every McpServer built on this state
     // (one per stdio connection, one per HTTP request) runs its tool calls
     // through it, so calls from different sessions never interleave.

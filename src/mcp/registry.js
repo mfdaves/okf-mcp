@@ -171,7 +171,11 @@ const GATES = {
     Boolean(state?.authoringService && state.allowAuthoring && state.allowComputationAuthoring),
   liveWrite: (state, principal) =>
     Boolean(state?.allowWrite && state.liveAuthoringService && canWrite(principal)),
-  runtimeRemote: (state) => Boolean(state?.allowRuntimeRemoteLoad),
+  // A runtime remote load changes the index every principal of the process
+  // reads. Over stdio the process has one principal, so --allow-remote-tool
+  // is enough; over HTTP the principal must also hold okf.write.
+  runtimeRemote: (state, principal) =>
+    Boolean(state?.allowRuntimeRemoteLoad && (state.transport !== "http" || canWrite(principal))),
 };
 
 function toolEnabled(tool, state, principal) {

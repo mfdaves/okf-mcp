@@ -144,6 +144,8 @@ function indexRefresher(state, intervalMs) {
 // and `refreshIntervalMs` (default 2,000; see indexRefresher).
 function createMcpHttpHandler(state, options) {
   const config = options || {};
+  // From now on many principals share this state (see GATES.runtimeRemote).
+  state.transport = "http";
   const refreshIfDue = indexRefresher(
     state,
     config.refreshIntervalMs ?? DEFAULT_REFRESH_INTERVAL_MS,
