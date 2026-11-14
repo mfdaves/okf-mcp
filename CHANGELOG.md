@@ -2,6 +2,33 @@
 
 All notable changes to `@mfdaves/okf-mcp`. The format follows Keep a Changelog; versions follow SemVer. Until 1.0, minor versions may change defaults where this file says so.
 
+## 0.13.0-rc.1 — 2026-11-14
+
+MCP over Streamable HTTP with a principal per request (WP6a in `docs/plan-1.0.md`, requirements I-2 and I-2a to I-2c). Stdio is unchanged: the six stdio MCP contract snapshots are byte-identical to 0.12.0-rc.1.
+
+### Added
+
+- `okf mcp --http [--host 127.0.0.1] [--port 8766] [--public-url URL] [--allowed-host H]... [--allowed-origin O]...` serves the stdio tools, resources and schemas over Streamable HTTP through the SDK's `createMcpHandler`: protocol revision 2026-07-28 and, statelessly, 2025-era clients including the 2025-11-25 `initialize`. A small `node:http` bridge in `src/mcp/http.js` replaces an `@modelcontextprotocol/node` dependency. `Host` is checked on every request and `Origin` on the MCP endpoint (403), bodies above 1 MiB get 413, and `GET /health` answers `{"status":"ok"}`. Binding a non-loopback host without `--auth` is a usage error (exit 2).
+- Principals: every call runs for `{ subject, actor, scopes, name?, email? }`. `okf.read` is required for any call; `okf.write` enables the live write tools and producer runs. A principal without `okf.write` sees no write tool in `tools/list`, and calling one fails as a disabled tool does. Over stdio the principal comes from the flags (`--actor`; `okf.write` only with `--write`). Without `--auth` an HTTP caller is anonymous and read-only.
+- Writes made for a principal stamp its actor in `generated.by` and are judged by the write policy for that actor; with `--git-commit`, a principal's `name` and `email` become the commit author while the committer stays the configured identity. `LiveAuthoringService.validateChanges/applyChanges` accept `context.actor` and `context.author`. Proposal tools act for the call's principal, so `proposedBy` names its actor (over stdio, `--actor` as before). Producer runs keep `process:<producer>`.
+- `--auth tokens:<file>`: a YAML list of `{ sha256, subject, actor, scopes }`, tokens kept only as SHA-256 hashes.
+- `--auth introspect:<url>` with `--authorization-server <issuer>`: RFC 7662 introspection with HTTP Basic client credentials from `OKF_INTROSPECTION_CLIENT_ID` / `OKF_INTROSPECTION_CLIENT_SECRET`. A token is accepted when `active` is true, `aud` equals `--public-url`, `exp` is in the future and `scope` holds `okf.read`; the actor is `human:<username>`. Answers are cached by token hash until the earlier of `exp` and 60 s. Refused tokens get 401 with a `resource_metadata` challenge, a missing `okf.read` 403, an unreachable or failing authorization server 503 without detail. The server publishes RFC 9728 protected-resource metadata naming the issuer; okf-mcp never issues tokens. Token values never appear in responses, errors, logs or the MCP request context.
+- `--refresh-interval <ms>` (default 2000): over HTTP, files changed outside okf-mcp are picked up before a request at most once per interval, inside the call queue, and a changed index is handed to live authoring. An unchanged check costs p50 33.7 ms / p95 37.1 ms at 5,000 concepts; `npm run bench:index` now reports it.
+- `server.json` describes a second package transport: Streamable HTTP at `http://127.0.0.1:8766/mcp`, started with `--http`.
+
+### Changed
+
+- All MCP sessions built over one server state share one tool-call queue (`state.callQueue`) instead of one queue per `McpServer` instance; over stdio there is still one session per process.
+- `src/cli.js` is split into `src/cli/{options,usage,commands,http-options}.js` with no behaviour change; it leaves the Q-1 size ratchet's grandfather list.
+
+### Known issues
+
+- `--authoring` is refused with `--http`: which scope may create and accept proposals over HTTP is not decided, and under the stdio rule the proposal tools would be open to read-only principals.
+- A revoked introspected token stays valid for up to 60 seconds (the answer cache).
+- `--allow-remote-tool` over HTTP lets any principal, read-only ones included, load a remote bundle into the state every principal shares.
+- No CORS preflight handling: browser clients on other origins need a proxy that answers it.
+- Refresh while serving detects changes by size and modification time, like the write path (W-6); an edit that keeps both is missed.
+
 ## 0.12.0-rc.1 — 2026-10-25
 
 Retrieval level-up (WP3c-2): an adaptive fusion weight, contextual embedding units and a confidence block with opt-in abstention, each measured against pre-registered targets on both fixtures and on a real 560-concept catalog (`test/fixtures/retrieval/reports/hybrid-0.12-2026-10-25.md`, `context-0.12-2026-10-25.md`). No default ranking changes: the fixed fusion weight 0.4 and concept units stay the defaults because the new options did not meet their conditions for becoming defaults.

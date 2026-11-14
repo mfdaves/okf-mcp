@@ -8,12 +8,12 @@
     "source": "github"
   },
   "websiteUrl": "https://github.com/mfdaves/okf-mcp#readme",
-  "version": "0.12.0-rc.1",
+  "version": "0.13.0-rc.1",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "@mfdaves/okf-mcp",
-      "version": "0.12.0-rc.1",
+      "version": "0.13.0-rc.1",
       "transport": {
         "type": "stdio"
       },
@@ -37,6 +37,42 @@
         {
           "type": "positional",
           "value": "mcp"
+        }
+      ]
+    },
+    {
+      "registryType": "npm",
+      "identifier": "@mfdaves/okf-mcp",
+      "version": "0.13.0-rc.1",
+      "transport": {
+        "type": "streamable-http",
+        "url": "http://127.0.0.1:8766/mcp"
+      },
+      "packageArguments": [
+        {
+          "type": "named",
+          "name": "--root",
+          "description": "Absolute path to one OKF bundle root.",
+          "isRequired": false,
+          "format": "filepath",
+          "placeholder": "/absolute/path/to/okf-root"
+        },
+        {
+          "type": "named",
+          "name": "--project",
+          "description": "Absolute path to an optional federated OKF project, including configured producers.",
+          "isRequired": false,
+          "format": "filepath",
+          "placeholder": "/absolute/path/to/okf.project.yaml"
+        },
+        {
+          "type": "positional",
+          "value": "mcp"
+        },
+        {
+          "type": "positional",
+          "value": "--http",
+          "description": "Serve MCP over Streamable HTTP on 127.0.0.1:8766 instead of stdio."
         }
       ]
     }

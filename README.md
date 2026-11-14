@@ -6,7 +6,7 @@ The part that is hard is writing to a catalog safely. A configured producer read
 
 Reading is the ordinary half. It consumes an OKF bundle directory of Markdown files with YAML frontmatter. An optional workspace mode can federate several bundles. Concepts are exposed through CLI commands and MCP resources and tools for validation, structured search, graph navigation, provenance inspection, and proposal-based authoring.
 
-The core intentionally has no database, embeddings, build step, or hosted-service dependency. It uses `js-yaml` for safe YAML, CommonMark for Markdown structure, MiniSearch for in-memory BM25+ text retrieval, and the official Model Context Protocol TypeScript SDK v2 for stdio MCP. Local root mode makes no network calls. Optional remote loading fetches public Markdown concepts and only their explicitly referenced inert assets from GitHub. Nothing in the v0.2 computation support executes code or attests a receipt.
+The core intentionally has no database, embeddings, build step, or hosted-service dependency. It uses `js-yaml` for safe YAML, CommonMark for Markdown structure, MiniSearch for in-memory BM25+ text retrieval, and the official Model Context Protocol TypeScript SDK v2 for MCP over stdio and Streamable HTTP. Local root mode makes no network calls. Optional remote loading fetches public Markdown concepts and only their explicitly referenced inert assets from GitHub. Nothing in the v0.2 computation support executes code or attests a receipt.
 
 ## OKF v0.2 Support And Extensions
 
@@ -283,12 +283,155 @@ returned as MCP tool results with `isError: true`. Calls to tools that are not
 enabled are rejected by SDK dispatch. Unexpected implementation errors are
 masked instead of exposing internal details.
 
+## MCP over HTTP
+
+From 0.13.0-rc.1 the `mcp` command can serve the same tools, resources and
+schemas over Streamable HTTP instead of stdio:
+
+```bash
+okf --root /path/to/okf mcp --http
+# OKF MCP HTTP server listening on http://127.0.0.1:8766/mcp
+```
+
+| Flag | Meaning |
+| --- | --- |
+| `--http` | Serve MCP over Streamable HTTP. |
+| `--host <host>` | Address to bind (default `127.0.0.1`). A non-loopback address requires `--auth`. |
+| `--port <port>` | Port (default `8766`; `0` picks a free one). |
+| `--public-url <url>` | The URL clients use for the MCP endpoint. Its path is the endpoint path (default `/mcp`), its host is accepted in `Host` headers, and with introspection it is the token audience. |
+| `--allowed-host <host>` | Another accepted `Host` header (hostname; the port is ignored); repeatable. `localhost`, `127.0.0.1` and `[::1]` are always accepted. |
+| `--allowed-origin <origin>` | Another accepted browser `Origin` (hostname or origin URL); repeatable. Requests without an `Origin` header are not affected. |
+| `--auth tokens:<file>`, `--auth introspect:<url>` | Bearer authentication, see below. |
+| `--authorization-server <issuer>` | With introspection, the issuer named in the protected-resource metadata. |
+| `--refresh-interval <ms>` | Check the files for changes made outside okf-mcp before a request at most this often (default `2000`; `0` checks before every request). |
+
+The server answers:
+
+- the MCP endpoint, through the SDK's `createMcpHandler`: protocol revision
+  `2026-07-28`, and 2025-era clients (including the `2025-11-25` `initialize`
+  handshake) through its stateless fallback. No session is kept: `GET` and
+  `DELETE` on the endpoint answer `405` to 2025-era clients.
+- `GET /health` with `{"status":"ok"}`.
+- with introspection, the RFC 9728 protected-resource metadata at
+  `/.well-known/oauth-protected-resource` plus the path of `--public-url`
+  (for example `/.well-known/oauth-protected-resource/mcp`) and at
+  `/.well-known/oauth-protected-resource`.
+
+Every request is checked against the accepted `Host` names (`403`
+otherwise); requests to the MCP endpoint are also checked against the accepted
+origins (`403`) and refused above 1 MiB (`413`). Each request builds its MCP
+server over the one shared catalog state, and tool calls from all clients run
+one at a time through one queue.
+
+### Principals and scopes
+
+Every HTTP request runs for a principal: a subject, an actor, scopes, and
+optionally a name and an email. `okf.read` is required for any call.
+`okf.write` adds the live write tools (`okf_validate_changes`,
+`okf_apply_changes`, when the server runs with `--write`) and producer runs
+(`okf_run_producer`). A principal without `okf.write` does not see those tools
+in `tools/list`, and calling one fails as calling a disabled tool does.
+
+Writes made for a principal stamp its actor in `generated.by` and are judged
+by the write policy for that actor. With `--git-commit`, a principal that
+carries a name and an email becomes the commit author; the committer stays
+the repository's configured Git identity. Producer runs keep
+`process:<producer>`. `--write` still requires `--actor`, which names the
+server process as over stdio; every authenticated HTTP principal writes as
+its own actor.
+
+Without `--auth`, every caller is an anonymous read-only principal. That mode
+is allowed only on a loopback address, and `--write` is a usage error there.
+`--authoring` is not available with `--http` in this release: which scope may
+create and accept proposals over HTTP is not decided yet. Over stdio the
+principal comes from the flags (`--actor`, and `okf.write` only with
+`--write`), so stdio behaves as before.
+
+### Token file
+
+`--auth tokens:<file>` reads a YAML list of tokens by their SHA-256 hash;
+plaintext tokens are never stored:
+
+```yaml
+tokens:
+  - sha256: 3f0c…            # hex SHA-256 of the bearer token
+    subject: ci
+    actor: process:ci-nightly
+    scopes: [okf.read, okf.write]
+```
+
+`printf %s "$TOKEN" | sha256sum` prints the hash. The file must be a regular
+file of at most 1 MiB; unknown fields, unknown scopes, invalid actors and
+repeated hashes are startup errors that name the entry and field, never a
+value. Listed tokens do not expire; remove an entry and restart the server to
+revoke it.
+
+### Token introspection
+
+`--auth introspect:<url>` checks opaque bearer tokens against an external
+OAuth 2.0 authorization server with RFC 7662 introspection. okf-mcp is only a
+resource server: it never issues tokens, and clients obtain them from the
+authorization server named in the protected-resource metadata.
+
+```bash
+OKF_INTROSPECTION_CLIENT_ID=okf-mcp OKF_INTROSPECTION_CLIENT_SECRET=… \
+okf --root /srv/okf --write --actor process:okf-mcp --git-commit mcp --http \
+  --public-url https://mcp.example.com/mcp \
+  --auth introspect:https://auth.example.com/oauth/introspect \
+  --authorization-server https://auth.example.com
+```
+
+- okf-mcp posts `token=<access token>` as a form to the URL, with HTTP Basic
+  client credentials (form-urlencoded before base64, RFC 6749 section 2.3.1)
+  read from `OKF_INTROSPECTION_CLIENT_ID` and
+  `OKF_INTROSPECTION_CLIENT_SECRET` only. The URL must be `https`, or `http`
+  on a loopback host, without credentials, query or fragment; redirects are
+  not followed.
+- A token is accepted when `active` is `true`, `aud` equals `--public-url`,
+  `exp` is in the future and `scope` holds `okf.read`. The principal's subject
+  is `sub`, its actor `human:<username>` (whitespace and control characters
+  replaced by `-`), its scopes the `okf.read` and `okf.write` entries of
+  `scope` (others are ignored), and its git author `name` and `email` when
+  both are present.
+- A missing or refused token gets `401` with a `WWW-Authenticate: Bearer`
+  challenge carrying `resource_metadata`; a token without `okf.read` gets
+  `403 insufficient_scope`. When the authorization server cannot be reached,
+  times out (5 s) or answers anything but `200` with JSON, the request gets
+  `503` with `{"error":"temporarily_unavailable"}` and no further detail.
+- Answers, accepted or not, are cached by the token's SHA-256 until the
+  earlier of `exp` and 60 seconds, so a revoked token keeps working for up to
+  a minute.
+
+Token values never appear in a response, an error, a log line or the MCP
+request context; only their hash is kept.
+
+### Index freshness
+
+Over HTTP the server re-reads files changed outside okf-mcp (for example by
+`git pull` or an editor) before a request, at most once per
+`--refresh-interval`. Changes are detected by file size and modification time,
+as for writes. An unchanged check costs about 35 ms at 5,000 concepts.
+
+### Behind a reverse proxy
+
+- Bind okf-mcp to a loopback address and let the proxy terminate TLS.
+- Set `--public-url` to the external URL of the endpoint and forward that
+  path unchanged; forward `/health` and
+  `/.well-known/oauth-protected-resource…` as well.
+- Forward the `Host` header as the public host (accepted automatically), or
+  accept the host the proxy sends with `--allowed-host`.
+- Forward the `Authorization` header unchanged.
+- Responses can be Server-Sent Events streams: turn response buffering off
+  for the endpoint and allow long-lived responses.
+- One process serves one root or one project; run one process per catalog.
+
 ## MCP Registry Metadata
 
-`server.json` describes the npm package as the stdio server
-`io.github.mfdaves/okf-mcp`. Registry-aware clients should prompt for an
-absolute OKF root path, pass it through `--root`, and append the fixed `mcp`
-command.
+`server.json` describes the npm package `io.github.mfdaves/okf-mcp` twice:
+as a stdio server, and as a Streamable HTTP server at
+`http://127.0.0.1:8766/mcp` started with the extra `--http` argument.
+Registry-aware clients should prompt for an absolute OKF root path, pass it
+through `--root`, and append the fixed `mcp` command.
 
 ## Concept Identity And Extensions
 
@@ -545,6 +688,8 @@ Safety rules:
 - independent processes still require external single-writer coordination
 
 ## HTTP API
+
+The REST authoring API below is separate from [MCP over HTTP](#mcp-over-http) (`mcp --http`).
 
 Start the HTTP server:
 
@@ -935,8 +1080,9 @@ Generated output is regular Markdown/YAML OKF and is validated by the same index
 
 ## Limitations
 
-- MCP transport is stdio only. The separate HTTP authoring API is not MCP over HTTP.
+- MCP is served over stdio and, with `mcp --http`, over Streamable HTTP. The separate HTTP authoring API (`serve`) is not MCP over HTTP.
 - MCP protocol compatibility follows the pinned official SDK v2 dependency.
-- There is no file watcher. Restart the server after external file changes. Concepts accepted through MCP authoring refresh the MCP server index immediately.
+- There is no file watcher. Over stdio, restart the server after external file changes; over HTTP, changes are picked up before a request at most once per `--refresh-interval`. Concepts accepted through MCP authoring refresh the MCP server index immediately.
+- With `mcp --http`, proposal authoring (`--authoring`) is not available, a revoked introspected token stays valid for up to 60 seconds, and one process still serves one root or project for every principal.
 - The HTTP API is a lightweight built-in server, not a full hosted multi-tenant service.
 - OKF v0.2 computation support is static inspection and preflight only; no computation or attester is executed.

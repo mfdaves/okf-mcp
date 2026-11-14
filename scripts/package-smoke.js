@@ -4,8 +4,8 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-const { spawnSync } = require("node:child_process");
-const { Client } = require("@modelcontextprotocol/client");
+const { spawn, spawnSync } = require("node:child_process");
+const { Client, StreamableHTTPClientTransport } = require("@modelcontextprotocol/client");
 const { StdioClientTransport } = require("@modelcontextprotocol/client/stdio");
 
 const repositoryRoot = path.resolve(__dirname, "..");
@@ -134,6 +134,60 @@ async function smokeMcp(okfMcp, installedRoot, mode) {
   assert.equal(stderr, "");
 }
 
+// MCP over Streamable HTTP from the installed binary on a free loopback port:
+// both protocol eras list the tools and answer a search; stderr carries only
+// the listening line.
+async function smokeHttp(okfMcp, installedRoot) {
+  const child = spawn(okfMcp, ["--root", installedRoot, "mcp", "--http", "--port", "0"], {
+    cwd: repositoryRoot,
+    stdio: ["ignore", "ignore", "pipe"],
+  });
+  let stderr = "";
+  child.stderr.on("data", (chunk) => {
+    stderr += String(chunk);
+  });
+  try {
+    const url = await new Promise((resolve, reject) => {
+      const timer = setTimeout(
+        () => reject(new Error(`HTTP server did not start: ${stderr}`)),
+        20000,
+      );
+      child.stderr.on("data", () => {
+        const match = stderr.match(/listening on (http:\/\/127\.0\.0\.1:\d+\/mcp)/);
+        if (match) {
+          clearTimeout(timer);
+          resolve(match[1]);
+        }
+      });
+      child.once("exit", () => reject(new Error(`HTTP server exited: ${stderr}`)));
+    });
+    for (const mode of ["legacy", { pin: "2026-07-28" }]) {
+      const client = new Client(
+        { name: "okf-package-http-smoke", version: "1" },
+        { versionNegotiation: { mode } },
+      );
+      await client.connect(new StreamableHTTPClientTransport(new URL(url)));
+      try {
+        assert.equal(client.getProtocolEra(), typeof mode === "object" ? "modern" : "legacy");
+        const names = (await client.listTools()).tools.map((tool) => tool.name);
+        assert.ok(names.includes("search_concepts"));
+        assert.equal(names.includes("okf_apply_changes"), false);
+        const result = await client.callTool({
+          name: "search_concepts",
+          arguments: { query: "MCP server", limit: 1 },
+        });
+        const payload = result.structuredContent || JSON.parse(result.content[0].text);
+        assert.ok(payload.results.length === 1);
+      } finally {
+        await client.close();
+      }
+    }
+  } finally {
+    child.kill();
+  }
+  assert.match(stderr, /^OKF MCP HTTP server listening on http:\/\/127\.0\.0\.1:\d+\/mcp\n$/);
+}
+
 async function smokeLiveValidation(okfMcp, installedRoot, mode) {
   const target = path.join(installedRoot, "package-smoke-preview.md");
   const transport = new StdioClientTransport({
@@ -198,43 +252,62 @@ async function main() {
   );
   assert.equal(serverMetadata.name, packageMetadata.mcpName);
   assert.equal(serverMetadata.version, packageMetadata.version);
-  assert.equal(serverMetadata.packages.length, 1);
-  assert.equal(serverMetadata.packages[0].registryType, "npm");
-  assert.equal(serverMetadata.packages[0].identifier, packageMetadata.name);
-  assert.equal(serverMetadata.packages[0].version, packageMetadata.version);
-  assert.deepEqual(serverMetadata.packages[0].transport, { type: "stdio" });
-  assert.deepEqual(
-    serverMetadata.packages[0].packageArguments.map((argument) => ({
-      type: argument.type,
-      name: argument.name,
-      value: argument.value,
-      format: argument.format,
-      isRequired: argument.isRequired,
-    })),
-    [
-      {
-        type: "named",
-        name: "--root",
-        value: undefined,
-        format: "filepath",
-        isRequired: false,
-      },
-      {
-        type: "named",
-        name: "--project",
-        value: undefined,
-        format: "filepath",
-        isRequired: false,
-      },
-      {
-        type: "positional",
-        name: undefined,
-        value: "mcp",
-        format: undefined,
-        isRequired: undefined,
-      },
-    ],
-  );
+  const stdioArguments = [
+    {
+      type: "named",
+      name: "--root",
+      value: undefined,
+      format: "filepath",
+      isRequired: false,
+    },
+    {
+      type: "named",
+      name: "--project",
+      value: undefined,
+      format: "filepath",
+      isRequired: false,
+    },
+    {
+      type: "positional",
+      name: undefined,
+      value: "mcp",
+      format: undefined,
+      isRequired: undefined,
+    },
+  ];
+  // One npm package, two transports: stdio, and Streamable HTTP with --http.
+  const expectedTransports = [
+    { transport: { type: "stdio" }, packageArguments: stdioArguments },
+    {
+      transport: { type: "streamable-http", url: "http://127.0.0.1:8766/mcp" },
+      packageArguments: stdioArguments.concat([
+        {
+          type: "positional",
+          name: undefined,
+          value: "--http",
+          format: undefined,
+          isRequired: undefined,
+        },
+      ]),
+    },
+  ];
+  assert.equal(serverMetadata.packages.length, expectedTransports.length);
+  serverMetadata.packages.forEach((entry, index) => {
+    assert.equal(entry.registryType, "npm");
+    assert.equal(entry.identifier, packageMetadata.name);
+    assert.equal(entry.version, packageMetadata.version);
+    assert.deepEqual(entry.transport, expectedTransports[index].transport);
+    assert.deepEqual(
+      entry.packageArguments.map((argument) => ({
+        type: argument.type,
+        name: argument.name,
+        value: argument.value,
+        format: argument.format,
+        isRequired: argument.isRequired,
+      })),
+      expectedTransports[index].packageArguments,
+    );
+  });
 
   const temporaryRoot = fs.mkdtempSync(path.join(os.tmpdir(), "okf-mcp-package-smoke-"));
   const packRoot = path.join(temporaryRoot, "pack");
@@ -292,8 +365,12 @@ async function main() {
 
     assert.equal(installedServerMetadata.name, packageMetadata.mcpName);
     assert.equal(installedServerMetadata.version, packageMetadata.version);
-    assert.equal(installedServerMetadata.packages[0].identifier, packageMetadata.name);
-    assert.equal(installedServerMetadata.packages[0].version, packageMetadata.version);
+    // Every transport entry (stdio, Streamable HTTP) names this package and version.
+    assert.ok(installedServerMetadata.packages.length >= 1);
+    installedServerMetadata.packages.forEach((entry) => {
+      assert.equal(entry.identifier, packageMetadata.name);
+      assert.equal(entry.version, packageMetadata.version);
+    });
     assert.equal(run(okf, ["--version"]).stdout.trim(), packageMetadata.version);
     assert.equal(run(okfMcp, ["--version"]).stdout.trim(), packageMetadata.version);
 
@@ -305,6 +382,7 @@ async function main() {
     await smokeMcp(okfMcp, installedRoot, { pin: "2026-07-28" });
     await smokeLiveValidation(okfMcp, installedRoot, "legacy");
     await smokeLiveValidation(okfMcp, installedRoot, { pin: "2026-07-28" });
+    await smokeHttp(okfMcp, installedRoot);
 
     process.stdout.write(
       `${JSON.stringify(
@@ -314,6 +392,7 @@ async function main() {
           concepts: 17,
           binaries: ["okf", "okf-mcp"],
           stdio: "passed",
+          http: "passed",
         },
         null,
         2,
