@@ -22,8 +22,9 @@ const { DEFAULT_RELATION_TYPES, loadProjectConfig } = require("../project");
 const { ProducerService } = require("../producers");
 const { loadEmbeddingConfigFile } = require("../search/embedding-config");
 const { openEmbeddingRuntime } = require("../search/hybrid");
+const { callPackTool, loadToolPacks, toolPackScopes } = require("../tool-packs");
 const packageMetadata = require("../../package.json");
-const { flagsPrincipal } = require("./principal");
+const { READ_SCOPE, flagsPrincipal } = require("./principal");
 const { ToolExecutionError, composeRegistry, jsonContent, toolEnabled } = require("./registry");
 const { listResources, readResource } = require("./resources");
 
@@ -215,6 +216,9 @@ function createState(bundleArgs, options) {
     transport: "stdio",
     // Set by an HTTP handler: run before a call or resource read (plan I-2c).
     refreshBeforeRead: null,
+    // Tool packs (plan D1) and the scopes their tools declare beyond okf.*.
+    toolPacks: [],
+    toolPackScopes: [],
     // One tool-call queue per process: every McpServer built on this state
     // (one per stdio connection, one per HTTP request) runs its tool calls
     // through it, so calls from different sessions never interleave.
@@ -276,6 +280,12 @@ async function attachEmbeddings(state, settings, context) {
 async function createStateAsync(bundleArgs, options) {
   if (options?.projectPath) {
     const loaded = await loadProjectBundles(options.projectPath);
+    // Tool packs load first: a pack that fails stops the server at startup.
+    const toolPacks = await loadToolPacks(loaded.project, {
+      loader: options.toolPackLoader,
+      env: options.toolPackEnv,
+      coreNames: registry.names,
+    });
     const extraRemoteBundles = await fetchRemoteBundles(options.remoteBundles || []);
     const initialRemoteBundles = loaded.remoteBundles.concat(extraRemoteBundles);
     const localBundleArgs = (loaded.bundles || []).filter((bundle) => !bundle.remote);
@@ -323,6 +333,8 @@ async function createStateAsync(bundleArgs, options) {
       repositoryMappings: options.repositoryMappings,
       languages: options.languages,
     });
+    projectState.toolPacks = toolPacks;
+    projectState.toolPackScopes = toolPackScopes(toolPacks);
     return attachEmbeddings(projectState, embeddingSettings(loaded.project.embedding, options), {
       root: loaded.project.root,
       write: Boolean(options.allowWrite),
@@ -431,9 +443,40 @@ function readIndex(state, read) {
   return current;
 }
 
+// The configured tool packs' tools the principal may use, after the core
+// tools: it needs okf.read and the tool's scope. A pack call runs outside the
+// call queue unless its pack sets serialize: true; `subjectToken` is the
+// caller's bearer token over HTTP and absent over stdio.
+function registerToolPackTools(server, state, caller, subjectToken) {
+  if (!caller.scopes.has(READ_SCOPE)) return;
+  for (const pack of state.toolPacks) {
+    for (const tool of pack.tools) {
+      if (!caller.scopes.has(tool.scope)) continue;
+      server.registerTool(
+        tool.name,
+        {
+          description: tool.description,
+          annotations: tool.annotations,
+          inputSchema: fromJsonSchema(tool.inputSchema),
+          ...(tool.outputSchema ? { outputSchema: fromJsonSchema(tool.outputSchema) } : {}),
+        },
+        async (args, ctx) => {
+          const run = () =>
+            callPackTool(pack, tool, args, caller, { subjectToken, signal: ctx?.mcpReq?.signal });
+          if (!pack.serialize) return run();
+          const current = state.callQueue.then(run);
+          state.callQueue = current.catch(() => {});
+          return current;
+        },
+      );
+    }
+  }
+}
+
 // One McpServer over shared state, advertising and serving the tools the
 // principal may use (the flags' principal when none is given, as over stdio).
-function registerMcpInterface(state, principal) {
+// `options.subjectToken` is the HTTP caller's bearer token, for tool packs.
+function registerMcpInterface(state, principal, options) {
   const caller = principal || flagsPrincipal(state);
   const server = new McpServer(
     {
@@ -493,6 +536,7 @@ function registerMcpInterface(state, principal) {
         },
       );
     });
+  registerToolPackTools(server, state, caller, options?.subjectToken);
   return server;
 }
 

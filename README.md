@@ -377,7 +377,8 @@ tokens:
 ```
 
 `printf %s "$TOKEN" | sha256sum` prints the hash. The file must be a regular
-file of at most 1 MiB; unknown fields, unknown scopes, invalid actors and
+file of at most 1 MiB; scopes are `okf.read`, `okf.write` or well-formed
+names outside `okf.*` (for tool packs), and unknown fields, other scopes, invalid actors and
 repeated hashes are startup errors that name the entry and field, never a
 value. Listed tokens do not expire; remove an entry and restart the server to
 revoke it.
@@ -408,9 +409,11 @@ okf --root /srv/okf --write --actor process:okf-mcp --git-commit mcp --http \
   `scope` holds `okf.read`. The principal's subject
   is `sub`, its actor `human:<username>` (every character outside
   `A-Z`, `a-z`, `0-9` and `._@+-` replaced by `-`, so a username can never
-  take the `provider/model` form), its scopes the `okf.read` and `okf.write` entries of
-  `scope` (others are ignored), and its git author `name` and `email`, each
-  optional.
+  take the `provider/model` form), its scopes every well-formed entry of
+  `scope` (`okf.read` and `okf.write` gate the core tools, scopes outside
+  `okf.*` such as `odoo.read` gate [tool-pack](#tool-packs-experimental)
+  tools, other `okf.*` names are ignored), and its git author `name` and
+  `email`, each optional.
 - A missing or refused token gets `401` with a `WWW-Authenticate: Bearer`
   challenge carrying `resource_metadata`; a token without `okf.read` gets
   `403 insufficient_scope`. When the authorization server cannot be reached,
@@ -422,8 +425,9 @@ okf --root /srv/okf --write --actor process:okf-mcp --git-commit mcp --http \
   introspection requests run at once; a request that would need a ninth gets
   `503` with `{"error":"temporarily_unavailable"}`.
 
-Token values never appear in a response, an error, a log line or the MCP
-request context; only their hash is kept.
+Token values never appear in a response, an error or a log line, and the
+caches keep only their hash; the verified token is handed on only to
+[tool-pack](#tool-packs-experimental) handlers, as `ctx.subjectToken`.
 
 ### Index freshness
 
@@ -445,6 +449,82 @@ as for writes. An unchanged check costs about 35 ms at 5,000 concepts.
 - Responses can be Server-Sent Events streams: turn response buffering off
   for the endpoint and allow long-lived responses.
 - One process serves one root or one project; run one process per catalog.
+
+## Tool packs (experimental)
+
+Experimental from 0.13.0-rc.1 and outside the 1.0 freeze: the interface may
+change in any release.
+
+A tool pack is an npm package that adds read tools to the MCP server, next to
+the core tools. Like a producer, it is listed by exact package name in the
+trusted project config and loaded only from the project's `node_modules`:
+
+```yaml
+toolPacks:
+  - package: "@example/okf-data-pack"
+    timeoutMs: 30000            # optional, per call; default 30000, at most 300000
+    config:
+      url: https://data.example.com
+      clientIdEnv: DATA_CLIENT_ID
+      clientSecretEnv: DATA_CLIENT_SECRET
+```
+
+The package exports:
+
+```js
+exports.okfToolPack = {
+  apiVersion: "1",
+  id: "data",                       // ^[a-z][a-z0-9_]{2,63}$
+  validateConfig(config) { return { valid: true, config }; },
+  serialize: false,                 // optional, see below
+  tools: {
+    data_search: {                  // ^[a-z][a-z0-9_]{2,63}$
+      description: "…",
+      annotations: { readOnlyHint: true },
+      inputSchema: { type: "object", properties: { … }, additionalProperties: false },
+      outputSchema: { type: "object", … },   // optional
+      scope: "data.read",
+      async handler(args, ctx) { return { records: [] }; },
+    },
+  },
+};
+```
+
+- **Loading.** Packs load when the server starts with `--project`, in config
+  order. A package that is not installed under the project's `node_modules`,
+  a descriptor the host does not accept, a configuration `validateConfig`
+  refuses, an inline secret in the config (`password`, `secret`, `token`,
+  `apiKey`, `credential(s)`), or a tool name that repeats a core tool or
+  another pack's tool stops the server with an error naming the package and
+  tool. Descriptions and schemas come from the package, never from config.
+- **Listing and access.** Pack tools are listed after the core tools, packs
+  in config order and each pack's tools in the order it declares them. A
+  principal sees a pack tool when it holds `okf.read` and the tool's `scope`;
+  calling a tool it does not see fails as calling a disabled tool does. Over
+  stdio the principal is the process's operator and holds every scope outside
+  `okf.*` that the configured packs declare (an `okf.write` scope still needs
+  `--write`).
+- **Calls.** Arguments are validated against `inputSchema` exactly like core
+  tool arguments. `ctx` holds `principal` (a frozen copy of subject, actor,
+  scopes, name and email), `subjectToken` (over HTTP the caller's verified
+  bearer token, absent over stdio), `config` (the normalised config
+  `validateConfig` returned, else the configured one; a fresh copy per call),
+  `getSecret(name)` (only for environment variables named by config keys
+  ending in `Env`) and `signal`, which aborts when `timeoutMs` passes or the
+  request is cancelled. A handler returns a JSON value (at most 1 MiB;
+  returned as structured content when the tool declares an `outputSchema`).
+- **Errors.** A handler may throw an error with a snake_case `code` and a
+  `details` object; the caller receives
+  `{ "error": "Tool execution failed", "tool", "message", "code", "details" }`
+  with a fixed message, the code, and only bounded scalar details (no string
+  holding the caller's token or a secret the pack read). The error's own
+  message is never forwarded. Any other failure is
+  `tool_pack_execution_failed`; the host's own codes are `tool_pack_timeout`,
+  `tool_pack_cancelled`, `tool_pack_result_too_large`,
+  `tool_pack_secret_not_allowed` and `tool_pack_secret_unavailable`.
+- **Concurrency.** Pack tools are read tools and run outside the call queue
+  that serialises knowledge reads and writes, so a slow pack never blocks a
+  write. A pack that needs the queue sets `serialize: true`.
 
 ## MCP Registry Metadata
 

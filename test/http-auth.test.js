@@ -159,7 +159,12 @@ test("the shared introspection answers map to principals", () => {
     introspectionPrincipal(Object.assign({}, ACTIVE, change), PUBLIC_URL, before).principal;
   assert.deepEqual(variant({ scope: "okf.read" }).scopes, new Set(["okf.read"]));
   assert.deepEqual(variant({ scope: "okf.write" }).scopes, new Set(["okf.write"]));
-  assert.deepEqual(variant({ scope: "openid okf.read odoo.read" }).scopes, new Set(["okf.read"]));
+  // Every well-formed scope is kept (odoo.read gates tool-pack tools); okf.* ones
+  // other than okf.read and okf.write are not.
+  assert.deepEqual(
+    variant({ scope: "openid okf.read odoo.read okf.admin Bad!" }).scopes,
+    new Set(["openid", "okf.read", "odoo.read"]),
+  );
   assert.equal(variant({ username: "Mario Rossi\tx\u0007" }).actor, "human:Mario-Rossi-x-");
   assert.equal(variant({ sub: 42 }).subject, "42");
   // name and email are each optional; an unusable one is dropped alone.

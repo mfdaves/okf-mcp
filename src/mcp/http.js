@@ -181,7 +181,9 @@ function createMcpHttpHandler(state, options) {
   const allowedOrigins = localhostAllowedOrigins().concat(config.allowedOrigins || []);
   const mcp = createMcpHandler(
     (context) =>
-      registerMcpInterface(state, context.authInfo?.extra?.principal || anonymousPrincipal()),
+      registerMcpInterface(state, context.authInfo?.extra?.principal || anonymousPrincipal(), {
+        subjectToken: context.authInfo?.extra?.subjectToken,
+      }),
     { legacy: "stateless" },
   );
 
@@ -217,20 +219,23 @@ function createMcpHttpHandler(state, options) {
       });
       return { response: preflight, headers };
     }
-    const principal = config.authenticate ? await config.authenticate(probe) : anonymousPrincipal();
-    if (principal instanceof Response) return { response: principal, headers };
+    const verified = config.authenticate
+      ? await config.authenticate(probe)
+      : { principal: anonymousPrincipal() };
+    if (verified instanceof Response) return { response: verified, headers };
+    const { principal, subjectToken } = verified;
     const body = await readBody(req, MAX_MCP_MESSAGE_BYTES);
     if (body === null) {
       const tooLarge = jsonRpcError(413, -32600, "Request body too large.");
       return { response: tooLarge, headers, close: true };
     }
-    // createMcpHandler hands authInfo to the factory as-is; it carries the
-    // principal, never the bearer token.
+    // createMcpHandler hands authInfo to the factory as-is: the principal,
+    // and the verified token only for tool-pack handlers (ctx.subjectToken).
     const authInfo = {
       token: "",
       clientId: principal.subject,
       scopes: [...principal.scopes],
-      extra: { principal },
+      extra: { principal, subjectToken },
     };
     return { response: await mcp.fetch(toWebRequest(req, body, signal), { authInfo }), headers };
   }

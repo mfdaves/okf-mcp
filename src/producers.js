@@ -5,6 +5,7 @@ const path = require("node:path");
 const { createRequire } = require("node:module");
 
 const { evaluateProducerFiles, policyDiagnostics } = require("./authoring/policy-hook");
+const { boundedErrorDetails, publicErrorCode } = require("./error-details");
 const { attachProject, buildIndex } = require("./indexer");
 const { splitFrontmatter } = require("./parser");
 const {
@@ -68,39 +69,17 @@ function diagnostic(code, extra) {
   );
 }
 
-const PRODUCER_ERROR_CODE = /^[a-z][a-z0-9_]{0,63}$/;
-const MAX_ERROR_DETAILS = 16;
-const MAX_ERROR_DETAIL_CHARS = 200;
-
 // A producer that cannot generate may throw an error carrying its own code
 // (for example access_denied) and a `details` object of scalar values (for
 // example the section it could not read). The receipt reports both as one
-// diagnostic; the error's message is never forwarded (B-6). Detail keys
-// are identifiers, strings are single-line and bounded, numbers finite;
-// anything else, and any string holding a secret the producer read, is
-// dropped. Null when the error carries no usable code.
+// diagnostic, details bounded by boundedErrorDetails (src/error-details.js)
+// and stripped of any secret the producer read; the error's message is
+// never forwarded (B-6). Null when the error carries no usable code.
 function producerErrorDiagnostic(error, secrets) {
-  const code = error && typeof error.code === "string" ? error.code : "";
-  if (!PRODUCER_ERROR_CODE.test(code)) return null;
-  const raw =
-    error.details && typeof error.details === "object" && !Array.isArray(error.details)
-      ? error.details
-      : {};
-  const details = {};
-  for (const [key, value] of Object.entries(raw)) {
-    if (Object.keys(details).length >= MAX_ERROR_DETAILS) break;
-    if (!/^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(key)) continue;
-    const scalar =
-      value === null ||
-      typeof value === "boolean" ||
-      (typeof value === "number" && Number.isFinite(value)) ||
-      (typeof value === "string" &&
-        value.length <= MAX_ERROR_DETAIL_CHARS &&
-        !/[\p{Cc}]/u.test(value) &&
-        !secrets.some((secret) => secret && value.includes(secret)));
-    if (scalar) details[key] = value;
-  }
-  return Object.assign(diagnostic(code), Object.keys(details).length ? { details } : {});
+  const code = publicErrorCode(error);
+  if (!code) return null;
+  const details = boundedErrorDetails(error, secrets);
+  return Object.assign(diagnostic(code), details ? { details } : {});
 }
 
 function isInside(root, target) {
@@ -138,20 +117,25 @@ function locateInstalledPackage(projectRoot, projectPath, packageName) {
   return null;
 }
 
-function loadInstalledProducer(project, packageName) {
+// Loads the exact bare package `packageName` installed under the project's
+// node_modules. `kind` ("producer" or "tool pack") names it in messages and
+// prefixes the error codes, so producer codes stay as they were.
+function loadInstalledPackage(project, packageName, kind) {
+  const label = kind || "producer";
+  const code = label.replace(/ /g, "_");
   let resolved;
   try {
     resolved = createRequire(project.path).resolve(packageName);
   } catch {
     throw new ProducerHostError(
-      "The configured producer package is not installed in the project.",
-      "producer_package_not_installed",
+      `The configured ${label} package is not installed in the project.`,
+      `${code}_package_not_installed`,
     );
   }
   if (!path.isAbsolute(resolved)) {
     throw new ProducerHostError(
-      "The configured producer package must resolve to an installed npm package.",
-      "invalid_producer_package",
+      `The configured ${label} package must resolve to an installed npm package.`,
+      `invalid_${code}_package`,
     );
   }
   let projectRoot;
@@ -164,8 +148,8 @@ function loadInstalledProducer(project, packageName) {
   const installDirectory = locateInstalledPackage(projectRoot, projectPath, packageName);
   if (!installDirectory) {
     throw new ProducerHostError(
-      "The configured producer package must be installed under a project node_modules directory.",
-      "invalid_producer_package",
+      `The configured ${label} package must be installed under a project node_modules directory.`,
+      `invalid_${code}_package`,
     );
   }
   let realInstall;
@@ -175,8 +159,8 @@ function loadInstalledProducer(project, packageName) {
     realResolved = fs.realpathSync(resolved);
   } catch {
     throw new ProducerHostError(
-      "The configured producer package could not be resolved safely.",
-      "invalid_producer_package",
+      `The configured ${label} package could not be resolved safely.`,
+      `invalid_${code}_package`,
     );
   }
   // A workspace or linked install points out of node_modules; that is an
@@ -185,11 +169,15 @@ function loadInstalledProducer(project, packageName) {
   // the package the project installed under that exact bare name.
   if (!isInside(realInstall, realResolved)) {
     throw new ProducerHostError(
-      "The configured producer package must resolve inside its installed package directory.",
-      "invalid_producer_package",
+      `The configured ${label} package must resolve inside its installed package directory.`,
+      `invalid_${code}_package`,
     );
   }
   return require(realResolved);
+}
+
+function loadInstalledProducer(project, packageName) {
+  return loadInstalledPackage(project, packageName, "producer");
 }
 
 function inspectConfig(value, envNames, pathParts) {
@@ -701,6 +689,7 @@ module.exports = {
   ProducerHostError,
   ProducerService,
   buildCandidate,
+  loadInstalledPackage,
   loadInstalledProducer,
   normalizeSummary,
   producerReceipt,

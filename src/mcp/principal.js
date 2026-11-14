@@ -3,19 +3,26 @@
 // The principal an MCP call runs for (plan I-2a):
 //   { subject, actor, scopes: Set, name?, email? }
 // `okf.read` is required for any call and `okf.write` for the live write
-// tools and producer runs. Over stdio the principal comes from the flags
-// (actor = --actor, okf.write only with --write); over HTTP from the
-// authentication mode (src/mcp/auth.js), or anonymous read-only without one.
+// tools and producer runs; other scope strings (such as odoo.read) gate
+// tool-pack tools (src/tool-packs.js). Over stdio the principal comes from the
+// flags (actor = --actor, okf.write only with --write) and also holds the
+// scopes the configured tool packs declare; over HTTP it comes from the
+// authentication mode (src/mcp/auth.js), or is anonymous read-only.
 
 const READ_SCOPE = "okf.read";
 const WRITE_SCOPE = "okf.write";
 const KNOWN_SCOPES = Object.freeze([READ_SCOPE, WRITE_SCOPE]);
+const SCOPE_NAME = /^[a-z][a-z0-9_.:-]{0,63}$/;
 
 function flagsPrincipal(state) {
   return {
     subject: "stdio",
     actor: state?.actor || null,
-    scopes: new Set(state?.allowWrite ? [READ_SCOPE, WRITE_SCOPE] : [READ_SCOPE]),
+    scopes: new Set(
+      (state?.allowWrite ? [READ_SCOPE, WRITE_SCOPE] : [READ_SCOPE]).concat(
+        state?.toolPackScopes || [],
+      ),
+    ),
   };
 }
 
@@ -43,6 +50,7 @@ function principalWriteContext(principal) {
 module.exports = {
   KNOWN_SCOPES,
   READ_SCOPE,
+  SCOPE_NAME,
   WRITE_SCOPE,
   anonymousPrincipal,
   canWrite,

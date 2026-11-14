@@ -112,8 +112,8 @@ function writeTokenFile(t, entries) {
   for (const entry of entries) {
     lines.push(
       `  - sha256: ${crypto.createHash("sha256").update(entry.token).digest("hex")}`,
-      `    subject: ${entry.subject}`,
-      `    actor: ${entry.actor}`,
+      `    subject: ${JSON.stringify(entry.subject)}`,
+      `    actor: ${JSON.stringify(entry.actor)}`,
       `    scopes: [${entry.scopes.join(", ")}]`,
     );
   }

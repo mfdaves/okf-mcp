@@ -15,8 +15,9 @@
 //   earlier of `exp` and 60 s, so a revoked token can live that long here;
 //   refused ones for 30 s. At most 8 introspections run at once.
 //
-// Token values never reach an error, a log line, a response or the MCP
-// request context: only their hash is kept.
+// Token values never reach an error, a log line or a response, and the
+// caches keep only their hash; the verified token goes on only to tool-pack
+// handlers, as ctx.subjectToken (src/tool-packs.js).
 
 const crypto = require("node:crypto");
 const fs = require("node:fs");
@@ -33,9 +34,17 @@ const {
 
 const { authorEmail, authorName } = require("../authoring/candidates");
 const { validActor } = require("../v02");
-const { KNOWN_SCOPES, READ_SCOPE } = require("./principal");
+const { KNOWN_SCOPES, READ_SCOPE, SCOPE_NAME } = require("./principal");
 
-const RESERVED_SCOPES = ["odoo.read"];
+// A scope a principal may carry: okf.read, okf.write, or any well-formed
+// scope outside okf.* (such as odoo.read, which tool-pack tools declare).
+function grantableScope(scope) {
+  return (
+    typeof scope === "string" &&
+    SCOPE_NAME.test(scope) &&
+    (KNOWN_SCOPES.includes(scope) || !scope.startsWith("okf."))
+  );
+}
 const CACHE_TTL_MS = 60 * 1000;
 const NEGATIVE_CACHE_TTL_MS = 30 * 1000;
 const CACHE_LIMIT = 1000;
@@ -109,18 +118,15 @@ function loadTokenFile(file) {
     if (!validActor(entry.actor))
       fail(".actor", "must be human:<id>, process:<id> or provider/model.");
     const scopes = Array.isArray(entry.scopes) ? entry.scopes : [];
-    if (
-      !scopes.length ||
-      scopes.some((scope) => !KNOWN_SCOPES.concat(RESERVED_SCOPES).includes(scope))
-    ) {
-      fail(".scopes", `must list scopes among ${KNOWN_SCOPES.concat(RESERVED_SCOPES).join(", ")}.`);
+    if (!scopes.length || !scopes.every(grantableScope)) {
+      fail(".scopes", `must list ${KNOWN_SCOPES.join(", ")} or well-formed scopes outside okf.*.`);
     }
     const hash = entry.sha256.toLowerCase();
     if (principals.has(hash)) fail(".sha256", "repeats an earlier entry.");
     principals.set(hash, {
       subject: entry.subject,
       actor: entry.actor,
-      scopes: new Set(scopes.filter((scope) => KNOWN_SCOPES.includes(scope))),
+      scopes: new Set(scopes),
     });
   });
   return principals;
@@ -159,7 +165,7 @@ function introspectionPrincipal(answer, audience, nowSeconds) {
   const principal = {
     subject,
     actor,
-    scopes: new Set(KNOWN_SCOPES.filter((scope) => scopes.includes(scope))),
+    scopes: new Set(scopes.filter(grantableScope).slice(0, 64)),
   };
   const name = authorName(answer.name);
   const email = authorEmail(answer.email);
@@ -289,8 +295,8 @@ function introspectionVerifier(options) {
   };
 }
 
-// The authentication of one HTTP server: { authenticate(request) → a
-// principal or a ready Response, routes(request) → the protected-resource
+// The authentication of one HTTP server: { authenticate(request) →
+// { principal, subjectToken } or a ready Response, routes(request) → the protected-resource
 // metadata document or undefined }.
 function createHttpAuth(auth, options) {
   const config = options || {};
@@ -335,7 +341,9 @@ function createHttpAuth(auth, options) {
     async authenticate(request) {
       const [header] = (request.headers.get("authorization") || "").split(",");
       try {
-        return (await verifyBearerToken(header || undefined, bearer)).extra.principal;
+        const verified = await verifyBearerToken(header || undefined, bearer);
+        // The token itself travels on only as a tool pack's subjectToken.
+        return { principal: verified.extra.principal, subjectToken: header.split(" ")[1] };
       } catch (error) {
         if (error instanceof IntrospectionUnavailableError) {
           return Response.json(

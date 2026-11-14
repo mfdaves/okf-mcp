@@ -368,6 +368,73 @@ function normalizeProducers(config, localBundleIds, errors) {
     .filter(Boolean);
 }
 
+// Tool packs (plan D1, experimental): [{ package, config, timeoutMs? }], each
+// an exact bare npm package name loaded from the project's node_modules
+// (src/tool-packs.js), its trusted config object, and an optional per-call
+// timeout in milliseconds (1 through 300,000).
+function normalizeToolPacks(config, errors) {
+  if (config.toolPacks === undefined) return [];
+  if (!Array.isArray(config.toolPacks)) {
+    errors.push({ code: "invalid_tool_packs", message: "toolPacks must be an array." });
+    return [];
+  }
+  const packages = new Set();
+  return config.toolPacks
+    .map((entry, index) => {
+      const field = `toolPacks[${index}]`;
+      if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+        errors.push({
+          code: "invalid_tool_pack",
+          field,
+          message: "Tool pack entries must be objects.",
+        });
+        return null;
+      }
+      Object.keys(entry)
+        .filter((key) => !["package", "config", "timeoutMs"].includes(key))
+        .forEach((key) => {
+          errors.push({
+            code: "unknown_tool_pack_field",
+            field: `${field}.${key}`,
+            message: `Unknown tool pack field: ${key}`,
+          });
+        });
+      const packageName = typeof entry.package === "string" ? entry.package.trim() : "";
+      if (!barePackageName(packageName)) {
+        errors.push({
+          code: "invalid_tool_pack_package",
+          field: `${field}.package`,
+          message: "Tool pack package must be a bare npm package name without a subpath.",
+        });
+      } else if (packages.has(packageName)) {
+        errors.push({
+          code: "duplicate_tool_pack_package",
+          field: `${field}.package`,
+          message: "A tool pack package may be listed only once.",
+        });
+      }
+      packages.add(packageName);
+      const packConfig = entry.config === undefined ? {} : entry.config;
+      if (!packConfig || typeof packConfig !== "object" || Array.isArray(packConfig)) {
+        errors.push({
+          code: "invalid_tool_pack_config",
+          field: `${field}.config`,
+          message: "Tool pack config must be an object.",
+        });
+      }
+      const timeoutMs = entry.timeoutMs === undefined ? 30000 : entry.timeoutMs;
+      if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 300000) {
+        errors.push({
+          code: "invalid_tool_pack_timeout",
+          field: `${field}.timeoutMs`,
+          message: "Tool pack timeoutMs must be an integer from 1 through 300000.",
+        });
+      }
+      return { package: packageName, config: packConfig, timeoutMs };
+    })
+    .filter(Boolean);
+}
+
 // `languages`: "auto" (default), "none", or the stemming language codes for
 // lexical search (plan R-2); validated against the search language registry.
 function normalizeLanguagesConfig(config, errors) {
@@ -504,6 +571,7 @@ function loadProjectConfig(configPath) {
   });
   validatePlugins(config, path.dirname(resolvedPath), allBundleIds, errors);
   const producers = normalizeProducers(config, localBundleIds, errors);
+  const toolPacks = normalizeToolPacks(config, errors);
   const languages = normalizeLanguagesConfig(config, errors);
   const autoFill = normalizeAutoFillConfig(config, errors);
   const writePolicy = normalizeWritePolicyConfig(config, errors);
@@ -520,6 +588,7 @@ function loadProjectConfig(configPath) {
     relationTypes: Array.from(relationTypes),
     plugins: Array.isArray(config.plugins) ? config.plugins : [],
     producers,
+    toolPacks,
     strictLinks: Boolean(config.strictLinks),
     languages,
     autoFill,
