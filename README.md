@@ -320,7 +320,14 @@ The server answers:
 
 Every request is checked against the accepted `Host` names (`403`
 otherwise); requests to the MCP endpoint are also checked against the accepted
-origins (`403`) and refused above 1 MiB (`413`). Each request builds its MCP
+origins (`403`, without CORS headers) and refused above 1 MiB (`413`). For an
+accepted browser origin the endpoint answers CORS: an `OPTIONS` preflight gets
+`204` without authentication, with `Access-Control-Allow-Origin` (the exact
+origin, `Vary: Origin`), `Access-Control-Allow-Methods: GET, POST, DELETE,
+OPTIONS` and `Access-Control-Allow-Headers: Authorization, Content-Type,
+Mcp-Session-Id, MCP-Protocol-Version, Last-Event-ID`; every other answer,
+`401` and `403` included, carries the same `Access-Control-Allow-Origin` and
+`Access-Control-Expose-Headers: WWW-Authenticate, Mcp-Session-Id`. Each request builds its MCP
 server over the one shared catalog state, and tool calls from all clients run
 one at a time through one queue.
 

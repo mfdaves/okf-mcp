@@ -26,6 +26,21 @@ const { MAX_MCP_MESSAGE_BYTES, createStateAsync, registerMcpInterface } = requir
 const DEFAULT_MCP_PATH = "/mcp";
 const DEFAULT_REFRESH_INTERVAL_MS = 2000;
 
+// CORS for the origins --allowed-origin (and the localhost names) accept:
+// the exact origin is echoed, never "*".
+const CORS_ALLOW_METHODS = "GET, POST, DELETE, OPTIONS";
+const CORS_ALLOW_HEADERS =
+  "Authorization, Content-Type, Mcp-Session-Id, MCP-Protocol-Version, Last-Event-ID";
+const CORS_EXPOSE_HEADERS = "WWW-Authenticate, Mcp-Session-Id";
+
+function corsHeaders(origin) {
+  return {
+    "access-control-allow-origin": origin,
+    vary: "Origin",
+    "access-control-expose-headers": CORS_EXPOSE_HEADERS,
+  };
+}
+
 function jsonRpcError(status, code, message) {
   return Response.json({ jsonrpc: "2.0", error: { code, message }, id: null }, { status });
 }
@@ -93,7 +108,10 @@ async function sendWebResponse(res, response, extraHeaders) {
   response.headers.forEach((value, key) => {
     headers[key] = value;
   });
-  res.writeHead(response.status, Object.assign(headers, extraHeaders || {}));
+  for (const [key, value] of Object.entries(extraHeaders || {})) {
+    headers[key] = key === "vary" && headers.vary ? `${headers.vary}, ${value}` : value;
+  }
+  res.writeHead(response.status, headers);
   if (!response.body || res.req.method === "HEAD") {
     res.end();
     return;
@@ -165,26 +183,44 @@ function createMcpHttpHandler(state, options) {
     { legacy: "stateless" },
   );
 
+  // The response for one request, with the headers to add to it:
+  // { response, headers?, close? }.
   async function route(req, signal) {
     const probe = toWebRequest(req, null, signal);
     const rejected = hostHeaderValidationResponse(probe, allowedHosts);
-    if (rejected) return rejected;
+    if (rejected) return { response: rejected };
     const pathname = new URL(probe.url).pathname;
     if (healthPaths.has(pathname) && (req.method === "GET" || req.method === "HEAD")) {
-      return Response.json({ status: "ok" });
+      return { response: Response.json({ status: "ok" }) };
     }
     const extra = config.routes ? await config.routes(probe) : undefined;
-    if (extra) return extra;
+    if (extra) return { response: extra };
     if (!mcpPaths.has(pathname)) {
-      return Response.json({ error: "not_found" }, { status: 404 });
+      return { response: Response.json({ error: "not_found" }, { status: 404 }) };
     }
+    // A foreign origin gets 403 and no CORS headers; an accepted one gets
+    // them on every answer, refusals included, and a preflight is answered
+    // before authentication.
     const foreign = originValidationResponse(probe, allowedOrigins);
-    if (foreign) return foreign;
+    if (foreign) return { response: foreign };
+    const origin = probe.headers.get("origin");
+    const headers = origin ? corsHeaders(origin) : undefined;
+    if (origin && req.method === "OPTIONS") {
+      const preflight = new Response(null, {
+        status: 204,
+        headers: {
+          "access-control-allow-methods": CORS_ALLOW_METHODS,
+          "access-control-allow-headers": CORS_ALLOW_HEADERS,
+        },
+      });
+      return { response: preflight, headers };
+    }
     const principal = config.authenticate ? await config.authenticate(probe) : anonymousPrincipal();
-    if (principal instanceof Response) return principal;
+    if (principal instanceof Response) return { response: principal, headers };
     const body = await readBody(req, MAX_MCP_MESSAGE_BYTES);
     if (body === null) {
-      return { response: jsonRpcError(413, -32600, "Request body too large."), close: true };
+      const tooLarge = jsonRpcError(413, -32600, "Request body too large.");
+      return { response: tooLarge, headers, close: true };
     }
     await refreshIfDue();
     // createMcpHandler hands authInfo to the factory as-is; it carries the
@@ -195,7 +231,7 @@ function createMcpHttpHandler(state, options) {
       scopes: [...principal.scopes],
       extra: { principal },
     };
-    return mcp.fetch(toWebRequest(req, body, signal), { authInfo });
+    return { response: await mcp.fetch(toWebRequest(req, body, signal), { authInfo }), headers };
   }
 
   async function handle(req, res) {
@@ -207,11 +243,14 @@ function createMcpHttpHandler(state, options) {
     try {
       outcome = await route(req, aborter.signal);
     } catch {
-      outcome = jsonRpcError(500, -32603, "Internal server error.");
+      outcome = { response: jsonRpcError(500, -32603, "Internal server error.") };
     }
-    const closing = !(outcome instanceof Response) && outcome.close;
-    const response = outcome instanceof Response ? outcome : outcome.response;
-    await sendWebResponse(res, response, closing ? { connection: "close" } : undefined);
+    const headers = Object.assign(
+      {},
+      outcome.headers,
+      outcome.close ? { connection: "close" } : {},
+    );
+    await sendWebResponse(res, outcome.response, headers);
   }
 
   return { handle, close: () => mcp.close() };
