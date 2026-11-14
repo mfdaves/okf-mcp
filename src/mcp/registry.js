@@ -1,5 +1,8 @@
 "use strict";
 
+const { proposalServiceFor } = require("../authoring/proposal-policy");
+const { canWrite, principalWriteContext } = require("./principal");
+
 class ToolExecutionError extends Error {
   constructor(message, code, details) {
     super(message);
@@ -147,7 +150,7 @@ function defineTool(description, annotations, properties, required, schemaExtras
       type: "object",
       additionalProperties: false,
       properties: properties || {},
-      ...(required && required.length ? { required } : {}),
+      ...(required?.length ? { required } : {}),
       ...(schemaExtras || {}),
     },
     ...(outputSchema ? { outputSchema } : {}),
@@ -155,24 +158,24 @@ function defineTool(description, annotations, properties, required, schemaExtras
 }
 
 // Availability gates. A tool names one as its `enabled` predicate; tools/list
-// advertises only the tools whose gate passes for the running server state.
+// advertises, and a call reaches, only the tools whose gate passes for the
+// running server state and the principal the call runs for (plan I-2a).
 const GATES = {
   always: () => true,
-  producer: (state) => Boolean(state && state.producerService),
-  producerWrite: (state) =>
-    Boolean(state && state.producerService && state.allowWrite && state.actor),
-  projectHelper: (state) => Boolean(state && state.authoringService),
-  authoringMutation: (state) => Boolean(state && state.authoringService && state.allowAuthoring),
+  producer: (state) => Boolean(state?.producerService),
+  producerWrite: (state, principal) =>
+    Boolean(state?.producerService && state.allowWrite && state.actor && canWrite(principal)),
+  projectHelper: (state) => Boolean(state?.authoringService),
+  authoringMutation: (state) => Boolean(state?.authoringService && state.allowAuthoring),
   computationAuthoring: (state) =>
-    Boolean(
-      state && state.authoringService && state.allowAuthoring && state.allowComputationAuthoring,
-    ),
-  liveWrite: (state) => Boolean(state && state.allowWrite && state.liveAuthoringService),
-  runtimeRemote: (state) => Boolean(state && state.allowRuntimeRemoteLoad),
+    Boolean(state?.authoringService && state.allowAuthoring && state.allowComputationAuthoring),
+  liveWrite: (state, principal) =>
+    Boolean(state?.allowWrite && state.liveAuthoringService && canWrite(principal)),
+  runtimeRemote: (state) => Boolean(state?.allowRuntimeRemoteLoad),
 };
 
-function toolEnabled(tool, state) {
-  return (tool.enabled || GATES.always)(state);
+function toolEnabled(tool, state, principal) {
+  return (tool.enabled || GATES.always)(state, principal);
 }
 
 // Advertised tools/list order. It predates the split into area modules and is
@@ -257,10 +260,10 @@ function jsonContent(value, options) {
       },
     ],
   };
-  if (options && options.structured) {
+  if (options?.structured) {
     result.structuredContent = value;
   }
-  if (options && options.isError) {
+  if (options?.isError) {
     result.isError = true;
   }
   return result;
@@ -277,25 +280,36 @@ async function expectedToolOperation(operation, options) {
       error instanceof ReferenceError ||
       error instanceof SyntaxError ||
       error instanceof RangeError ||
-      (error instanceof TypeError && !(options && options.translateTypeError));
+      (error instanceof TypeError && !options?.translateTypeError);
     if (programmingError) {
       throw error;
     }
     throw new ToolExecutionError(
-      error && error.message ? error.message : String(error),
-      error && error.code,
-      error && error.details,
+      error?.message ? error.message : String(error),
+      error?.code,
+      error?.details,
     );
   }
 }
 
-function requireAuthoring(state) {
+// The proposal service a call uses: the configured one, acting for the
+// principal's actor (proposedBy and policy verdicts name it).
+function requireAuthoring(state, principal) {
   if (!state.authoringService) {
     throw new Error(
       "OKF authoring is not configured. Start the server with --root or --project to enable writable concept proposals.",
     );
   }
-  return state.authoringService;
+  return proposalServiceFor(state.authoringService, principal?.actor);
+}
+
+// The context a live write hands the authoring service: the server's remote
+// snapshots plus the principal's actor and git author.
+function writeContext(state, principal) {
+  return Object.assign(
+    { additionalBundles: state.remoteBundles },
+    principalWriteContext(principal),
+  );
 }
 
 module.exports = {
@@ -325,4 +339,5 @@ module.exports = {
   stringArrayParameter,
   stringParameter,
   toolEnabled,
+  writeContext,
 };

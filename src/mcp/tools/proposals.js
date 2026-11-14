@@ -31,8 +31,10 @@ const tools = {
       ["path", "frontmatter"],
     ),
     enabled: GATES.projectHelper,
-    handler: async (state, args) =>
-      jsonContent(await expectedToolOperation(() => requireAuthoring(state).validateConcept(args))),
+    handler: async (state, args, principal) =>
+      jsonContent(
+        await expectedToolOperation(() => requireAuthoring(state, principal).validateConcept(args)),
+      ),
   },
   okf_suggest_concept_path: {
     ...defineTool(
@@ -49,9 +51,11 @@ const tools = {
       ["type", "title"],
     ),
     enabled: GATES.projectHelper,
-    handler: async (state, args) =>
+    handler: async (state, args, principal) =>
       jsonContent(
-        await expectedToolOperation(() => requireAuthoring(state).suggestConceptPath(args)),
+        await expectedToolOperation(() =>
+          requireAuthoring(state, principal).suggestConceptPath(args),
+        ),
       ),
   },
   okf_propose_concept: {
@@ -72,9 +76,9 @@ const tools = {
       ["path", "frontmatter"],
     ),
     enabled: GATES.authoringMutation,
-    handler: async (state, args) => {
+    handler: async (state, args, principal) => {
       const result = await expectedToolOperation(() =>
-        requireAuthoring(state).proposeConcept(args),
+        requireAuthoring(state, principal).proposeConcept(args),
       );
       return jsonContent(result, { isError: result.created === false });
     },
@@ -108,8 +112,10 @@ const tools = {
       },
     ),
     enabled: GATES.authoringMutation,
-    handler: async (state, args) => {
-      const result = await expectedToolOperation(() => requireAuthoring(state).proposeUpdate(args));
+    handler: async (state, args, principal) => {
+      const result = await expectedToolOperation(() =>
+        requireAuthoring(state, principal).proposeUpdate(args),
+      );
       return jsonContent(result, { isError: result.created === false });
     },
   },
@@ -139,9 +145,9 @@ const tools = {
       ["path", "frontmatter"],
     ),
     enabled: GATES.computationAuthoring,
-    handler: async (state, args) => {
+    handler: async (state, args, principal) => {
       const result = await expectedToolOperation(() =>
-        requireAuthoring(state).proposeAttestedComputation(args),
+        requireAuthoring(state, principal).proposeAttestedComputation(args),
       );
       return jsonContent(result, { isError: result.created === false });
     },
@@ -154,8 +160,10 @@ const tools = {
       }),
     }),
     enabled: GATES.projectHelper,
-    handler: async (state, args) =>
-      jsonContent(await expectedToolOperation(() => requireAuthoring(state).listProposals(args))),
+    handler: async (state, args, principal) =>
+      jsonContent(
+        await expectedToolOperation(() => requireAuthoring(state, principal).listProposals(args)),
+      ),
   },
   okf_get_proposal: {
     ...defineTool(
@@ -167,8 +175,10 @@ const tools = {
       ["proposalId"],
     ),
     enabled: GATES.projectHelper,
-    handler: async (state, args) =>
-      jsonContent(await expectedToolOperation(() => requireAuthoring(state).getProposal(args))),
+    handler: async (state, args, principal) =>
+      jsonContent(
+        await expectedToolOperation(() => requireAuthoring(state, principal).getProposal(args)),
+      ),
   },
   okf_accept_proposal: {
     ...defineTool(
@@ -180,9 +190,9 @@ const tools = {
       ["proposalId"],
     ),
     enabled: GATES.authoringMutation,
-    handler: async (state, args) => {
+    handler: async (state, args, principal) => {
       const result = await expectedToolOperation(() =>
-        requireAuthoring(state).acceptProposal(
+        requireAuthoring(state, principal).acceptProposal(
           Object.assign({}, args, {
             allowComputation: state.allowComputationAuthoring,
           }),
@@ -205,8 +215,10 @@ const tools = {
       ["proposalId"],
     ),
     enabled: GATES.authoringMutation,
-    handler: async (state, args) =>
-      jsonContent(await expectedToolOperation(() => requireAuthoring(state).rejectProposal(args))),
+    handler: async (state, args, principal) =>
+      jsonContent(
+        await expectedToolOperation(() => requireAuthoring(state, principal).rejectProposal(args)),
+      ),
   },
 };
 

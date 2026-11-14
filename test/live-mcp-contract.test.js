@@ -179,10 +179,11 @@ test("live validation and apply advertise projection-friendly matching contracts
   assert.equal(preview.payload.git.ready, false);
   assert.deepEqual(preview.result.structuredContent, preview.payload);
   assert.equal(fs.existsSync(path.join(root, "preview.md")), false);
+  // The service receives the call's principal: over stdio, the --actor.
   assert.deepEqual(calls[0], {
     method: "validate",
     args: previewInput,
-    context: { additionalBundles: [] },
+    context: { additionalBundles: [], actor: "test/contract" },
   });
 
   for (const change of [
@@ -265,6 +266,6 @@ test("live validation and apply advertise projection-friendly matching contracts
   const applyCalls = calls.filter((call) => call.method === "apply");
   assert.equal(applyCalls.length, 2);
   applyCalls.forEach((call) => {
-    assert.deepEqual(call.context, { additionalBundles: [] });
+    assert.deepEqual(call.context, { additionalBundles: [], actor: "test/contract" });
   });
 });

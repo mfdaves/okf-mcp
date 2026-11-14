@@ -74,9 +74,9 @@ const tools = {
       [],
     ),
     enabled: GATES.authoringMutation,
-    handler: async (state, args) => {
+    handler: async (state, args, principal) => {
       const result = await expectedToolOperation(() =>
-        requireAuthoring(state).proposeV02Migration(args),
+        requireAuthoring(state, principal).proposeV02Migration(args),
       );
       return jsonContent(result, { isError: result.created === false });
     },

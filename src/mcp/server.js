@@ -23,6 +23,7 @@ const { ProducerService } = require("../producers");
 const { loadEmbeddingConfigFile } = require("../search/embedding-config");
 const { openEmbeddingRuntime } = require("../search/hybrid");
 const packageMetadata = require("../../package.json");
+const { flagsPrincipal } = require("./principal");
 const { ToolExecutionError, composeRegistry, jsonContent, toolEnabled } = require("./registry");
 const { listResources, readResource } = require("./resources");
 
@@ -125,13 +126,16 @@ function rebuildStateIndex(state) {
   return state.index;
 }
 
-async function callTool(state, name, args) {
+// Runs one tool for a principal (the flags' principal when none is given, as
+// over stdio). A tool whose gate the principal does not pass is unknown to it.
+async function callTool(state, name, args, principal) {
   const tool = registry.tools[name];
+  const caller = principal || flagsPrincipal(state);
   try {
-    if (!tool) {
+    if (!tool || !toolEnabled(tool, state, caller)) {
       throw new Error(`Unknown registered MCP tool: ${name}`);
     }
-    return await tool.handler(state, args);
+    return await tool.handler(state, args, caller);
   } catch (error) {
     if (!(error instanceof ToolExecutionError)) {
       throw error;
@@ -392,7 +396,10 @@ async function createStateAsync(bundleArgs, options) {
   });
 }
 
-function registerMcpInterface(state) {
+// One McpServer over shared state, advertising and serving the tools the
+// principal may use (the flags' principal when none is given, as over stdio).
+function registerMcpInterface(state, principal) {
+  const caller = principal || flagsPrincipal(state);
   const server = new McpServer(
     {
       name: "okf-mcp",
@@ -418,7 +425,7 @@ function registerMcpInterface(state) {
     async (uri) => readResource(state.index, uri.href),
   );
   registry.names
-    .filter((name) => toolEnabled(registry.tools[name], state))
+    .filter((name) => toolEnabled(registry.tools[name], state, caller))
     .forEach((name) => {
       const definition = registry.tools[name];
       server.registerTool(
@@ -434,7 +441,7 @@ function registerMcpInterface(state) {
         async (args) => {
           const current = state.callQueue.then(async () => {
             try {
-              return await callTool(state, name, args);
+              return await callTool(state, name, args, caller);
             } catch {
               return jsonContent(
                 {

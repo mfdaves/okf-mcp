@@ -17,6 +17,7 @@ const {
   sourceParameter,
   stringArrayParameter,
   stringParameter,
+  writeContext,
 } = require("../registry");
 
 const LIVE_CREATE_CHANGE = {
@@ -212,7 +213,7 @@ function liveRequest(args) {
 function projectLiveReceipt(receipt, detail) {
   if (detail === "full") return receipt;
   const compact = structuredClone(receipt);
-  const preconditionGit = compact.preconditions && compact.preconditions.git;
+  const preconditionGit = compact.preconditions?.git;
   if (preconditionGit || compact.git) {
     compact.git = Object.assign({}, preconditionGit || {}, compact.git || {});
   }
@@ -224,9 +225,9 @@ function projectLiveReceipt(receipt, detail) {
     delete change.bundle;
     const effects = change.effects;
     if (!effects) return;
-    ["beforeRevision", "afterRevision", "bytesBefore", "bytesAfter"].forEach(
-      (key) => delete effects[key],
-    );
+    for (const key of ["beforeRevision", "afterRevision", "bytesBefore", "bytesAfter"]) {
+      delete effects[key];
+    }
     if (effects.bodyChanged === false) delete effects.bodyChanged;
     ["tags", "sources", "relations", "metadata"].forEach((name) => {
       const group = effects[name];
@@ -263,13 +264,14 @@ const tools = {
       LIVE_VALIDATE_OUTPUT,
     ),
     enabled: GATES.liveWrite,
-    handler: async (state, args) => {
+    handler: async (state, args, principal) => {
       const request = liveRequest(args);
       const result = await expectedToolOperation(
         () =>
-          requireLiveAuthoring(state).validateChanges(request.input, {
-            additionalBundles: state.remoteBundles,
-          }),
+          requireLiveAuthoring(state).validateChanges(
+            request.input,
+            writeContext(state, principal),
+          ),
         { translateTypeError: true },
       );
       if (result.applied || result.filesChanged) {
@@ -288,13 +290,11 @@ const tools = {
       LIVE_APPLY_OUTPUT,
     ),
     enabled: GATES.liveWrite,
-    handler: async (state, args) => {
+    handler: async (state, args, principal) => {
       const request = liveRequest(args);
       const result = await expectedToolOperation(
         () =>
-          requireLiveAuthoring(state).applyChanges(request.input, {
-            additionalBundles: state.remoteBundles,
-          }),
+          requireLiveAuthoring(state).applyChanges(request.input, writeContext(state, principal)),
         { translateTypeError: true },
       );
       if (result.applied || result.filesChanged) {
