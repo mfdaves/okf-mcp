@@ -144,10 +144,10 @@ test("over HTTP a principal sees pack tools by scope and passes its token as the
   for (const name of FAKE_TOOLS) assert.equal(readerNames.includes(name), false, name);
   assert.equal(record(await callOutcome(reader, "fake_echo", { text: "x" })).code, -32602);
   const fakeNames = await names(fake);
-  assert.deepEqual(fakeNames.slice(-3), ["fake_echo", "fake_fail", "fake_slow"]);
+  assert.deepEqual(fakeNames.slice(-4), ["fake_echo", "fake_fail", "fake_slow", "fake_whoami"]);
   assert.equal(fakeNames.includes("fake_admin"), false);
   assert.equal(record(await callOutcome(fake, "fake_admin", {})).code, -32602);
-  assert.deepEqual((await names(admin)).slice(-4), FAKE_TOOLS);
+  assert.deepEqual((await names(admin)).slice(-5), FAKE_TOOLS.concat("fake_whoami"));
   const noRead = await httpExchange(port, {
     method: "POST",
     headers: Object.assign({ authorization: `Bearer ${token("noread")}` }, MCP_POST_HEADERS),
@@ -238,6 +238,62 @@ test("over HTTP the server advertises the core scopes and every scope its packs 
   const without = await start(null);
   assert.deepEqual(without.supported, ["okf.read", "okf.write"]);
   assert.ok(without.challenge.includes('scope="okf.read okf.write"'));
+});
+
+test("a tool that requires a subject token is offered only to authenticated HTTP callers", async (t) => {
+  const { projectPath } = makeProject(t, [FAKE_ENTRY]);
+  // Stdio: the operator holds the scope (okf.read) but carries no token.
+  const stdio = (await connectMcp(t, [], { projectPath, toolPackEnv: ENV })).client;
+  assert.equal((await names(stdio)).includes("fake_whoami"), false);
+  assert.equal((await callOutcome(stdio, "fake_whoami", {})).code, -32602);
+  // HTTP without --auth: anonymous callers hold okf.read but carry no token.
+  const anonymous = await runMcpHttpServer([], {
+    projectPath,
+    toolPackEnv: ENV,
+    http: { port: 0 },
+  });
+  t.after(() => anonymous.close());
+  const guest = await connectHttp(t, anonymous.url);
+  assert.equal((await names(guest)).includes("fake_whoami"), false);
+  assert.equal((await callOutcome(guest, "fake_whoami", {})).code, -32602);
+  // Authenticated HTTP: a principal with okf.read only sees and calls it.
+  const file = writeTokenFile(t, [
+    { token: "tok-reader", subject: "reader", actor: "human:reader", scopes: ["okf.read"] },
+  ]);
+  const server = await runMcpHttpServer([], {
+    projectPath,
+    toolPackEnv: ENV,
+    http: { port: 0, auth: { mode: "tokens", file } },
+  });
+  t.after(() => server.close());
+  const reader = await connectHttp(t, server.url, { token: "tok-reader" });
+  assert.equal((await names(reader)).includes("fake_whoami"), true);
+  const whoami = await callJson(reader, "fake_whoami", {});
+  assert.deepEqual(whoami.payload, { subject: "reader", hasSubjectToken: true });
+  // The flag must be a boolean.
+  const project = {
+    toolPacks: [{ package: "@fixture/x", config: {}, timeoutMs: 1000 }],
+    errors: [],
+  };
+  const okfToolPack = {
+    apiVersion: "1",
+    id: "pack",
+    validateConfig: () => ({ valid: true }),
+    tools: {
+      a_tool: {
+        description: "A tool.",
+        annotations: {},
+        inputSchema: { type: "object", properties: {} },
+        scope: "okf.read",
+        requiresSubjectToken: "yes",
+        handler: () => ({}),
+      },
+    },
+  };
+  await assert.rejects(
+    loadToolPacks(project, { loader: async () => ({ okfToolPack }), env: {} }),
+    (error) => error.code === "incompatible_tool_pack",
+  );
 });
 
 test("a pack call is bounded by its timeout and by the request's abort signal", async (t) => {

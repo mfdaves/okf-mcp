@@ -503,7 +503,10 @@ exports.okfToolPack = {
   calling a tool it does not see fails as calling a disabled tool does. Over
   stdio the principal is the process's operator and holds every scope outside
   `okf.*` that the configured packs declare (an `okf.write` scope still needs
-  `--write`).
+  `--write`). A tool that sets `requiresSubjectToken: true` (because it acts
+  for the caller elsewhere) is listed and callable only when the request
+  carries a subject token, that is over HTTP with `--auth`; over stdio and
+  anonymous HTTP it is hidden and refused like a disabled tool.
 - **Calls.** Arguments are validated against `inputSchema` exactly like core
   tool arguments. `ctx` holds `principal` (a frozen copy of subject, actor,
   scopes, name and email), `subjectToken` (over HTTP the caller's verified

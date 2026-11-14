@@ -452,6 +452,8 @@ function registerToolPackTools(server, state, caller, subjectToken) {
   for (const pack of state.toolPacks) {
     for (const tool of pack.tools) {
       if (!caller.scopes.has(tool.scope)) continue;
+      // A tool that acts for the caller elsewhere needs the caller's token.
+      if (tool.requiresSubjectToken && !subjectToken) continue;
       server.registerTool(
         tool.name,
         {

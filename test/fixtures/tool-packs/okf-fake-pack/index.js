@@ -115,5 +115,15 @@ exports.okfToolPack = {
         return { ok: true };
       },
     },
+    fake_whoami: {
+      description: "Act for the signed-in caller.",
+      annotations,
+      inputSchema: schema({}),
+      scope: "okf.read",
+      requiresSubjectToken: true,
+      handler(args, ctx) {
+        return { subject: ctx.principal.subject, hasSubjectToken: Boolean(ctx.subjectToken) };
+      },
+    },
   },
 };

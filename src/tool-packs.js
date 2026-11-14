@@ -9,7 +9,7 @@
 //   okfToolPack = { apiVersion: "1", id, validateConfig(config), tools,
 //                   serialize? }
 //   tools[name] = { description, annotations, inputSchema, outputSchema?,
-//                   scope, handler(args, ctx) }
+//                   scope, requiresSubjectToken?, handler(args, ctx) }
 //   ctx = { principal, subjectToken, config, getSecret, signal }
 //
 // Tool names match ^[a-z][a-z0-9_]{2,63}$ and may not repeat a core tool or
@@ -121,6 +121,7 @@ function packTools(packageName, descriptor) {
         (plainObject(tool.outputSchema) && tool.outputSchema.type === "object")) &&
       typeof tool.scope === "string" &&
       SCOPE.test(tool.scope) &&
+      (tool.requiresSubjectToken === undefined || typeof tool.requiresSubjectToken === "boolean") &&
       typeof tool.handler === "function";
     if (!valid) throw incompatible(name);
     try {
@@ -138,6 +139,7 @@ function packTools(packageName, descriptor) {
       inputSchema: structuredClone(tool.inputSchema),
       outputSchema: tool.outputSchema ? structuredClone(tool.outputSchema) : undefined,
       scope: tool.scope,
+      requiresSubjectToken: tool.requiresSubjectToken === true,
       handler: tool.handler,
     });
   });
