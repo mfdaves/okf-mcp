@@ -213,7 +213,7 @@ Preview and run accept only the configured producer name plus optional receipt d
 Two rules keep a managed bundle stable across repeated runs:
 
 - A producer restamps `generated.at` on every run. The host compares each candidate against the published file ignoring that stamp, so a source that did not change reports `unchanged` and leaves the bytes, the timestamps, and the manifest untouched. Publication-diff counts therefore describe the source, not the run.
-- A manifest entry alone is not authority to destroy work. Any file the host would rewrite or remove must itself carry `generated` provenance, so a damaged, hand-merged, or forged manifest cannot make a producer delete hand-authored content.
+- A manifest entry alone is not authority to destroy work. Any file the host would rewrite or remove must itself carry `generated` provenance, so a damaged, hand-merged, or forged manifest cannot make a producer delete hand-authored content. A reserved `index.md` or `log.md` cannot carry `generated` frontmatter, so for those the proof is that their bytes still match the manifest's digest; a hand-edited one stops the run with `producer_owned_file_modified`. A refusal names the file in its diagnostic's `details.path`.
 
 Directories emptied by a stale deletion are removed with their last managed file.
 

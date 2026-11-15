@@ -48,10 +48,24 @@ class ProducerHostError extends Error {
   }
 }
 
+// A bundle-relative path an error names in its details, kept when it is a
+// plain relative path (no absolute path, traversal or control character).
+function detailPath(details) {
+  const value = details && typeof details.path === "string" ? details.path : "";
+  const safe =
+    value.length > 0 &&
+    value.length <= 512 &&
+    !/[\p{Cc}]/u.test(value) &&
+    !/^([/\\]|[A-Za-z]:)/.test(value) &&
+    !value.split(/[/\\]/).includes("..");
+  return safe ? value : undefined;
+}
+
 function publicDiagnostic(entry) {
   const source = entry || {};
   const rawCode = typeof source.code === "string" ? source.code : "";
   const rawField = typeof source.field === "string" ? source.field : "";
+  const offending = detailPath(source.details);
   return Object.fromEntries(
     [
       ["code", /^[a-z][a-z0-9_]{0,63}$/.test(rawCode) ? rawCode : "producer_invalid"],
@@ -59,6 +73,8 @@ function publicDiagnostic(entry) {
       ["layer", source.layer || "producer"],
       ["path", source.path],
       ["field", /^[A-Za-z0-9_.[\]-]{1,128}$/.test(rawField) ? rawField : undefined],
+      // The file a publication error is about, so an operator can find it.
+      ["details", offending ? { path: offending } : undefined],
     ].filter(([, value]) => value !== undefined),
   );
 }

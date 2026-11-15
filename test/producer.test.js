@@ -420,11 +420,80 @@ test("a manifest claim cannot rewrite or remove a concept without generation pro
 
   const result = await serviceFor(fixture, generate).run("primary-db");
   assert.equal(result.applied, false);
-  assert.equal(
-    result.diagnostics.some((entry) => entry.code === "producer_manifest_claims_unmanaged_file"),
-    true,
+  const refusal = result.diagnostics.find(
+    (entry) => entry.code === "producer_manifest_claims_unmanaged_file",
   );
+  assert.deepEqual(refusal.details, { path: "hand-authored.md" });
   assert.equal(fs.existsSync(handAuthored), true);
+});
+
+// The fixture output with a second concept, listed by the root index and by
+// a nested reserved index.md, so that both reserved files change.
+function grownOutput() {
+  const files = output();
+  files[0].content = files[0].content.replace(
+    "- [Database](database.md)",
+    "- [Database](database.md)\n- [Schema](schema/index.md)",
+  );
+  files.push(
+    {
+      path: "schema/index.md",
+      content: ["# Schema", "", "- [Public schema](public.md)", ""].join("\n"),
+    },
+    {
+      path: "schema/public.md",
+      content: files[1].content
+        .replace("type: Database", "type: Schema")
+        .replaceAll("Application database", "Public schema"),
+    },
+  );
+  return files;
+}
+
+test("a producer rewrites and removes its own reserved index files when their bytes are its own", async (t) => {
+  const fixture = makeProject();
+  t.after(() => fs.rmSync(fixture.root, { recursive: true, force: true }));
+  const indexPath = path.join(fixture.bundle, "index.md");
+  const nestedIndex = path.join(fixture.bundle, "schema", "index.md");
+  const run = async (files) => serviceFor(fixture, async () => ({ files })).run("primary-db");
+
+  assert.equal((await run(output())).applied, true);
+  // The index lists one more concept: the producer rewrites it (and creates
+  // a nested index) although an index cannot carry generation provenance.
+  const grown = await run(grownOutput());
+  assert.equal(grown.applied, true, JSON.stringify(grown.diagnostics));
+  assert.deepEqual(grown.changes.update, ["index.md"]);
+  assert.match(fs.readFileSync(indexPath, "utf8"), /schema\/index\.md/);
+  assert.equal(fs.existsSync(nestedIndex), true);
+  // And shrinks back: the nested index is removed, the root index rewritten.
+  const shrunk = await run(output());
+  assert.equal(shrunk.applied, true, JSON.stringify(shrunk.diagnostics));
+  assert.deepEqual(shrunk.changes.update, ["index.md"]);
+  assert.deepEqual(shrunk.changes.delete.sort(), ["schema/index.md", "schema/public.md"]);
+  assert.equal(fs.existsSync(nestedIndex), false);
+});
+
+test("a hand-edited reserved index.md stops the producer with its path in the diagnostic", async (t) => {
+  const fixture = makeProject();
+  t.after(() => fs.rmSync(fixture.root, { recursive: true, force: true }));
+  const run = async (files) => serviceFor(fixture, async () => ({ files })).run("primary-db");
+  assert.equal((await run(output())).applied, true);
+  const indexPath = path.join(fixture.bundle, "index.md");
+  const edited = `${fs.readFileSync(indexPath, "utf8")}\nA note added by hand.\n`;
+  fs.writeFileSync(indexPath, edited, "utf8");
+
+  const refused = await run(grownOutput());
+  assert.equal(refused.applied, false);
+  assert.deepEqual(refused.diagnostics, [
+    {
+      code: "producer_owned_file_modified",
+      severity: "error",
+      layer: "producer",
+      details: { path: "index.md" },
+    },
+  ]);
+  assert.equal(fs.readFileSync(indexPath, "utf8"), edited);
+  assert.equal(fs.existsSync(path.join(fixture.bundle, "schema")), false);
 });
 
 test("publication prunes directories emptied by stale deletions", async (t) => {

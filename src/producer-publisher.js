@@ -4,7 +4,7 @@ const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
 
-const { splitFrontmatter } = require("./parser");
+const { isReservedPath, splitFrontmatter } = require("./parser");
 
 const MANIFEST_NAME = ".okf-producer.json";
 
@@ -299,8 +299,14 @@ function inspectPublication(root, producer, files) {
   owned.forEach((_digest, relativePath) => {
     if (!generated.has(relativePath)) changes.delete.push(relativePath);
   });
+  // Every file rewritten or removed must have been written by a producer.
+  // verifyOwnedFiles has already proven each owned file unedited since the
+  // last publish (its bytes match the manifest digest); a concept must also
+  // carry generation provenance, but a reserved index.md or log.md cannot
+  // (OKF allows it no such frontmatter), so for those the digest is the proof.
   changes.update.concat(changes.delete).forEach((relativePath) => {
     const current = ownedContents.get(relativePath);
+    if (current && isReservedPath(relativePath)) return;
     if (!current || !hasGeneratedProvenance(current.toString("utf8"))) {
       throw new ProducerPublicationError(
         "The ownership manifest claims a file that carries no generation provenance.",
