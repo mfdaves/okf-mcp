@@ -1,5 +1,7 @@
 "use strict";
 
+const { readersInclude } = require("./audiences");
+
 const CONFORMANCE_WARNING_CODES = new Set(["missing_frontmatter", "missing_type"]);
 
 const PROJECT_INVALID_WARNING_CODES = new Set([
@@ -94,6 +96,32 @@ function validateIndex(index, bundle) {
         (entry.code === "broken_link" && strictLinks),
     });
   });
+
+  // Audiences (plan I-2d): a concept may reference only bundles that every
+  // reader of its own bundle reads too. A reference from an open bundle into
+  // a restricted one would tell every reader that the target exists, and
+  // leave them with a link they cannot follow.
+  const audiences = source.project?.audiences || {};
+  if (Object.keys(audiences).length) {
+    (source.edges || []).forEach((edge) => {
+      const from = source.byUri?.get(edge.source);
+      const to = source.byUri?.get(edge.target);
+      if (!from || !to || from.bundle === to.bundle) return;
+      if (bundle && from.bundle !== bundle) return;
+      if (readersInclude(audiences[to.bundle], audiences[from.bundle])) return;
+      add(
+        {
+          code: "reference_outside_audience",
+          bundle: from.bundle,
+          path: from.path,
+          target: edge.target,
+          message:
+            "The concept references a bundle that some readers of its own bundle may not read.",
+        },
+        { severity: "error", layer: "project", invalidatesProject: true },
+      );
+    });
+  }
 
   const conformanceErrors = diagnostics.filter(
     (entry) => entry.layer === "conformance" && entry.severity === "error",

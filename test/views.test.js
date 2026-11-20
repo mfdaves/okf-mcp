@@ -551,3 +551,34 @@ test("the bundle listing names each bundle's audiences, and proposals show only 
     (await get(outsider, "nope")).replaceAll("nope", "<id>"),
   );
 });
+
+test("a concept may not reference a bundle that some readers of its own bundle cannot read", async (t) => {
+  const { projectPath } = makeProject(t);
+  const { connect } = await startServer(t, projectPath);
+  const member = await connect("token-hr");
+  const write = async (bundle, file, relations) => {
+    const result = await member.callTool({
+      name: "okf_apply_changes",
+      arguments: {
+        bundle,
+        changes: [
+          { op: "create", path: file, type: "Reference", title: `Note ${file}`, relations },
+        ],
+      },
+    });
+    return JSON.parse(result.content[0].text);
+  };
+  // From the restricted bundle into the open one: every reader of hr reads open.
+  const allowed = await write("hr", "notes/a.md", [{ type: "related_to", target: OPEN_URI }]);
+  assert.equal(allowed.applied, true, JSON.stringify(allowed).slice(0, 400));
+  // From the open bundle into the restricted one: refused, nothing written.
+  const refused = await write("open", "notes/b.md", [{ type: "related_to", target: HIDDEN_URI }]);
+  assert.equal(refused.applied, false);
+  assert.match(JSON.stringify(refused), /reference_outside_audience/);
+  const outsider = await connect("token-outsider");
+  const found = JSON.parse(
+    (await outsider.callTool({ name: "list_concepts", arguments: { bundle: "open" } })).content[0]
+      .text,
+  );
+  assert.doesNotMatch(JSON.stringify(found), /notes\/b/);
+});
