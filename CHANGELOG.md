@@ -2,6 +2,22 @@
 
 All notable changes to `@mfdaves/okf-mcp`. The format follows Keep a Changelog; versions follow SemVer. Until 1.0, minor versions may change defaults where this file says so.
 
+## 0.13.0-rc.2 — 2026-11-21
+
+Audiences and views over HTTP (WP6c in `docs/plan-1.0.md`, requirement I-2d): one process can serve bundles that only some of its principals read. A project whose bundles name no audiences behaves as in 0.13.0-rc.1, and stdio is unchanged.
+
+### Added
+
+- A bundle (and a remote bundle) of `okf.project.yaml` can name `audiences`, 1 to 64 names of the form `^[a-z][a-z0-9_-]{0,31}$`. A principal reads the bundles without audiences and those naming one of its own. `list_bundles` shows each bundle's audiences.
+- Principals carry audiences: the `audiences` list of the RFC 7662 introspection answer, or `audiences` of a `--auth tokens:<file>` entry. A missing or malformed list gives none. A stdio caller reads every bundle.
+- Views: over HTTP each principal is served from a server state built only from the bundles it may read (index, store, validation, authoring, producers, proposals), so no answer can contain what the view does not. A bundle outside the view answers like one that does not exist, for reads and writes. The 8 most recently used views are kept. Writes through one view reach the others before their next call.
+- Validation error `reference_outside_audience`: a concept may reference only bundles that every reader of its own bundle reads.
+
+### Changed
+
+- A bundle or remote bundle entry of `okf.project.yaml` with an unknown key is now a project error (`unknown_bundle_key`), and that bundle is closed to HTTP principals until corrected. Before, unknown keys were ignored. `audiences` that is not a valid list is the error `invalid_bundle_audiences` with the same effect.
+- With embeddings and audiences, search answers of a view carry no `cache` counts.
+
 ## 0.13.0-rc.1 — 2026-11-14
 
 MCP over Streamable HTTP with a principal per request (WP6a in `docs/plan-1.0.md`, requirements I-2 and I-2a to I-2c). Stdio is unchanged: the six stdio MCP contract snapshots are byte-identical to 0.12.0-rc.1.

@@ -379,13 +379,15 @@ tokens:
     subject: ci
     actor: process:ci-nightly
     scopes: [okf.read, okf.write]
+    audiences: [sales]       # optional, see Audiences
 ```
 
 `printf %s "$TOKEN" | sha256sum` prints the hash. The file must be a regular
 file of at most 1 MiB; scopes are `okf.read`, `okf.write` or well-formed
-names outside `okf.*` (for tool packs), and unknown fields, other scopes, invalid actors and
-repeated hashes are startup errors that name the entry and field, never a
-value. Listed tokens do not expire; remove an entry and restart the server to
+names outside `okf.*` (for tool packs), `audiences` is a list of at most 64
+audience names, and unknown fields, other scopes, invalid actors, invalid
+audiences and repeated hashes are startup errors that name the entry and
+field, never a value. Listed tokens do not expire; remove an entry and restart the server to
 revoke it.
 
 ### Token introspection
@@ -417,8 +419,9 @@ okf --root /srv/okf --write --actor process:okf-mcp --git-commit mcp --http \
   take the `provider/model` form), its scopes every well-formed entry of
   `scope` (`okf.read` and `okf.write` gate the core tools, scopes outside
   `okf.*` such as `odoo.read` gate [tool-pack](#tool-packs-experimental)
-  tools, other `okf.*` names are ignored), and its git author `name` and
-  `email`, each optional.
+  tools, other `okf.*` names are ignored), its git author `name` and
+  `email`, each optional, and its [audiences](#audiences) the names in
+  `audiences`, when the answer carries that list.
 - A request without credentials gets `401` with
   `WWW-Authenticate: Bearer realm="okf-mcp", scope="…", resource_metadata="…"`
   and no `error` attribute (RFC 6750 section 3.1); a presented Bearer token
@@ -438,6 +441,61 @@ okf --root /srv/okf --write --actor process:okf-mcp --git-commit mcp --http \
 Token values never appear in a response, an error or a log line, and the
 caches keep only their hash; the verified token is handed on only to
 [tool-pack](#tool-packs-experimental) handlers, as `ctx.subjectToken`.
+
+### Audiences
+
+A bundle of the project file can name the audiences that read it, and a
+principal carries the audiences it belongs to:
+
+```yaml
+bundles:
+  - id: handbook            # no audiences: every principal reads it
+    root: okf/handbook
+  - id: sales-notes
+    root: okf/sales-notes
+    audiences: [sales, management]
+```
+
+An audience name is a lowercase letter followed by up to 31 lowercase
+letters, digits, `-` or `_`; a bundle names from 1 to 64 distinct ones, and
+`remoteBundles` entries take the same key. A principal reads a bundle without
+audiences, and one with audiences when it holds at least one of them. Its
+audiences come from the `audiences` list of the introspection answer or of
+its token-file entry; a missing or malformed list (not a list, more than 64
+names, a name of another form) gives none, so such a principal reads only
+the bundles open to everyone. Over stdio the caller reads every bundle: the
+operator has the files.
+
+Each principal is served from a view of the project built from the bundles
+it may read and nothing else. Search, lists, the graph, resources, context,
+validation, write receipts, producers and proposals of that view hold no
+concept, title, path, count or diagnostic of another bundle, and a bundle
+outside the view answers exactly as a bundle that does not exist, for reads
+and for writes. `list_bundles` names each bundle's audiences. The server
+keeps the views of the 8 most recently used combinations of bundles; another
+combination is built on first use. A change of a principal's audiences
+applies when its introspection answer is read again, within 60 seconds.
+
+A write through a view is validated and applied in that view, and every
+other view picks the change up before its next call. The write policy is
+judged as before, by actor and bundle; audiences decide what is read, and a
+bundle a principal cannot read cannot be written by it.
+
+A concept may reference only bundles that every reader of its own bundle
+reads: a graph edge (a relation or a link between concepts) from a bundle
+into a bundle whose audiences do not cover the first one's readers is the
+project validation error `reference_outside_audience`, and a write batch
+that would create one is refused. A bundle without audiences may reference
+only bundles without audiences.
+
+A bundle or remote bundle entry with a key it does not take is a project
+error, and that bundle is closed to every HTTP principal until the file is
+corrected: a misspelt `audiences` never opens a bundle. The same holds for an
+`audiences` value that is not a valid list.
+
+With embeddings, the vector cache covers the whole project and one embedding
+runtime serves every view; a view's search reads only the vectors of its own
+concepts, and its answers carry no count of the cache.
 
 ### Index freshness
 
