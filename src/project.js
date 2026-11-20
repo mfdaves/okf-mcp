@@ -6,6 +6,7 @@ const { parseFrontmatterYaml, splitFrontmatter } = require("./parser");
 const { normalizeLanguages } = require("./search/languages");
 const { parseWritePolicy } = require("./policy/write-policy");
 const { normalizeEmbeddingConfig } = require("./search/embedding-config");
+const { NO_AUDIENCE, validBundleAudiences } = require("./audiences");
 
 const DEFAULT_RELATION_TYPES = [
   "depends_on",
@@ -133,6 +134,45 @@ function readConfigFile(configPath) {
   return parseFrontmatterYaml(text);
 }
 
+const BUNDLE_KEYS = new Set(["id", "root", "path", "include", "exclude", "audiences"]);
+const REMOTE_BUNDLE_KEYS = new Set(["id", "provider", "url", "include", "exclude", "audiences"]);
+
+// A key the bundle entry does not take is an error: a misspelt `audiences`
+// would otherwise leave a bundle open to every principal without a word.
+// Returns whether the entry had such a key.
+function rejectUnknownBundleKeys(entry, allowed, id, errors) {
+  if (!entry || typeof entry !== "object" || Array.isArray(entry)) return false;
+  let found = false;
+  for (const key of Object.keys(entry)) {
+    if (allowed.has(key)) continue;
+    found = true;
+    errors.push({
+      code: "unknown_bundle_key",
+      bundle: id,
+      field: key,
+      message: "Unknown key in a bundle entry.",
+    });
+  }
+  return found;
+}
+
+// The audiences that read a bundle (plan I-2d); none: every principal. A
+// value that is not a list of audience names closes the bundle, and so does
+// an entry with a key it does not take.
+function bundleAudiences(entry, id, errors, allowed) {
+  if (rejectUnknownBundleKeys(entry, allowed, id, errors)) return [NO_AUDIENCE];
+  if (!entry || entry.audiences === undefined) return [];
+  if (validBundleAudiences(entry.audiences)) return entry.audiences.slice();
+  errors.push({
+    code: "invalid_bundle_audiences",
+    bundle: id,
+    field: "audiences",
+    message:
+      "audiences must be a non-empty list of distinct names: a lowercase letter, then lowercase letters, digits, - or _.",
+  });
+  return [NO_AUDIENCE];
+}
+
 function normalizeBundles(config, configPath, errors) {
   const rootDir = path.dirname(path.resolve(configPath));
   const bundles = Array.isArray(config.bundles) ? config.bundles : [];
@@ -156,6 +196,7 @@ function normalizeBundles(config, configPath, errors) {
           root: resolveProjectPath(rootDir, bundle, `bundles[${index}].root`, errors),
           include: [],
           exclude: [],
+          audiences: [],
         };
       }
       const id = configId(bundle?.id, `bundle-${index + 1}`);
@@ -173,6 +214,7 @@ function normalizeBundles(config, configPath, errors) {
         ),
         include: Array.isArray(bundle.include) ? bundle.include : [],
         exclude: Array.isArray(bundle.exclude) ? bundle.exclude : [],
+        audiences: bundleAudiences(bundle, id, errors, BUNDLE_KEYS),
       };
     })
     .filter((bundle) => bundle.root);
@@ -517,6 +559,7 @@ function normalizeRemoteBundles(config, errors) {
       url: remote?.url ? String(remote.url) : "",
       include: Array.isArray(remote?.include) ? remote.include : [],
       exclude: Array.isArray(remote?.exclude) ? remote.exclude : [],
+      audiences: bundleAudiences(remote, id, errors, REMOTE_BUNDLE_KEYS),
     };
   });
 }

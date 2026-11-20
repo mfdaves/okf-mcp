@@ -386,6 +386,13 @@ function applyProject(index, project) {
     strictLinks: project.strictLinks,
     languages: project.languages,
     autoFill: project.autoFill,
+    // The audiences each bundle names (plan I-2d), by bundle id; a bundle
+    // open to every principal is absent.
+    audiences: Object.fromEntries(
+      [...(project.bundles || []), ...(project.remoteBundles || [])]
+        .filter((bundle) => bundle.audiences?.length)
+        .map((bundle) => [bundle.id, bundle.audiences.slice()]),
+    ),
   };
   index.strictLinks = Boolean(index.strictLinks || project.strictLinks);
 }
