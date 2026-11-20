@@ -27,6 +27,7 @@ const packageMetadata = require("../../package.json");
 const { READ_SCOPE, flagsPrincipal } = require("./principal");
 const { ToolExecutionError, composeRegistry, jsonContent, toolEnabled } = require("./registry");
 const { listResources, readResource } = require("./resources");
+const views = require("./views");
 
 const MAX_MCP_MESSAGE_BYTES = 1024 * 1024;
 
@@ -101,6 +102,10 @@ function shareIndexWithLiveAuthoring(state) {
 // batch to apply (producer runs, proposals, remote loads, a stale concept
 // file).
 function rebuildStateIndex(state) {
+  // Every state of the process (src/mcp/views.js) checks its files again
+  // before its next read: what this one wrote may be in their bundles.
+  const base = state.base || state;
+  base.writeGeneration = (base.writeGeneration || 0) + 1;
   const service = state.liveAuthoringService;
   const publication =
     service && typeof service.takePublication === "function" ? service.takePublication() : null;
@@ -335,6 +340,25 @@ async function createStateAsync(bundleArgs, options) {
     });
     projectState.toolPacks = toolPacks;
     projectState.toolPackScopes = toolPackScopes(toolPacks);
+    if (views.usesAudiences(loaded.project)) {
+      if (options.allowRuntimeRemoteLoad) {
+        throw new Error(
+          "Runtime remote loads are not available in a project whose bundles name audiences.",
+        );
+      }
+      if (!(store instanceof FileConceptStore)) {
+        throw new Error("A project whose bundles name audiences needs the file concept store.");
+      }
+    }
+    // What a view's own services are built with (createViewState).
+    projectState.viewOptions = {
+      gitCommit: options.gitCommit,
+      writePolicy: options.writePolicy,
+      producerLoader: options.producerLoader,
+      producerEnv: options.producerEnv,
+      producerNow: options.producerNow,
+    };
+    projectState.maxViews = options.maxViews || views.DEFAULT_MAX_VIEWS;
     return attachEmbeddings(projectState, embeddingSettings(loaded.project.embedding, options), {
       root: loaded.project.root,
       write: Boolean(options.allowWrite),
@@ -427,6 +451,82 @@ async function createStateAsync(bundleArgs, options) {
     repositoryMappings: options?.repositoryMappings,
     languages: options?.languages,
   });
+}
+
+// The state of one view (plan I-2d, src/mcp/views.js): what a server over
+// the bundles of `ids` alone would hold. Its index, store and authoring
+// services are its own; it shares with `base` the tool packs, the call
+// queue, so that calls and git commits of every view stay in one order, and
+// the embedding runtime, through a facade that never syncs it.
+function createViewState(base, ids) {
+  const project = views.viewProject(base.project, ids);
+  const localBundleArgs = base.localBundleArgs.filter((bundle) => ids.has(bundle.id));
+  const remoteBundles = base.remoteBundles.filter((bundle) => ids.has(bundle.id));
+  const baseStore = base.authoringService.store;
+  const options = base.viewOptions || {};
+  const store = new FileConceptStore({
+    project,
+    bundles: project.bundles,
+    relationTypes: project.relationTypes,
+    allowCustomRelationTypes: baseStore.allowCustomRelationTypes,
+    strictLinks: project.strictLinks,
+    proposalRoot: baseStore.proposalRoot,
+  });
+  const authoringService = new ConceptAuthoringService(store, {
+    actor: base.actor,
+    writePolicy: options.writePolicy,
+  });
+  const liveAuthoringService = base.liveAuthoringService
+    ? new LiveAuthoringService(store, {
+        actor: base.actor,
+        gitCommit: options.gitCommit,
+        writePolicy: options.writePolicy,
+      })
+    : null;
+  const initialIndex = attachProject(
+    buildIndex(localBundleArgs.concat(remoteBundles), {
+      relationTypes: project.relationTypes,
+      strictLinks: base.strictLinks,
+    }),
+    project,
+  );
+  const view = createState(localBundleArgs, {
+    initialIndex,
+    initialRemoteBundles: remoteBundles,
+    relationTypes: project.relationTypes,
+    authoringService,
+    liveAuthoringService,
+    producerLoader: options.producerLoader,
+    producerEnv: options.producerEnv,
+    producerNow: options.producerNow,
+    allowWrite: base.allowWrite,
+    actor: base.actor,
+    allowAuthoring: base.allowAuthoring,
+    allowComputationAuthoring: base.allowComputationAuthoring,
+    strictLinks: base.strictLinks,
+    repositoryMappings: base.repositoryMappings,
+    languages: base.languages,
+  });
+  view.base = base;
+  view.viewBundleIds = ids;
+  view.transport = base.transport;
+  view.toolPacks = base.toolPacks;
+  view.toolPackScopes = base.toolPackScopes;
+  Object.defineProperty(view, "callQueue", {
+    enumerable: true,
+    get: () => base.callQueue,
+    set: (queue) => {
+      base.callQueue = queue;
+    },
+  });
+  if (base.embeddings) view.embeddings = views.viewEmbeddings(base);
+  if (base.viewRefresher) view.refreshBeforeRead = base.viewRefresher(view);
+  return view;
+}
+
+// The state a principal is served from: the server's own, or its view's.
+function viewStateFor(state, principal) {
+  return views.viewStateFor(state, principal, createViewState);
 }
 
 // Runs a read of the index. With a refresher set (MCP over HTTP, plan I-2c)
@@ -564,4 +664,6 @@ module.exports = {
   createStateAsync,
   /** @internal Builds one McpServer over an existing state (tests share one state). */
   registerMcpInterface,
+  /** @internal The state a principal is served from (plan I-2d). */
+  viewStateFor,
 };

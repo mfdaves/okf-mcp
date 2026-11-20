@@ -279,7 +279,11 @@ class EmbeddingRuntime {
 
   // searchConcepts with the dense side when it can run, lexical otherwise;
   // either way the response says which ran and why (O-2).
-  async search(index, options) {
+  // `internal.sync: false` is for a view (src/mcp/views.js): its index holds
+  // part of the project, and a sync on it would prune the other bundles'
+  // vectors.
+  async search(index, options, internal) {
+    const sync = internal?.sync !== false;
     const config = Object.assign({}, options || {});
     RUNTIME_OPTIONS.forEach((key) => {
       delete config[key];
@@ -297,9 +301,9 @@ class EmbeddingRuntime {
         failure = this.ready ? Object.assign({}, current, { cooldown: true }) : current;
       } else if (!this.cache.size || !denseCoverage(index, this.cache, this.units).present) {
         failure = { code: "cache_empty" };
-        this.scheduleSync(index);
+        if (sync) this.scheduleSync(index);
       } else {
-        this.scheduleSync(index);
+        if (sync) this.scheduleSync(index);
         const encodeStarted = performance.now();
         try {
           encoded = await this.encodeQuery(query);

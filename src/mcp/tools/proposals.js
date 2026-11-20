@@ -15,6 +15,13 @@ const {
   stringParameter,
 } = require("../registry");
 
+// The views of a project (src/mcp/views.js) share its proposal directory: a
+// view shows the proposals of its own bundles, and a proposal of another
+// bundle answers like one that does not exist.
+function inView(state, proposal) {
+  return !state.viewBundleIds || state.viewBundleIds.has(proposal?.bundle);
+}
+
 const tools = {
   okf_validate_concept: {
     ...defineTool(
@@ -162,7 +169,9 @@ const tools = {
     enabled: GATES.proposalRead,
     handler: async (state, args, principal) =>
       jsonContent(
-        await expectedToolOperation(() => requireAuthoring(state, principal).listProposals(args)),
+        (
+          await expectedToolOperation(() => requireAuthoring(state, principal).listProposals(args))
+        ).filter((proposal) => inView(state, proposal)),
       ),
   },
   okf_get_proposal: {
@@ -177,7 +186,13 @@ const tools = {
     enabled: GATES.proposalRead,
     handler: async (state, args, principal) =>
       jsonContent(
-        await expectedToolOperation(() => requireAuthoring(state, principal).getProposal(args)),
+        await expectedToolOperation(async () => {
+          const proposal = await requireAuthoring(state, principal).getProposal(args);
+          if (!inView(state, proposal)) {
+            throw new Error(`Unknown OKF proposal: ${args.proposalId || "<missing>"}`);
+          }
+          return proposal;
+        }),
       ),
   },
   okf_accept_proposal: {

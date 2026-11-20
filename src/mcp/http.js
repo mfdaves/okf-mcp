@@ -22,7 +22,12 @@ const {
 const { advertisedScopes } = require("../tool-packs");
 const { createHttpAuth } = require("./auth");
 const { anonymousPrincipal } = require("./principal");
-const { MAX_MCP_MESSAGE_BYTES, createStateAsync, registerMcpInterface } = require("./server");
+const {
+  MAX_MCP_MESSAGE_BYTES,
+  createStateAsync,
+  registerMcpInterface,
+  viewStateFor,
+} = require("./server");
 
 const DEFAULT_MCP_PATH = "/mcp";
 const DEFAULT_REFRESH_INTERVAL_MS = 2000;
@@ -146,9 +151,14 @@ async function sendWebResponse(res, response, extraHeaders) {
 // refreshed from disk. A failed refresh leaves the index as it was.
 function indexRefresher(state, intervalMs) {
   let checkedAt = Date.now();
+  // A write through any state of the process (the server's own or a view's)
+  // makes this one look at its files again at once.
+  const generation = () => (state.base || state).writeGeneration || 0;
+  let seen = generation();
   return () => {
     const now = Date.now();
-    if (now - checkedAt < intervalMs) return;
+    if (generation() === seen && now - checkedAt < intervalMs) return;
+    seen = generation();
     checkedAt = now;
     try {
       state.refreshIndex();
@@ -167,10 +177,10 @@ function createMcpHttpHandler(state, options) {
   const config = options || {};
   // From now on many principals share this state (see GATES.runtimeRemote).
   state.transport = "http";
-  state.refreshBeforeRead = indexRefresher(
-    state,
-    config.refreshIntervalMs ?? DEFAULT_REFRESH_INTERVAL_MS,
-  );
+  // Each view of the project (plan I-2d) gets a refresher of its own.
+  state.viewRefresher = (target) =>
+    indexRefresher(target, config.refreshIntervalMs ?? DEFAULT_REFRESH_INTERVAL_MS);
+  state.refreshBeforeRead = state.viewRefresher(state);
   const mcpPath = config.mcpPath || DEFAULT_MCP_PATH;
   // The endpoint answers with and without one trailing slash, so a
   // --public-url written either way reaches it.
@@ -181,10 +191,14 @@ function createMcpHttpHandler(state, options) {
   const allowedHosts = localhostAllowedHostnames().concat(config.allowedHosts || []);
   const allowedOrigins = localhostAllowedOrigins().concat(config.allowedOrigins || []);
   const mcp = createMcpHandler(
-    (context) =>
-      registerMcpInterface(state, context.authInfo?.extra?.principal || anonymousPrincipal(), {
+    (context) => {
+      // Each principal is served from the state of its view: the bundles it
+      // may read (plan I-2d).
+      const principal = context.authInfo?.extra?.principal || anonymousPrincipal();
+      return registerMcpInterface(viewStateFor(state, principal), principal, {
         subjectToken: context.authInfo?.extra?.subjectToken,
-      }),
+      });
+    },
     { legacy: "stateless" },
   );
 

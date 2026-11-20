@@ -19,6 +19,13 @@ const {
   nonEmptyStringParameter,
 } = require("../registry");
 
+// The audiences a bundle names in the project file (plan I-2d), so that a
+// writer knows who reads what it writes there; absent for an open bundle.
+function bundleAudiences(index, id) {
+  const names = index.project?.audiences?.[id];
+  return names?.length ? { audiences: names.slice() } : {};
+}
+
 function publicBundles(index, options) {
   return index.bundles.map((bundle) => {
     const documentCount = index.documents.filter((doc) => doc.bundle === bundle.id).length;
@@ -41,6 +48,7 @@ function publicBundles(index, options) {
         revision: bundle.remoteSource && (bundle.remoteSource.commitSha || bundle.remoteSource.ref),
         include: bundle.include || [],
         exclude: bundle.exclude || [],
+        ...bundleAudiences(index, bundle.id),
       };
     }
     const absoluteRoot = path.resolve(bundle.root);
@@ -60,6 +68,7 @@ function publicBundles(index, options) {
       versionStatus: bundle.versionStatus,
       include: bundle.include || [],
       exclude: bundle.exclude || [],
+      ...bundleAudiences(index, bundle.id),
     };
   });
 }
