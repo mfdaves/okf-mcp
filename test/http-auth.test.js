@@ -132,6 +132,7 @@ test("the shared introspection answers map to principals", () => {
       subject: "42",
       actor: "human:mrossi",
       scopes: new Set(["okf.read", "okf.write"]),
+      audiences: new Set(["hr"]),
       name: "Mario Rossi",
       email: "mrossi@example.com",
     },
@@ -167,6 +168,23 @@ test("the shared introspection answers map to principals", () => {
   );
   assert.equal(variant({ username: "Mario Rossi\tx\u0007" }).actor, "human:Mario-Rossi-x-");
   assert.equal(variant({ sub: 42 }).subject, "42");
+  // audiences: a list of names, or none at all (plan I-2d).
+  assert.deepEqual(
+    variant({ audiences: ["hr", "sales-team"] }).audiences,
+    new Set(["hr", "sales-team"]),
+  );
+  for (const audiences of [
+    undefined,
+    null,
+    "hr",
+    ["HR"],
+    ["hr", 7],
+    [""],
+    Array(65).fill("hr"),
+    { hr: true },
+  ]) {
+    assert.deepEqual(variant({ audiences }).audiences, new Set(), JSON.stringify(audiences));
+  }
   // name and email are each optional; an unusable one is dropped alone.
   const anonymous = variant({ name: undefined, email: undefined });
   assert.equal(Object.hasOwn(anonymous, "name") || Object.hasOwn(anonymous, "email"), false);

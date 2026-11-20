@@ -33,7 +33,14 @@ const {
 
 const { authorEmail, authorName } = require("../authoring/candidates");
 const { validActor } = require("../v02");
-const { KNOWN_SCOPES, READ_SCOPE, SCOPE_NAME } = require("./principal");
+const {
+  AUDIENCE_NAME,
+  KNOWN_SCOPES,
+  MAX_AUDIENCES,
+  READ_SCOPE,
+  SCOPE_NAME,
+  audienceSet,
+} = require("./principal");
 
 // A scope a principal may carry: okf.read, okf.write, or any well-formed
 // scope outside okf.* (such as odoo.read, which tool-pack tools declare).
@@ -106,7 +113,9 @@ function loadTokenFile(file) {
       throw new Error(`Invalid token file: tokens[${index}]${field} ${message}`);
     };
     const keys = entry && typeof entry === "object" ? Object.keys(entry) : [];
-    const unknown = keys.find((key) => !["sha256", "subject", "actor", "scopes"].includes(key));
+    const unknown = keys.find(
+      (key) => !["sha256", "subject", "actor", "scopes", "audiences"].includes(key),
+    );
     if (!keys.length || unknown) fail(unknown ? `.${unknown}` : "", "is not a known field.");
     if (!/^[0-9a-f]{64}$/i.test(String(entry.sha256 || ""))) {
       fail(".sha256", "must be 64 hex characters.");
@@ -120,12 +129,21 @@ function loadTokenFile(file) {
     if (!scopes.length || !scopes.every(grantableScope)) {
       fail(".scopes", `must list ${KNOWN_SCOPES.join(", ")} or well-formed scopes outside okf.*.`);
     }
+    const audiences = entry.audiences === undefined ? [] : entry.audiences;
+    if (
+      !Array.isArray(audiences) ||
+      audiences.length > MAX_AUDIENCES ||
+      !audiences.every((name) => typeof name === "string" && AUDIENCE_NAME.test(name))
+    ) {
+      fail(".audiences", "must list audience names: lowercase letters, digits, - and _.");
+    }
     const hash = entry.sha256.toLowerCase();
     if (principals.has(hash)) fail(".sha256", "repeats an earlier entry.");
     principals.set(hash, {
       subject: entry.subject,
       actor: entry.actor,
       scopes: new Set(scopes),
+      audiences: new Set(audiences),
     });
   });
   return principals;
@@ -165,6 +183,9 @@ function introspectionPrincipal(answer, audience, nowSeconds) {
     subject,
     actor,
     scopes: new Set(scopes.filter(grantableScope).slice(0, 64)),
+    // The audiences the authorization server places the user in; a missing or
+    // malformed claim gives none.
+    audiences: audienceSet(answer.audiences),
   };
   const name = authorName(answer.name);
   const email = authorEmail(answer.email);

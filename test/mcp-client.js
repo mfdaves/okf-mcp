@@ -116,6 +116,7 @@ function writeTokenFile(t, entries) {
       `    actor: ${JSON.stringify(entry.actor)}`,
       `    scopes: [${entry.scopes.join(", ")}]`,
     );
+    if (entry.audiences) lines.push(`    audiences: [${entry.audiences.join(", ")}]`);
   }
   fs.writeFileSync(file, `${lines.join("\n")}\n`);
   return file;

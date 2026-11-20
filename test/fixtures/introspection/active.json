@@ -1,3 +1,3 @@
 { "active": true, "sub": "42", "username": "mrossi", "name": "Mario Rossi",
-  "email": "mrossi@example.com", "scope": "okf.read okf.write",
+  "email": "mrossi@example.com", "scope": "okf.read okf.write", "audiences": ["hr"],
   "aud": "https://mcp.example.com/mcp", "exp": 1794000000, "client_id": "c_9a…" }
