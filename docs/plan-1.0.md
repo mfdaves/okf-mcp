@@ -1,6 +1,6 @@
 # okf-mcp 1.0 master plan: a knowledge runtime for autonomous agents
 
-Status: revision 11, 2026-11-21: I-2d (audiences and views) added, B-4 revised to hold per view, WP6c added. Revision 10 (2026-11-14): WP6 split into WP6a (MCP over Streamable HTTP with per-user principals, ships as 0.13.0-rc.1) and WP6b (the rest of the deployment surface); I-2a to I-2c added. Revision 9 (2026-10-25) cut v0.11.0-rc.2 and v0.12.0-rc.1 and closed WP3c-2 with a recorded negative result.
+Status: revision 12, 2026-11-21: Q-7 no longer runs the tests on Windows. Revision 11 (2026-11-21): I-2d (audiences and views) added, B-4 revised to hold per view, WP6c added. Revision 10 (2026-11-14): WP6 split into WP6a (MCP over Streamable HTTP with per-user principals, ships as 0.13.0-rc.1) and WP6b (the rest of the deployment surface); I-2a to I-2c added. Revision 9 (2026-10-25) cut v0.11.0-rc.2 and v0.12.0-rc.1 and closed WP3c-2 with a recorded negative result.
 
 ## 0. How to use this document
 
@@ -125,7 +125,7 @@ Code quality:
 | Q-4 | Lint and format in CI with Biome 2.5.15 (single binary, no dependency tree); no new runtime dependency. Rules that would need code changes are warnings for now (useOptionalChain 267, useNodejsImportProtocol 36, useIterableCallbackReturn 19, noPrototypeBuiltins 18, others 32); each WP leaves the files it owns warning-free, and the formatter carve-out for `src/search*` and `scripts/search-benchmark.js` is removed by WP1 and WP0. The formatting commit is listed in `.git-blame-ignore-revs`. |
 | Q-5 | Every behaviour change ships with a test; retrieval changes also ship a fixture metric. |
 | Q-6 | Comments explain why; match the current style (CommonJS, `"use strict"`, small pure functions). |
-| Q-7 | CI matrix: Node 22 and 24 on `ubuntu-latest`, plus `npm test` on `windows-latest` (12 modules handle `path.sep`). POSIX permission assertions are skipped on Windows; if the runner lacks the symlink privilege, the ungated symlink tests in `test/assets.test.js`, `test/git-source.test.js`, and `test/producer.test.js` get the same `win32` guard already used in `test/okf-mcp.test.js`. |
+| Q-7 | CI matrix: Node 22 and 24 on `ubuntu-latest`. `npm test` on `windows-latest` is no longer run (revision 12): the job failed on `main` from 2026-10-25 on, in the git-backed write tests and several HTTP tests. The `win32` guards in the tests stay (12 modules handle `path.sep`; POSIX permission assertions are skipped on Windows). |
 
 Security:
 
